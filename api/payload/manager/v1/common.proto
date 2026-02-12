@@ -1,0 +1,65 @@
+syntax = "proto3";
+
+package payload.manager.common.v1;
+
+/*
+  Shared enums/tables for Payload Manager APIs.
+
+  Keep this file focused on definitions reused across service, config,
+  and metadata protos.
+*/
+
+/*
+  Storage tier ordered roughly from fastest/least durable → slowest/most durable.
+*/
+enum Tier {
+  TIER_UNSPECIFIED = 0;
+  TIER_GPU = 1;
+  TIER_RAM = 2;
+  TIER_DISK = 3;
+  TIER_OBJECT = 4; // S3 / MinIO
+}
+
+/*
+  Compression algorithm applied at rest.
+*/
+enum Compression {
+  COMPRESSION_UNSPECIFIED = 0;
+  COMPRESSION_NONE = 1;
+  COMPRESSION_LZ4 = 2;
+  COMPRESSION_ZSTD = 3;
+}
+
+/*
+  Logical format of the payload.
+*/
+enum PayloadFormat {
+  PAYLOAD_FORMAT_UNSPECIFIED = 0;
+  PAYLOAD_FORMAT_RAW = 1;
+  PAYLOAD_FORMAT_ARROW_IPC = 2;
+  PAYLOAD_FORMAT_PARQUET = 3;
+  PAYLOAD_FORMAT_FLATBUFFER = 4;
+}
+
+/*
+  Lifecycle state for payload metadata tracking.
+*/
+enum PayloadState {
+  PAYLOAD_STATE_UNSPECIFIED = 0;
+  PAYLOAD_STATE_ACTIVE = 1;
+  PAYLOAD_STATE_SPILLING = 2;
+  PAYLOAD_STATE_DURABLE = 3;
+  PAYLOAD_STATE_EVICTING = 4;
+  PAYLOAD_STATE_DELETED = 5;
+}
+
+/*
+  Per-payload eviction priority.
+*/
+enum EvictionPriority {
+  EVICTION_PRIORITY_UNSPECIFIED = 0;
+  EVICTION_PRIORITY_LOW = 1;
+  EVICTION_PRIORITY_NORMAL = 2;
+  EVICTION_PRIORITY_HIGH = 3;
+  EVICTION_PRIORITY_NEVER = 4;
+}

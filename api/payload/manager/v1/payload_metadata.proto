@@ -8,80 +8,7 @@ option java_package = "com.yourorg.payload.manager.metadata.v1";
 option java_outer_classname = "PayloadMetadataProto";
 
 import "google/protobuf/timestamp.proto";
-
-
-// ============================================================
-// ENUMS
-// ============================================================
-
-// Storage tier where payload currently resides
-enum Tier {
-  TIER_UNSPECIFIED = 0;
-
-  // L0 - Device memory (CUDA)
-  TIER_GPU = 1;
-
-  // L1 - Host memory
-  TIER_RAM = 2;
-
-  // L2 - Local disk (NVMe / SSD)
-  TIER_DISK = 3;
-
-  // L3 - Remote object store (S3 / MinIO)
-  TIER_OBJECT_STORE = 4;
-}
-
-
-// Compression algorithm applied at rest
-enum Compression {
-  COMPRESSION_UNSPECIFIED = 0;
-
-  // No compression
-  COMPRESSION_NONE = 1;
-
-  // Fast spill compression
-  COMPRESSION_LZ4 = 2;
-
-  // Better ratio, moderate CPU
-  COMPRESSION_ZSTD = 3;
-}
-
-
-// Logical format of the payload
-// (Manager is blob-based but format-aware)
-enum PayloadFormat {
-  FORMAT_UNSPECIFIED = 0;
-
-  // Raw opaque binary blob
-  FORMAT_RAW = 1;
-
-  // Future extensibility
-  FORMAT_ARROW_IPC = 2;
-  FORMAT_PARQUET = 3;
-  FORMAT_FLATBUFFER = 4;
-}
-
-
-// Current lifecycle state
-enum PayloadState {
-  STATE_UNSPECIFIED = 0;
-
-  // Newly created, in hot tier
-  STATE_ACTIVE = 1;
-
-  // Spill requested but not complete
-  STATE_SPILLING = 2;
-
-  // Persisted to durable tier
-  STATE_DURABLE = 3;
-
-  // Marked for eviction
-  STATE_EVICTING = 4;
-
-  // Removed from system
-  STATE_DELETED = 5;
-}
-
+import "payload/manager/v1/common.proto";
 
 
 // ============================================================
@@ -116,10 +43,10 @@ message PayloadMetadata {
   uint64 compressed_size_bytes = 5;
 
   // Logical format of payload
-  PayloadFormat format = 6;
+  payload.manager.common.v1.PayloadFormat format = 6;
 
   // Compression applied at rest
-  Compression compression = 7;
+  payload.manager.common.v1.Compression compression = 7;
 
 
   // ----------------------------------------------------------------
@@ -127,10 +54,10 @@ message PayloadMetadata {
   // ----------------------------------------------------------------
 
   // Current primary tier
-  Tier current_tier = 8;
+  payload.manager.common.v1.Tier current_tier = 8;
 
   // All tiers where payload currently exists (replication / promotion)
-  repeated Tier available_tiers = 9;
+  repeated payload.manager.common.v1.Tier available_tiers = 9;
 
   // Path for disk tier (if applicable)
   string disk_path = 10;
@@ -143,7 +70,7 @@ message PayloadMetadata {
   // Lifecycle
   // ----------------------------------------------------------------
 
-  PayloadState state = 12;
+  payload.manager.common.v1.PayloadState state = 12;
 
   google.protobuf.Timestamp created_at = 13;
   google.protobuf.Timestamp last_accessed_at = 14;

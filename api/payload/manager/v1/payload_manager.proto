@@ -18,7 +18,7 @@ package payload.manager.v1;
 
 import "google/protobuf/empty.proto";
 import "google/protobuf/timestamp.proto";
-import "payload/manager/v1/commo.proto";
+import "payload/manager/v1/common.proto";
 
 
 // =======================
