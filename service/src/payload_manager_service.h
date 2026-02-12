@@ -10,7 +10,7 @@
 #include <google/protobuf/empty.pb.h>
 #include <grpcpp/grpcpp.h>
 
-#include "payload/manager/v1/payload_manager.grpc.pb.h"
+#include "payload/manager/v1/service.grpc.pb.h"
 
 class PayloadManagerServiceImpl final : public payload::manager::v1::PayloadManager::Service {
  public:
