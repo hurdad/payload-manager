@@ -1,0 +1,641 @@
+syntax = "proto3";
+
+package payload.manager.v1;
+
+/*
+  Payload Manager API (v1)
+
+  This service manages the lifecycle, placement, and durability of opaque
+  binary payloads across multiple tiers (GPU, RAM, DISK).
+
+  Core invariants:
+  - Payload bytes are NEVER transferred via this API.
+  - UUIDs are stable identifiers and MUST be exactly 16 bytes (RFC 4122).
+  - Resolve() is advisory (snapshot). Acquire() is authoritative (lease + stable location).
+  - Metadata is small, mutable, and opaque to the manager.
+  - Lineage is descriptive; it does not imply scheduling or dependency enforcement.
+*/
+
+import "google/protobuf/empty.proto";
+import "google/protobuf/timestamp.proto";
+
+
+// =======================
+// ENUMS
+// =======================
+
+/*
+  Storage tier where the payload currently resides.
+  Ordered roughly from fastest/least durable → slowest/most durable.
+*/
+enum Tier {
+  TIER_UNSPECIFIED = 0;
+  TIER_GPU  = 1;  // L0: device memory (volatile)
+  TIER_RAM  = 2;  // L1: host RAM / shared memory (volatile)
+  TIER_DISK = 3;  // L2: persistent storage (durable)
+}
+
+/*
+  Lifecycle state of a payload.
+  State transitions are monotonic; terminal states are EXPIRED and DELETED.
+*/
+enum PayloadState {
+  STATE_UNSPECIFIED = 0;
+  STATE_ALLOCATED   = 1;  // reserved, not visible yet
+  STATE_ACTIVE      = 2;  // visible to readers
+  STATE_EVICTING    = 3;  // moving between tiers
+  STATE_DELETING    = 4;  // explicit client delete
+  STATE_EXPIRED     = 5;  // TTL elapsed
+  STATE_DELETED     = 6;  // terminal
+}
+
+/*
+  Controls promotion behavior (moving a payload to a higher tier).
+*/
+enum PromotionPolicy {
+  PROMOTION_POLICY_UNSPECIFIED = 0;
+  PROMOTION_POLICY_BEST_EFFORT = 1; // schedule if possible
+  PROMOTION_POLICY_BLOCKING    = 2; // block until complete or fail
+}
+
+/*
+  Controls spill behavior (making a payload durable, typically to disk).
+*/
+enum SpillPolicy {
+  SPILL_POLICY_UNSPECIFIED = 0;
+  SPILL_POLICY_BEST_EFFORT = 1; // schedule spill if possible
+  SPILL_POLICY_BLOCKING    = 2; // block until durable or fail
+}
+
+/*
+  Controls how metadata updates are applied.
+*/
+enum MetadataUpdateMode {
+  METADATA_UPDATE_MODE_UNSPECIFIED = 0;
+  METADATA_UPDATE_MODE_MERGE   = 1; // JSON merge semantics (implementation-defined)
+  METADATA_UPDATE_MODE_REPLACE = 2; // full replacement
+}
+
+/*
+  Per-payload eviction priority.
+
+  IMPORTANT:
+  - This is a best-effort policy. Under severe resource exhaustion, the system
+    may violate policy to preserve node stability.
+  - Leases and explicit pins take precedence over eviction policy.
+*/
+enum EvictionPriority {
+  EVICTION_PRIORITY_UNSPECIFIED = 0;
+  EVICTION_PRIORITY_LOW    = 1; // evict early
+  EVICTION_PRIORITY_NORMAL = 2; // default
+  EVICTION_PRIORITY_HIGH   = 3; // evict late
+  EVICTION_PRIORITY_NEVER  = 4; // best-effort "do not evict" (not absolute)
+}
+
+
+// =======================
+// EVICTION POLICY
+// =======================
+
+/*
+  Per-payload eviction policy controls how aggressively a payload is reclaimed
+  under pressure.
+
+  Common use cases:
+  - Mark expensive-to-recompute data as HIGH/NEVER
+  - Mark ephemeral data as LOW
+  - Require that a payload becomes durable before it is evicted from GPU/RAM
+*/
+message EvictionPolicy {
+  // Priority used by the eviction scoring algorithm.
+  EvictionPriority priority = 1;
+
+  // If true, payload MUST be spilled to durable storage before being evicted
+  // from volatile tiers (GPU/RAM), unless doing so is impossible (disk full, etc).
+  bool require_durable = 2;
+
+  // Where to spill to when making durable (typically DISK).
+  Tier spill_target = 3;
+
+  // If set, manager should attempt to keep the payload at or above this tier
+  // (best-effort). Example: min_residency_tier=RAM means "try not to leave RAM".
+  Tier min_residency_tier = 4;
+}
+
+
+// =======================
+// LOCATION DESCRIPTORS
+// =======================
+
+/*
+  GPU-resident payload location.
+  ipc_handle is opaque and interpreted by CUDA-aware clients.
+*/
+message GpuLocation {
+  uint32 device_id = 1;
+  bytes  ipc_handle = 2;
+  uint64 length_bytes = 3;
+}
+
+/*
+  RAM-resident payload location (typically shared memory / slab allocator).
+*/
+message RamLocation {
+  string shm_name = 1;
+  uint32 slab_id = 2;
+  uint64 block_index = 3;
+  uint64 length_bytes = 4;
+}
+
+/*
+  Disk-resident payload location.
+*/
+message DiskLocation {
+  string path = 1;
+  uint64 offset_bytes = 2;
+  uint64 length_bytes = 3;
+}
+
+
+// =======================
+// PAYLOAD DESCRIPTOR
+// =======================
+
+/*
+  Authoritative descriptor for a payload.
+
+  NOTE:
+  - This message does not contain payload bytes.
+  - Only descriptors returned from Acquire() should be used for reading,
+    because Acquire() provides a lease that stabilizes location.
+*/
+message PayloadDescriptor {
+  // MUST be exactly 16 bytes (RFC 4122 UUID).
+  bytes uuid = 1;
+
+  Tier tier = 2;
+  PayloadState state = 3;
+
+  // Exactly one location should be set and should match `tier`.
+  oneof location {
+    GpuLocation  gpu  = 4;
+    RamLocation  ram  = 5;
+    DiskLocation disk = 6;
+  }
+
+  // Monotonic; increments on placement/state changes.
+  // Useful for fencing / optimistic concurrency.
+  uint64 version = 7;
+
+  google.protobuf.Timestamp created_at = 8;
+  google.protobuf.Timestamp expires_at = 9;
+
+  // Per-payload eviction policy (best-effort).
+  // If unset/unspecified, manager uses global defaults.
+  EvictionPolicy eviction_policy = 10;
+}
+
+
+// =======================
+// PAYLOAD METADATA
+// =======================
+
+/*
+  Semantic metadata describing a payload.
+
+  IMPORTANT:
+  - Small (KBs). Not intended for large blobs.
+  - Opaque to the payload manager: not validated, parsed, or indexed here.
+  - Interpreted by clients, tools, or downstream services.
+*/
+message PayloadMetadata {
+  // Opaque metadata blob (commonly UTF-8 JSON, but treated as raw bytes).
+  bytes json = 1;
+
+  // Optional schema/contract identifier used by clients/tooling.
+  // Examples: "sigmf.core@1.2", "rf.capture.v1", "urn:yourorg:schema:3"
+  string schema = 2;
+}
+
+
+// =======================
+// GENERIC LINEAGE
+// =======================
+
+/*
+  Describes lineage edges: relationships between payload UUIDs.
+  Domain semantics are defined by clients, not the manager.
+*/
+message LineageEdge {
+  bytes parent_uuid = 1; // 16-byte UUID
+  string operation = 2;  // e.g. "FFT", "DEMOD", "CLASSIFY"
+  string role = 3;       // e.g. "input", "reference"
+  bytes parameters = 4;  // opaque parameters (optional)
+}
+
+message AddLineageRequest {
+  bytes child_uuid = 1; // 16-byte UUID
+  repeated LineageEdge parents = 2;
+}
+
+message GetLineageRequest {
+  bytes uuid = 1;        // 16-byte UUID
+  bool upstream = 2;     // true=parents, false=children
+  uint32 max_depth = 3;  // 0=direct edges only
+}
+
+message GetLineageResponse {
+  repeated LineageEdge edges = 1;
+}
+
+
+// =======================
+// ALLOCATE / COMMIT
+// =======================
+
+/*
+  Allocate reserves space and returns a UUID + placement descriptor, but the
+  payload is not visible until CommitPayload is called.
+*/
+message AllocatePayloadRequest {
+  uint64 size_bytes = 1;
+  Tier preferred_tier = 2;
+
+  // TTL in milliseconds; 0 can mean "no TTL" (implementation-defined).
+  uint64 ttl_ms = 3;
+
+  // If true, payload should be made durable (spilled) before it is allowed
+  // to be reclaimed from volatile tiers. This is a convenience hint that
+  // maps naturally to eviction_policy.require_durable.
+  bool persist = 4;
+
+  // Optional per-payload eviction policy.
+  // If not set, manager applies global defaults.
+  EvictionPolicy eviction_policy = 5;
+}
+
+message AllocatePayloadResponse {
+  PayloadDescriptor descriptor = 1;
+}
+
+/*
+  Commit marks payload as fully written and visible to readers.
+  Typical transition: STATE_ALLOCATED → STATE_ACTIVE.
+*/
+message CommitPayloadRequest {
+  bytes uuid = 1; // 16-byte UUID
+}
+
+message CommitPayloadResponse {
+  PayloadDescriptor descriptor = 1;
+}
+
+
+// =======================
+// RESOLVE
+// =======================
+
+/*
+  Resolve returns a snapshot of the current descriptor.
+  This does NOT grant stability; the payload may move immediately after.
+  Use Acquire() before reading bytes.
+*/
+message ResolveRequest {
+  bytes uuid = 1; // 16-byte UUID
+}
+
+message ResolveResponse {
+  PayloadDescriptor descriptor = 1;
+}
+
+
+// =======================
+// ACQUIRE / RELEASE
+// =======================
+
+/*
+  Acquire returns a lease + a stable descriptor for reading/processing.
+
+  Guarantees (while lease is valid):
+  - Location returned is stable (not moved/evicted underneath you)
+  - Payload is at least min_tier (subject to promotion_policy)
+*/
+message AcquireRequest {
+  bytes uuid = 1; // 16-byte UUID
+
+  // Minimum acceptable tier for access (e.g., RAM or GPU).
+  Tier min_tier = 2;
+
+  // Promotion behavior if payload is below min_tier.
+  PromotionPolicy promotion_policy = 3;
+
+  // Minimum time caller requests the lease to remain valid.
+  uint64 min_lease_duration_ms = 4;
+}
+
+message AcquireResponse {
+  // Authoritative descriptor to use for reading while lease is valid.
+  PayloadDescriptor descriptor = 1;
+
+  // Lease token; opaque to clients.
+  string lease_id = 2;
+
+  // Server-chosen expiry (may be >= requested min_lease_duration_ms).
+  google.protobuf.Timestamp lease_expires_at = 3;
+}
+
+message ReleaseRequest {
+  string lease_id = 1;
+}
+
+
+// =======================
+// PROMOTION
+// =======================
+
+/*
+  Promote requests moving a payload to a higher tier (e.g., DISK→RAM, RAM→GPU).
+*/
+message PromoteRequest {
+  bytes uuid = 1; // 16-byte UUID
+  Tier target_tier = 2;
+  PromotionPolicy policy = 3;
+}
+
+message PromoteResponse {
+  PayloadDescriptor descriptor = 1;
+}
+
+
+// =======================
+// SPILL / DURABILITY
+// =======================
+
+/*
+  Spill requests making payloads durable, typically by writing them to DISK.
+
+  Notes:
+  - If wait_for_leases=true, the server may block until leases drain or policy fails.
+  - fsync=true requests stronger durability at the cost of throughput (implementation-defined).
+*/
+message SpillRequest {
+  repeated bytes uuids = 1; // 16-byte UUIDs
+  SpillPolicy policy = 2;
+  bool wait_for_leases = 3;
+  bool fsync = 4;
+}
+
+message SpillResponse {
+  message Result {
+    bytes uuid = 1;          // 16-byte UUID
+    bool ok = 2;
+    string error_message = 3;
+    PayloadDescriptor descriptor = 4; // current descriptor after spill attempt
+  }
+  repeated Result results = 1;
+}
+
+
+// =======================
+// DELETE
+// =======================
+
+/*
+  Delete requests removal of payload bytes and associated placement.
+  If force=false, server may reject if active leases exist.
+*/
+message DeleteRequest {
+  bytes uuid = 1; // 16-byte UUID
+  bool force = 2;
+}
+
+
+// =======================
+// BATCH RESOLVE
+// =======================
+
+message BatchResolveRequest {
+  repeated bytes uuids = 1; // 16-byte UUIDs
+}
+
+message BatchResolveResponse {
+  repeated PayloadDescriptor descriptors = 1;
+}
+
+
+// =======================
+// METADATA RPCs
+// =======================
+
+/*
+  UpdatePayloadMetadata modifies the "current" metadata view for a payload.
+  Use AppendPayloadMetadataEvent for immutable history/audit trails.
+*/
+message UpdatePayloadMetadataRequest {
+  bytes uuid = 1; // 16-byte UUID
+  MetadataUpdateMode mode = 2;
+  PayloadMetadata metadata = 3;
+
+  // Optional attribution fields for auditability
+  string actor = 4;
+  string reason = 5;
+}
+
+message UpdatePayloadMetadataResponse {
+  bytes uuid = 1; // 16-byte UUID
+  PayloadMetadata metadata = 2;
+  google.protobuf.Timestamp updated_at = 3;
+}
+
+/*
+  AppendPayloadMetadataEvent adds an immutable event to the payload's metadata history.
+*/
+message AppendPayloadMetadataEventRequest {
+  bytes uuid = 1; // 16-byte UUID
+  PayloadMetadata metadata = 2;
+  string source = 3;
+  string version = 4;
+}
+
+message AppendPayloadMetadataEventResponse {
+  bytes uuid = 1; // 16-byte UUID
+  google.protobuf.Timestamp event_time = 2;
+}
+
+message GetPayloadMetadataRequest {
+  bytes uuid = 1; // 16-byte UUID
+}
+
+message GetPayloadMetadataResponse {
+  bytes uuid = 1; // 16-byte UUID
+  PayloadMetadata metadata = 2;
+}
+
+message ListPayloadMetadataEventsRequest {
+  bytes uuid = 1; // 16-byte UUID
+  google.protobuf.Timestamp start_time = 2;
+  google.protobuf.Timestamp end_time = 3;
+  uint32 limit = 4;
+}
+
+message PayloadMetadataEvent {
+  google.protobuf.Timestamp ts = 1;
+  PayloadMetadata metadata = 2;
+  string source = 3;
+  string version = 4;
+}
+
+message ListPayloadMetadataEventsResponse {
+  repeated PayloadMetadataEvent events = 1;
+}
+
+
+// =======================
+// POLICY RPCs (EVICTION)
+// =======================
+
+/*
+  Update per-payload eviction policy.
+
+  Notes:
+  - Best-effort; may be constrained by current leases/pins/system pressure.
+  - May trigger background actions (e.g., spill if require_durable becomes true).
+*/
+message UpdateEvictionPolicyRequest {
+  bytes uuid = 1; // 16-byte UUID
+  EvictionPolicy eviction_policy = 2;
+
+  // Optional attribution
+  string actor = 3;
+  string reason = 4;
+}
+
+message UpdateEvictionPolicyResponse {
+  PayloadDescriptor descriptor = 1;
+  google.protobuf.Timestamp updated_at = 2;
+}
+
+
+// =======================
+// CONTROL / OBSERVABILITY
+// =======================
+
+/*
+  Prefetch is a non-blocking hint to stage/promote data in the background.
+*/
+message PrefetchRequest {
+  bytes uuid = 1; // 16-byte UUID
+  Tier target_tier = 2;
+}
+
+/*
+  Pin requests the manager to keep the payload resident (best-effort) for a duration.
+  Pins are typically stronger than eviction policy, but still not absolute under severe failure.
+*/
+message PinRequest {
+  bytes uuid = 1; // 16-byte UUID
+  uint64 duration_ms = 2;
+}
+
+message StatsRequest {}
+
+/*
+  Aggregate stats for observability/capacity planning.
+*/
+message StatsResponse {
+  uint64 payloads_gpu  = 1;
+  uint64 payloads_ram  = 2;
+  uint64 payloads_disk = 3;
+
+  uint64 bytes_gpu  = 4;
+  uint64 bytes_ram  = 5;
+  uint64 bytes_disk = 6;
+}
+
+
+// =======================
+// SERVICE
+// =======================
+
+/*
+  PayloadManager is the control-plane API for payload lifecycle + placement.
+
+  Reading contract:
+  - Resolve() is snapshot-only (may be stale immediately).
+  - Acquire() grants a lease and returns the ONLY safe descriptor to use for reading
+    payload bytes while the lease is valid.
+*/
+service PayloadManager {
+
+  // Allocate a payload UUID and reserve space in a preferred tier (STATE_ALLOCATED).
+  rpc AllocatePayload(AllocatePayloadRequest)
+      returns (AllocatePayloadResponse);
+
+  // Mark the payload as ready/visible (STATE_ACTIVE) after client has finished writing bytes.
+  rpc CommitPayload(CommitPayloadRequest)
+      returns (CommitPayloadResponse);
+
+  // Snapshot descriptor (no stability guarantee).
+  rpc Resolve(ResolveRequest)
+      returns (ResolveResponse);
+
+  // Snapshot multiple descriptors (no stability guarantee).
+  rpc BatchResolve(BatchResolveRequest)
+      returns (BatchResolveResponse);
+
+  // Acquire a lease + stable descriptor for reading/processing.
+  rpc Acquire(AcquireRequest)
+      returns (AcquireResponse);
+
+  // Release a lease.
+  rpc Release(ReleaseRequest)
+      returns (google.protobuf.Empty);
+
+  // Explicitly promote to a higher tier.
+  rpc Promote(PromoteRequest)
+      returns (PromoteResponse);
+
+  // Spill payload(s) to durable storage (typically DISK).
+  rpc Spill(SpillRequest)
+      returns (SpillResponse);
+
+  // Delete payload bytes and placement (subject to leases unless force=true).
+  rpc Delete(DeleteRequest)
+      returns (google.protobuf.Empty);
+
+  // Add lineage edges (descriptive).
+  rpc AddLineage(AddLineageRequest)
+      returns (google.protobuf.Empty);
+
+  // Query lineage edges (parents or children).
+  rpc GetLineage(GetLineageRequest)
+      returns (GetLineageResponse);
+
+  // Metadata (current view)
+  rpc UpdatePayloadMetadata(UpdatePayloadMetadataRequest)
+      returns (UpdatePayloadMetadataResponse);
+
+  // Metadata (immutable event history)
+  rpc AppendPayloadMetadataEvent(AppendPayloadMetadataEventRequest)
+      returns (AppendPayloadMetadataEventResponse);
+
+  rpc GetPayloadMetadata(GetPayloadMetadataRequest)
+      returns (GetPayloadMetadataResponse);
+
+  rpc ListPayloadMetadataEvents(ListPayloadMetadataEventsRequest)
+      returns (ListPayloadMetadataEventsResponse);
+
+  // Per-payload eviction policy
+  rpc UpdateEvictionPolicy(UpdateEvictionPolicyRequest)
+      returns (UpdateEvictionPolicyResponse);
+
+  // Control / observability
+  rpc Prefetch(PrefetchRequest)
+      returns (google.protobuf.Empty);
+
+  rpc Pin(PinRequest)
+      returns (google.protobuf.Empty);
+
+  rpc Stats(StatsRequest)
+      returns (StatsResponse);
+}

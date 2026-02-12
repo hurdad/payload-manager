@@ -1,0 +1,15 @@
+# Google C++ style for clang-format with 2-space indentation
+BasedOnStyle: Google
+IndentWidth: 2                  # 2 spaces per indentation
+TabWidth: 2                     # Tab character equivalent width
+UseTab: Never                   # Use spaces instead of tabs
+ColumnLimit: 150                # Maximum line length
+AllowShortFunctionsOnASingleLine: false
+BreakBeforeBraces: Attach       # Google style usually uses K&R braces
+SortIncludes: true              # Automatically sort #include directives
+DerivePointerAlignment: false
+PointerAlignment: Left          # Align * with type: int* ptr;
+SpacesBeforeTrailingComments: 1
+ReflowComments: true
+AlignConsecutiveAssignments: true
+AlignConsecutiveDeclarations: true
