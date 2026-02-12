@@ -14,10 +14,10 @@ using payload::manager::v1::EvictionPolicy;
 using payload::manager::v1::LineageEdge;
 using payload::manager::v1::MetadataUpdateMode;
 using payload::manager::v1::PayloadDescriptor;
-using payload::manager::v1::PayloadMetadata;
+using payload::manager::v1::PayloadGenericMetadata;
 using payload::manager::v1::PayloadMetadataEvent;
 using payload::manager::v1::PayloadState;
-using payload::manager::common::v1::Tier;
+using payload::manager::v1::Tier;
 
 pb::Timestamp ToTimestamp(std::chrono::system_clock::time_point tp) {
   const auto sec = std::chrono::time_point_cast<std::chrono::seconds>(tp);
@@ -76,7 +76,7 @@ grpc::Status PayloadManagerServiceImpl::AllocatePayload(
   const Tier tier = request->preferred_tier() == Tier::TIER_UNSPECIFIED ? Tier::TIER_RAM
                                                                          : request->preferred_tier();
   d->set_tier(tier);
-  d->set_state(PayloadState::STATE_ALLOCATED);
+  d->set_state(PayloadState::PAYLOAD_STATE_ALLOCATED);
   d->set_version(1);
   *d->mutable_created_at() = ToTimestamp(Now());
 
@@ -109,7 +109,7 @@ grpc::Status PayloadManagerServiceImpl::CommitPayload(
     return grpc::Status(grpc::StatusCode::NOT_FOUND, "payload not found");
   }
 
-  rec->descriptor.set_state(PayloadState::STATE_ACTIVE);
+  rec->descriptor.set_state(PayloadState::PAYLOAD_STATE_ACTIVE);
   rec->descriptor.set_version(rec->descriptor.version() + 1);
   *response->mutable_payload_descriptor() = rec->descriptor;
   return grpc::Status::OK;
@@ -152,7 +152,7 @@ grpc::Status PayloadManagerServiceImpl::Acquire(
     return grpc::Status(grpc::StatusCode::NOT_FOUND, "payload not found");
   }
 
-  if (rec->descriptor.state() != PayloadState::STATE_ACTIVE) {
+  if (rec->descriptor.state() != PayloadState::PAYLOAD_STATE_ACTIVE) {
     return grpc::Status(grpc::StatusCode::FAILED_PRECONDITION,
                         "payload must be active before acquire");
   }
@@ -315,7 +315,7 @@ grpc::Status PayloadManagerServiceImpl::UpdatePayloadMetadata(
       request->mode() == MetadataUpdateMode::METADATA_UPDATE_MODE_UNSPECIFIED) {
     rec->metadata = request->metadata();
   } else {
-    PayloadMetadata merged = rec->metadata;
+    PayloadGenericMetadata merged = rec->metadata;
     if (!request->metadata().json().empty()) {
       std::string combined = merged.json();
       if (!combined.empty()) {

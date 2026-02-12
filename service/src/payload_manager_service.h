@@ -118,7 +118,7 @@ class PayloadManagerServiceImpl final : public payload::manager::v1::PayloadMana
   struct PayloadRecord {
     payload::manager::v1::PayloadDescriptor descriptor;
     uint64_t size_bytes = 0;
-    payload::manager::v1::PayloadMetadata metadata;
+    payload::manager::v1::PayloadGenericMetadata metadata;
     std::vector<payload::manager::v1::PayloadMetadataEvent> metadata_events;
     std::vector<payload::manager::v1::LineageEdge> parents;
     bool pin_active = false;
