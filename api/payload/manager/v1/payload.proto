@@ -42,15 +42,36 @@ enum PayloadFormat {
 }
 
 /*
-  Lifecycle state for payload metadata tracking.
+  Canonical lifecycle state shared across all Payload Manager APIs.
+
+  State transitions are monotonic; terminal states are EXPIRED and DELETED.
 */
 enum PayloadState {
   PAYLOAD_STATE_UNSPECIFIED = 0;
-  PAYLOAD_STATE_ACTIVE = 1;
-  PAYLOAD_STATE_SPILLING = 2;
-  PAYLOAD_STATE_DURABLE = 3;
-  PAYLOAD_STATE_EVICTING = 4;
-  PAYLOAD_STATE_DELETED = 5;
+
+  // Reserved/created but not visible to readers yet.
+  PAYLOAD_STATE_ALLOCATED = 1;
+
+  // Visible and available for readers.
+  PAYLOAD_STATE_ACTIVE = 2;
+
+  // In progress of becoming durable (e.g. spill to disk/object storage).
+  PAYLOAD_STATE_SPILLING = 3;
+
+  // Durable copy exists.
+  PAYLOAD_STATE_DURABLE = 4;
+
+  // In progress of movement/eviction between tiers.
+  PAYLOAD_STATE_EVICTING = 5;
+
+  // Explicit client delete requested and in progress.
+  PAYLOAD_STATE_DELETING = 6;
+
+  // TTL elapsed.
+  PAYLOAD_STATE_EXPIRED = 7;
+
+  // Terminal: payload bytes/placement removed.
+  PAYLOAD_STATE_DELETED = 8;
 }
 
 /*
