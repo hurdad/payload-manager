@@ -70,9 +70,6 @@ message PayloadMetadata {
   // Lifecycle
   // ----------------------------------------------------------------
 
-  // Metadata-tracking lifecycle (spill/durable/eviction observability).
-  // For API request/visibility lifecycle, see
-  // payload.manager.v1.PayloadLifecycleState in payload_manager_service.proto.
   payload.manager.common.v1.PayloadState state = 12;
 
   google.protobuf.Timestamp created_at = 13;

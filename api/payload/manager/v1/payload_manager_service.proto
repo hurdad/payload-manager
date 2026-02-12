@@ -26,14 +26,10 @@ import "payload/manager/v1/common.proto";
 // =======================
 
 /*
-  API lifecycle state of a payload as observed through the service endpoints.
-  This enum models request/visibility transitions (Allocate/Commit/Delete/TTL)
-  and is distinct from payload.manager.common.v1.PayloadState, which is used
-  for metadata tracking and durability observability.
-
+  Lifecycle state of a payload.
   State transitions are monotonic; terminal states are EXPIRED and DELETED.
 */
-enum PayloadLifecycleState {
+enum PayloadState {
   STATE_UNSPECIFIED = 0;
   STATE_ALLOCATED   = 1;  // reserved, not visible yet
   STATE_ACTIVE      = 2;  // visible to readers
@@ -151,7 +147,7 @@ message PayloadDescriptor {
   bytes uuid = 1;
 
   payload.manager.common.v1.Tier tier = 2;
-  PayloadLifecycleState state = 3;
+  PayloadState state = 3;
 
   // Exactly one location should be set and should match `tier`.
   oneof location {
