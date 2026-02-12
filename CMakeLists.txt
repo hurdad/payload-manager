@@ -7,5 +7,6 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 add_subdirectory(api)
 add_subdirectory(client/cpp)
+add_subdirectory(examples/cpp)
 
 add_subdirectory(service)
