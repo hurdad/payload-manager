@@ -28,6 +28,8 @@ set(PROTO_SRCS)
 set(PROTO_HDRS)
 set(GRPC_SRCS)
 set(GRPC_HDRS)
+set(PY_PROTO_SRCS)
+set(PY_GRPC_SRCS)
 
 foreach(PROTO_FILE IN LISTS PROTO_FILES)
   get_filename_component(PROTO_WE ${PROTO_FILE} NAME_WE)
@@ -37,6 +39,8 @@ foreach(PROTO_FILE IN LISTS PROTO_FILES)
   list(APPEND PROTO_HDRS ${GENERATED_DIR}/${PROTO_DIR}/${PROTO_WE}.pb.h)
   list(APPEND GRPC_SRCS ${GENERATED_DIR}/${PROTO_DIR}/${PROTO_WE}.grpc.pb.cc)
   list(APPEND GRPC_HDRS ${GENERATED_DIR}/${PROTO_DIR}/${PROTO_WE}.grpc.pb.h)
+  list(APPEND PY_PROTO_SRCS ${GENERATED_DIR}/${PROTO_DIR}/${PROTO_WE}_pb2.py)
+  list(APPEND PY_GRPC_SRCS ${GENERATED_DIR}/${PROTO_DIR}/${PROTO_WE}_pb2_grpc.py)
 endforeach()
 
 if(TARGET protobuf::protoc)
@@ -51,6 +55,12 @@ if(TARGET gRPC::grpc_cpp_plugin)
   set(GRPC_CPP_PLUGIN $<TARGET_FILE:gRPC::grpc_cpp_plugin>)
 else()
   find_program(GRPC_CPP_PLUGIN grpc_cpp_plugin REQUIRED)
+endif()
+
+if(TARGET gRPC::grpc_python_plugin)
+  set(GRPC_PYTHON_PLUGIN $<TARGET_FILE:gRPC::grpc_python_plugin>)
+else()
+  find_program(GRPC_PYTHON_PLUGIN grpc_python_plugin REQUIRED)
 endif()
 
 if(TARGET protobuf::libprotobuf)
@@ -94,6 +104,20 @@ add_custom_command(
   VERBATIM
 )
 
+add_custom_command(
+  OUTPUT ${PY_PROTO_SRCS} ${PY_GRPC_SRCS}
+  COMMAND ${PROTOC_CMD}
+          --proto_path=${PROTO_ROOT}
+          --python_out=${GENERATED_DIR}
+          --grpc_python_out=${GENERATED_DIR}
+          --plugin=protoc-gen-grpc_python=${GRPC_PYTHON_PLUGIN}
+          ${PROTO_FILES}
+  WORKING_DIRECTORY ${PROTO_ROOT}
+  DEPENDS ${PROTO_ABS_FILES}
+  COMMENT "Generating protobuf/gRPC Python sources"
+  VERBATIM
+)
+
 add_library(payload_manager_proto STATIC
   ${PROTO_SRCS}
   ${GRPC_SRCS}
@@ -113,6 +137,12 @@ target_link_libraries(payload_manager_proto
 )
 
 add_custom_target(generate_protos ALL
-  DEPENDS ${PROTO_SRCS} ${PROTO_HDRS} ${GRPC_SRCS} ${GRPC_HDRS}
+  DEPENDS
+    ${PROTO_SRCS}
+    ${PROTO_HDRS}
+    ${GRPC_SRCS}
+    ${GRPC_HDRS}
+    ${PY_PROTO_SRCS}
+    ${PY_GRPC_SRCS}
 )
 add_dependencies(payload_manager_proto generate_protos)
