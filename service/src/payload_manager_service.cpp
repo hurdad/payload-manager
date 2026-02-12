@@ -18,6 +18,7 @@ using payload::manager::v1::PayloadMetadata;
 using payload::manager::v1::PayloadMetadataEvent;
 using payload::manager::v1::PayloadState;
 using payload::manager::common::v1::Tier;
+using payload::manager::v1::ErrorStatus;
 
 pb::Timestamp ToTimestamp(std::chrono::system_clock::time_point tp) {
   const auto sec = std::chrono::time_point_cast<std::chrono::seconds>(tp);
@@ -54,6 +55,14 @@ std::string RandomTokenHex(std::size_t bytes) {
   return oss.str();
 }
 
+
+
+ErrorStatus MakeRpcStatus(grpc::StatusCode code, const std::string& message = {}) {
+  ErrorStatus status;
+  status.set_code(static_cast<int>(code));
+  status.set_message(message);
+  return status;
+}
 bool IsValidUuid(const std::string& uuid) { return uuid.size() == 16; }
 
 }  // namespace
@@ -134,10 +143,17 @@ grpc::Status PayloadManagerServiceImpl::BatchResolve(
   std::lock_guard<std::mutex> lock(mu_);
 
   for (const auto& uuid : request->uuids()) {
+    auto* result = response->add_results();
+    result->set_uuid(uuid);
+
     auto* rec = FindPayloadOrNull(uuid);
-    if (rec != nullptr) {
-      *response->add_descriptors() = rec->descriptor;
+    if (rec == nullptr) {
+      *result->mutable_status() = MakeRpcStatus(grpc::StatusCode::NOT_FOUND, "payload not found");
+      continue;
     }
+
+    *result->mutable_payload_descriptor() = rec->descriptor;
+    *result->mutable_status() = MakeRpcStatus(grpc::StatusCode::OK);
   }
 
   return grpc::Status::OK;
@@ -219,8 +235,7 @@ grpc::Status PayloadManagerServiceImpl::Spill(
 
     auto* rec = FindPayloadOrNull(uuid);
     if (rec == nullptr) {
-      result->set_ok(false);
-      result->set_error_message("payload not found");
+      *result->mutable_status() = MakeRpcStatus(grpc::StatusCode::NOT_FOUND, "payload not found");
       continue;
     }
 
@@ -228,7 +243,7 @@ grpc::Status PayloadManagerServiceImpl::Spill(
     PopulateLocation(rec->descriptor, rec->size_bytes);
     rec->descriptor.set_version(rec->descriptor.version() + 1);
     *result->mutable_payload_descriptor() = rec->descriptor;
-    result->set_ok(true);
+    *result->mutable_status() = MakeRpcStatus(grpc::StatusCode::OK);
   }
 
   return grpc::Status::OK;

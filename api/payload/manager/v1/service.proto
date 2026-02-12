@@ -21,6 +21,14 @@ import "google/protobuf/timestamp.proto";
 import "payload/manager/v1/payload.proto";
 
 
+
+
+// Consistent status envelope for partial-success result sets.
+message ErrorStatus {
+  int32 code = 1;
+  string message = 2;
+}
+
 // =======================
 // ENUMS
 // =======================
@@ -347,9 +355,8 @@ message SpillRequest {
 message SpillResponse {
   message Result {
     bytes uuid = 1;          // 16-byte UUID
-    bool ok = 2;
-    string error_message = 3;
-    PayloadDescriptor payload_descriptor = 4; // current descriptor after spill attempt
+    ErrorStatus status = 2;
+    PayloadDescriptor payload_descriptor = 3; // current descriptor after spill attempt
   }
   repeated Result results = 1;
 }
@@ -378,7 +385,13 @@ message BatchResolveRequest {
 }
 
 message BatchResolveResponse {
-  repeated PayloadDescriptor descriptors = 1;
+  message Result {
+    bytes uuid = 1; // 16-byte UUID
+    ErrorStatus status = 2;
+    PayloadDescriptor payload_descriptor = 3;
+  }
+
+  repeated Result results = 1;
 }
 
 
