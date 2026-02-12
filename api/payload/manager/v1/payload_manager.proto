@@ -18,22 +18,12 @@ package payload.manager.v1;
 
 import "google/protobuf/empty.proto";
 import "google/protobuf/timestamp.proto";
+import "payload/manager/v1/commo.proto";
 
 
 // =======================
 // ENUMS
 // =======================
-
-/*
-  Storage tier where the payload currently resides.
-  Ordered roughly from fastest/least durable → slowest/most durable.
-*/
-enum Tier {
-  TIER_UNSPECIFIED = 0;
-  TIER_GPU  = 1;  // L0: device memory (volatile)
-  TIER_RAM  = 2;  // L1: host RAM / shared memory (volatile)
-  TIER_DISK = 3;  // L2: persistent storage (durable)
-}
 
 /*
   Lifecycle state of a payload.
@@ -76,23 +66,6 @@ enum MetadataUpdateMode {
   METADATA_UPDATE_MODE_REPLACE = 2; // full replacement
 }
 
-/*
-  Per-payload eviction priority.
-
-  IMPORTANT:
-  - This is a best-effort policy. Under severe resource exhaustion, the system
-    may violate policy to preserve node stability.
-  - Leases and explicit pins take precedence over eviction policy.
-*/
-enum EvictionPriority {
-  EVICTION_PRIORITY_UNSPECIFIED = 0;
-  EVICTION_PRIORITY_LOW    = 1; // evict early
-  EVICTION_PRIORITY_NORMAL = 2; // default
-  EVICTION_PRIORITY_HIGH   = 3; // evict late
-  EVICTION_PRIORITY_NEVER  = 4; // best-effort "do not evict" (not absolute)
-}
-
-
 // =======================
 // EVICTION POLICY
 // =======================
@@ -108,18 +81,18 @@ enum EvictionPriority {
 */
 message EvictionPolicy {
   // Priority used by the eviction scoring algorithm.
-  EvictionPriority priority = 1;
+  payload.manager.common.v1.EvictionPriority priority = 1;
 
   // If true, payload MUST be spilled to durable storage before being evicted
   // from volatile tiers (GPU/RAM), unless doing so is impossible (disk full, etc).
   bool require_durable = 2;
 
   // Where to spill to when making durable (typically DISK).
-  Tier spill_target = 3;
+  payload.manager.common.v1.Tier spill_target = 3;
 
   // If set, manager should attempt to keep the payload at or above this tier
   // (best-effort). Example: min_residency_tier=RAM means "try not to leave RAM".
-  Tier min_residency_tier = 4;
+  payload.manager.common.v1.Tier min_residency_tier = 4;
 }
 
 
@@ -173,7 +146,7 @@ message PayloadDescriptor {
   // MUST be exactly 16 bytes (RFC 4122 UUID).
   bytes uuid = 1;
 
-  Tier tier = 2;
+  payload.manager.common.v1.Tier tier = 2;
   PayloadState state = 3;
 
   // Exactly one location should be set and should match `tier`.
@@ -259,7 +232,7 @@ message GetLineageResponse {
 */
 message AllocatePayloadRequest {
   uint64 size_bytes = 1;
-  Tier preferred_tier = 2;
+  payload.manager.common.v1.Tier preferred_tier = 2;
 
   // TTL in milliseconds; 0 can mean "no TTL" (implementation-defined).
   uint64 ttl_ms = 3;
@@ -324,7 +297,7 @@ message AcquireRequest {
   bytes uuid = 1; // 16-byte UUID
 
   // Minimum acceptable tier for access (e.g., RAM or GPU).
-  Tier min_tier = 2;
+  payload.manager.common.v1.Tier min_tier = 2;
 
   // Promotion behavior if payload is below min_tier.
   PromotionPolicy promotion_policy = 3;
@@ -358,7 +331,7 @@ message ReleaseRequest {
 */
 message PromoteRequest {
   bytes uuid = 1; // 16-byte UUID
-  Tier target_tier = 2;
+  payload.manager.common.v1.Tier target_tier = 2;
   PromotionPolicy policy = 3;
 }
 
@@ -525,7 +498,7 @@ message UpdateEvictionPolicyResponse {
 */
 message PrefetchRequest {
   bytes uuid = 1; // 16-byte UUID
-  Tier target_tier = 2;
+  payload.manager.common.v1.Tier target_tier = 2;
 }
 
 /*
