@@ -26,20 +26,6 @@ import "payload/manager/v1/payload.proto";
 // =======================
 
 /*
-  Lifecycle state of a payload.
-  State transitions are monotonic; terminal states are EXPIRED and DELETED.
-*/
-enum PayloadLifeCycle {
-  STATE_UNSPECIFIED = 0;
-  STATE_ALLOCATED   = 1;  // reserved, not visible yet
-  STATE_ACTIVE      = 2;  // visible to readers
-  STATE_EVICTING    = 3;  // moving between tiers
-  STATE_DELETING    = 4;  // explicit client delete
-  STATE_EXPIRED     = 5;  // TTL elapsed
-  STATE_DELETED     = 6;  // terminal
-}
-
-/*
   Controls promotion behavior (moving a payload to a higher tier).
 */
 enum PromotionPolicy {
@@ -147,7 +133,7 @@ message PayloadDescriptor {
   bytes uuid = 1;
 
   payload.manager.v1.Tier tier = 2;
-  PayloadLifeCycle state = 3;
+  payload.manager.v1.PayloadState state = 3;
 
   // Exactly one location should be set and should match `tier`.
   oneof location {
