@@ -10,9 +10,9 @@ find_package(gRPC CONFIG QUIET)
 
 set(PROTO_ROOT ${CMAKE_CURRENT_SOURCE_DIR})
 set(PROTO_FILES
-  payload/manager/v1/commo.proto
-  payload/manager/v1/payload_manager.proto
-  payload/manager/v1/payload_metadata.proto
+  payload/manager/v1/common.proto
+  payload/manager/v1/payload_manager_service.proto
+  payload/manager/v1/payload_manager_metadata.proto
   payload/manager/v1/payload_manager_config.proto
 )
 
