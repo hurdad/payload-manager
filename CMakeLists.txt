@@ -7,4 +7,4 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 add_subdirectory(api)
 
-add_subdirectory(service/src)
+add_subdirectory(service)

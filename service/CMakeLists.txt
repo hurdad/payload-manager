@@ -1,6 +1,6 @@
 add_executable(payload_manager_service
-  main.cpp
-  payload_manager_service.cpp
+  src/main.cpp
+  src/payload_manager_service.cpp
 )
 
 target_include_directories(payload_manager_service
