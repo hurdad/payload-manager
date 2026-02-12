@@ -1,7 +1,7 @@
 FROM ubuntu:24.04 AS builder
 
 ENV DEBIAN_FRONTEND=noninteractive
-WORKDIR /workspace/payload-manager
+WORKDIR /workspace
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
@@ -18,10 +18,10 @@ RUN apt-get update \
         python3-pip \
     && rm -rf /var/lib/apt/lists/*
 
-COPY . .
+COPY . ./src
 
-RUN cmake -S . -B build -G Ninja \
-    && cmake --build build --target payload_manager_service
+RUN cmake -S ./src -B /workspace/build -G Ninja -DCMAKE_BUILD_TYPE=Release \
+    && cmake --build /workspace/build --target payload_manager_service
 
 
 FROM ubuntu:24.04 AS runtime
@@ -37,7 +37,7 @@ RUN apt-get update \
         libgrpc29t64 \
     && rm -rf /var/lib/apt/lists/*
 
-COPY --from=builder /workspace/payload-manager/build/service/payload_manager_service ./payload_manager_service
+COPY --from=builder /workspace/build/service/payload_manager_service ./payload_manager_service
 
 EXPOSE 50051
 CMD ["./payload_manager_service", "0.0.0.0:50051"]
