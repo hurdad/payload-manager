@@ -90,11 +90,11 @@ message TimescaleDBBackend {
   string connection_uri = 1;
   string schema = 2;
   uint32 max_connections = 3;
-  google.protobuf.duration connect_timeout = 4;
+  google.protobuf.Duration connect_timeout = 4;
   bool enable_hypertables = 5;
   bool auto_migrate = 6;
-  google.protobuf.duration metadata_event_retention = 7;
-  google.protobuf.duration lineage_retention = 8;
+  google.protobuf.Duration metadata_event_retention = 7;
+  google.protobuf.Duration lineage_retention = 8;
 }
 
 
@@ -232,9 +232,9 @@ message ObjectStorageCredentials {
 // =======================
 
 message LeaseConfig {
-  google.protobuf.duration default_lease_duration = 1;
-  google.protobuf.duration max_lease_duration = 2;
-  google.protobuf.duration reap_interval = 3;
+  google.protobuf.Duration default_lease_duration = 1;
+  google.protobuf.Duration max_lease_duration = 2;
+  google.protobuf.Duration reap_interval = 3;
 }
 
 

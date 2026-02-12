@@ -275,7 +275,7 @@ message AllocatePayloadRequest {
 }
 
 message AllocatePayloadResponse {
-  PayloadDescriptor descriptor = 1;
+  PayloadDescriptor payload_descriptor = 1;
 }
 
 /*
@@ -287,7 +287,7 @@ message CommitPayloadRequest {
 }
 
 message CommitPayloadResponse {
-  PayloadDescriptor descriptor = 1;
+  PayloadDescriptor payload_descriptor = 1;
 }
 
 
@@ -305,7 +305,7 @@ message ResolveRequest {
 }
 
 message ResolveResponse {
-  PayloadDescriptor descriptor = 1;
+  PayloadDescriptor payload_descriptor = 1;
 }
 
 
@@ -335,7 +335,7 @@ message AcquireRequest {
 
 message AcquireResponse {
   // Authoritative descriptor to use for reading while lease is valid.
-  PayloadDescriptor descriptor = 1;
+  PayloadDescriptor payload_descriptor = 1;
 
   // Lease token; opaque to clients.
   string lease_id = 2;
@@ -363,7 +363,7 @@ message PromoteRequest {
 }
 
 message PromoteResponse {
-  PayloadDescriptor descriptor = 1;
+  PayloadDescriptor payload_descriptor = 1;
 }
 
 
@@ -390,7 +390,7 @@ message SpillResponse {
     bytes uuid = 1;          // 16-byte UUID
     bool ok = 2;
     string error_message = 3;
-    PayloadDescriptor descriptor = 4; // current descriptor after spill attempt
+    PayloadDescriptor payload_descriptor = 4; // current descriptor after spill attempt
   }
   repeated Result results = 1;
 }
@@ -511,7 +511,7 @@ message UpdateEvictionPolicyRequest {
 }
 
 message UpdateEvictionPolicyResponse {
-  PayloadDescriptor descriptor = 1;
+  PayloadDescriptor payload_descriptor = 1;
   google.protobuf.Timestamp updated_at = 2;
 }
 
