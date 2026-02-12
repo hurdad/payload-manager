@@ -1,10 +1,10 @@
 syntax = "proto3";
 
-package payload.manager.v1;
+package payload.manager.metadata.v1;
 
-option go_package = "github.com/yourorg/payload-manager/api/v1;payloadmanagerv1";
+option go_package = "github.com/yourorg/payload-manager/api/metadata/v1;payloadmetadatav1";
 option java_multiple_files = true;
-option java_package = "com.yourorg.payload.manager.v1";
+option java_package = "com.yourorg.payload.manager.metadata.v1";
 option java_outer_classname = "PayloadMetadataProto";
 
 import "google/protobuf/timestamp.proto";
