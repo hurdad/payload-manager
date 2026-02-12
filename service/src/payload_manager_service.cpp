@@ -17,7 +17,7 @@ using payload::manager::v1::PayloadDescriptor;
 using payload::manager::v1::PayloadMetadata;
 using payload::manager::v1::PayloadMetadataEvent;
 using payload::manager::v1::PayloadState;
-using payload::manager::v1::Tier;
+using payload::manager::common::v1::Tier;
 
 pb::Timestamp ToTimestamp(std::chrono::system_clock::time_point tp) {
   const auto sec = std::chrono::time_point_cast<std::chrono::seconds>(tp);
