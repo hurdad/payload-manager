@@ -1,6 +1,6 @@
 syntax = "proto3";
 
-package payload.manager.config.v1;
+package payload.manager.v1;
 
 /*
   Payload Manager Configuration (v1)
@@ -16,7 +16,7 @@ package payload.manager.config.v1;
 */
 
 import "google/protobuf/duration.proto";
-import "payload/manager/v1/common.proto";
+import "payload/manager/v1/payload.proto";
 
 
 // =======================
@@ -50,9 +50,9 @@ message PayloadManagerConfig {
 // =======================
 
 message GlobalPolicyDefaults {
-  payload.manager.common.v1.EvictionPriority default_eviction_priority = 1;
+  payload.manager.v1.EvictionPriority default_eviction_priority = 1;
   bool require_durable_by_default = 2;
-  payload.manager.common.v1.Tier default_spill_target = 3;
+  payload.manager.v1.Tier default_spill_target = 3;
 }
 
 

@@ -1,6 +1,6 @@
 syntax = "proto3";
 
-package payload.manager.common.v1;
+package payload.manager.v1;
 
 /*
   Shared enums/tables for Payload Manager APIs.

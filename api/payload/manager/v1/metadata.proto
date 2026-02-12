@@ -1,14 +1,9 @@
 syntax = "proto3";
 
-package payload.manager.metadata.v1;
-
-option go_package = "github.com/yourorg/payload-manager/api/metadata/v1;payloadmetadatav1";
-option java_multiple_files = true;
-option java_package = "com.yourorg.payload.manager.metadata.v1";
-option java_outer_classname = "PayloadMetadataProto";
+package payload.manager.v1;
 
 import "google/protobuf/timestamp.proto";
-import "payload/manager/v1/common.proto";
+import "payload/manager/v1/payload.proto";
 
 
 // ============================================================
@@ -43,10 +38,10 @@ message PayloadMetadata {
   uint64 compressed_size_bytes = 5;
 
   // Logical format of payload
-  payload.manager.common.v1.PayloadFormat format = 6;
+  payload.manager.v1.PayloadFormat format = 6;
 
   // Compression applied at rest
-  payload.manager.common.v1.Compression compression = 7;
+  payload.manager.v1.Compression compression = 7;
 
 
   // ----------------------------------------------------------------
@@ -54,10 +49,10 @@ message PayloadMetadata {
   // ----------------------------------------------------------------
 
   // Current primary tier
-  payload.manager.common.v1.Tier current_tier = 8;
+  payload.manager.v1.Tier current_tier = 8;
 
   // All tiers where payload currently exists (replication / promotion)
-  repeated payload.manager.common.v1.Tier available_tiers = 9;
+  repeated payload.manager.v1.Tier available_tiers = 9;
 
   // Path for disk tier (if applicable)
   string disk_path = 10;
@@ -70,7 +65,7 @@ message PayloadMetadata {
   // Lifecycle
   // ----------------------------------------------------------------
 
-  payload.manager.common.v1.PayloadState state = 12;
+  payload.manager.v1.PayloadState state = 12;
 
   google.protobuf.Timestamp created_at = 13;
   google.protobuf.Timestamp last_accessed_at = 14;

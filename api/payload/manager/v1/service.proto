@@ -18,7 +18,7 @@ package payload.manager.v1;
 
 import "google/protobuf/empty.proto";
 import "google/protobuf/timestamp.proto";
-import "payload/manager/v1/common.proto";
+import "payload/manager/v1/payload.proto";
 
 
 // =======================
@@ -29,7 +29,7 @@ import "payload/manager/v1/common.proto";
   Lifecycle state of a payload.
   State transitions are monotonic; terminal states are EXPIRED and DELETED.
 */
-enum PayloadState {
+enum PayloadLifeCycle {
   STATE_UNSPECIFIED = 0;
   STATE_ALLOCATED   = 1;  // reserved, not visible yet
   STATE_ACTIVE      = 2;  // visible to readers
@@ -81,18 +81,18 @@ enum MetadataUpdateMode {
 */
 message EvictionPolicy {
   // Priority used by the eviction scoring algorithm.
-  payload.manager.common.v1.EvictionPriority priority = 1;
+  payload.manager.v1.EvictionPriority priority = 1;
 
   // If true, payload MUST be spilled to durable storage before being evicted
   // from volatile tiers (GPU/RAM), unless doing so is impossible (disk full, etc).
   bool require_durable = 2;
 
   // Where to spill to when making durable (typically DISK).
-  payload.manager.common.v1.Tier spill_target = 3;
+  payload.manager.v1.Tier spill_target = 3;
 
   // If set, manager should attempt to keep the payload at or above this tier
   // (best-effort). Example: min_residency_tier=RAM means "try not to leave RAM".
-  payload.manager.common.v1.Tier min_residency_tier = 4;
+  payload.manager.v1.Tier min_residency_tier = 4;
 }
 
 
@@ -146,8 +146,8 @@ message PayloadDescriptor {
   // MUST be exactly 16 bytes (RFC 4122 UUID).
   bytes uuid = 1;
 
-  payload.manager.common.v1.Tier tier = 2;
-  PayloadState state = 3;
+  payload.manager.v1.Tier tier = 2;
+  PayloadLifeCycle state = 3;
 
   // Exactly one location should be set and should match `tier`.
   oneof location {
@@ -181,7 +181,7 @@ message PayloadDescriptor {
   - Opaque to the payload manager: not validated, parsed, or indexed here.
   - Interpreted by clients, tools, or downstream services.
 */
-message PayloadMetadata {
+message PayloadGenericMetadata {
   // Opaque metadata blob (commonly UTF-8 JSON, but treated as raw bytes).
   bytes json = 1;
 
@@ -232,7 +232,7 @@ message GetLineageResponse {
 */
 message AllocatePayloadRequest {
   uint64 size_bytes = 1;
-  payload.manager.common.v1.Tier preferred_tier = 2;
+  payload.manager.v1.Tier preferred_tier = 2;
 
   // TTL in milliseconds; 0 can mean "no TTL" (implementation-defined).
   uint64 ttl_ms = 3;
@@ -297,7 +297,7 @@ message AcquireRequest {
   bytes uuid = 1; // 16-byte UUID
 
   // Minimum acceptable tier for access (e.g., RAM or GPU).
-  payload.manager.common.v1.Tier min_tier = 2;
+  payload.manager.v1.Tier min_tier = 2;
 
   // Promotion behavior if payload is below min_tier.
   PromotionPolicy promotion_policy = 3;
@@ -331,7 +331,7 @@ message ReleaseRequest {
 */
 message PromoteRequest {
   bytes uuid = 1; // 16-byte UUID
-  payload.manager.common.v1.Tier target_tier = 2;
+  payload.manager.v1.Tier target_tier = 2;
   PromotionPolicy policy = 3;
 }
 
@@ -407,7 +407,7 @@ message BatchResolveResponse {
 message UpdatePayloadMetadataRequest {
   bytes uuid = 1; // 16-byte UUID
   MetadataUpdateMode mode = 2;
-  PayloadMetadata metadata = 3;
+  PayloadGenericMetadata metadata = 3;
 
   // Optional attribution fields for auditability
   string actor = 4;
@@ -416,7 +416,7 @@ message UpdatePayloadMetadataRequest {
 
 message UpdatePayloadMetadataResponse {
   bytes uuid = 1; // 16-byte UUID
-  PayloadMetadata metadata = 2;
+  PayloadGenericMetadata metadata = 2;
   google.protobuf.Timestamp updated_at = 3;
 }
 
@@ -425,7 +425,7 @@ message UpdatePayloadMetadataResponse {
 */
 message AppendPayloadMetadataEventRequest {
   bytes uuid = 1; // 16-byte UUID
-  PayloadMetadata metadata = 2;
+  PayloadGenericMetadata metadata = 2;
   string source = 3;
   string version = 4;
 }
@@ -441,7 +441,7 @@ message GetPayloadMetadataRequest {
 
 message GetPayloadMetadataResponse {
   bytes uuid = 1; // 16-byte UUID
-  PayloadMetadata metadata = 2;
+  PayloadGenericMetadata metadata = 2;
 }
 
 message ListPayloadMetadataEventsRequest {
@@ -453,7 +453,7 @@ message ListPayloadMetadataEventsRequest {
 
 message PayloadMetadataEvent {
   google.protobuf.Timestamp ts = 1;
-  PayloadMetadata metadata = 2;
+  PayloadGenericMetadata metadata = 2;
   string source = 3;
   string version = 4;
 }
@@ -498,7 +498,7 @@ message UpdateEvictionPolicyResponse {
 */
 message PrefetchRequest {
   bytes uuid = 1; // 16-byte UUID
-  payload.manager.common.v1.Tier target_tier = 2;
+  payload.manager.v1.Tier target_tier = 2;
 }
 
 /*
