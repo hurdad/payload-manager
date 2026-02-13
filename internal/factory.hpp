@@ -2,7 +2,7 @@
 
 #include <memory>
 
-#include "internal/config/config.pb.h"
+#include "config/config.pb.h"
 
 #include "internal/db/api/repository.hpp"
 #include "internal/service/payload_service.hpp"

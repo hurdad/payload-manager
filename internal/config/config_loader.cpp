@@ -76,7 +76,7 @@ static void YamlToJson(const YAML::Node& node, std::ostream& out) {
 // Public loader
 // ------------------------------------------------------------
 
-RuntimeConfig ConfigLoader::LoadFromYaml(const std::string& path) {
+payload::runtime::config::RuntimeConfig ConfigLoader::LoadFromYaml(const std::string& path) {
 
     YAML::Node yaml;
     try {
@@ -88,14 +88,15 @@ RuntimeConfig ConfigLoader::LoadFromYaml(const std::string& path) {
     std::stringstream json;
     YamlToJson(yaml, json);
 
-    RuntimeConfig config;
+    payload::runtime::config::RuntimeConfig config;
+
+    google::protobuf::util::JsonParseOptions options;
+    options.ignore_unknown_fields = false;
 
     auto status = google::protobuf::util::JsonStringToMessage(
         json.str(),
         &config,
-        google::protobuf::util::JsonParseOptions{
-            .ignore_unknown_fields = false
-        }
+        options
     );
 
     if (!status.ok()) {
