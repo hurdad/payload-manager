@@ -24,6 +24,8 @@ RUN apt-get update \
         libgrpc++-dev \
         libgrpc-dev \
         libyaml-cpp-dev \
+        libpqxx-dev \
+        libsqlite3-dev \
         protobuf-compiler-grpc \
         python3 \
         python3-pip \
