@@ -1,0 +1,38 @@
+syntax = "proto3";
+package payload.manager.v1;
+
+/*
+  Ordered from fastest → most durable.
+  Higher tiers may not always be available.
+*/
+enum Tier {
+  TIER_UNSPECIFIED = 0;
+  TIER_GPU = 1;
+  TIER_RAM = 2;
+  TIER_DISK = 3;
+  TIER_OBJECT = 4;
+}
+
+/*
+  Lifecycle states are monotonic.
+  Clients MUST NOT assume a reversible transition.
+*/
+enum PayloadState {
+  PAYLOAD_STATE_UNSPECIFIED = 0;
+  PAYLOAD_STATE_ALLOCATED = 1; // writer owns
+  PAYLOAD_STATE_ACTIVE = 2;    // visible to readers
+  PAYLOAD_STATE_SPILLING = 3;
+  PAYLOAD_STATE_DURABLE = 4;
+  PAYLOAD_STATE_EVICTING = 5;
+  PAYLOAD_STATE_DELETING = 6;
+  PAYLOAD_STATE_EXPIRED = 7;
+  PAYLOAD_STATE_DELETED = 8;
+}
+
+enum EvictionPriority {
+  EVICTION_PRIORITY_UNSPECIFIED = 0;
+  EVICTION_PRIORITY_LOW = 1;
+  EVICTION_PRIORITY_NORMAL = 2;
+  EVICTION_PRIORITY_HIGH = 3;
+  EVICTION_PRIORITY_NEVER = 4;
+}
