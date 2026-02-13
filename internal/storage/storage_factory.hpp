@@ -4,7 +4,7 @@
 #include <unordered_map>
 
 #include "storage_backend.hpp"
-#include "payload/manager/v1/config.pb.h"
+#include "config/config.pb.h"
 
 namespace payload::storage {
 
@@ -24,7 +24,7 @@ public:
       payload::manager::v1::Tier,
       StorageBackendPtr>;
 
-  static TierMap Build(const payload::manager::v1::StorageConfig& cfg);
+  static TierMap Build(const payload::runtime::config::StorageConfig& cfg);
 
 };
 

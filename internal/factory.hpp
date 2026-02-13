@@ -5,7 +5,7 @@
 #include "config/config.pb.h"
 
 #include "internal/db/api/repository.hpp"
-#include "internal/service/payload_service.hpp"
+#include "internal/service/data_service.hpp"
 #include "internal/service/catalog_service.hpp"
 #include "internal/service/admin_service.hpp"
 
@@ -20,7 +20,7 @@ namespace payload::internal {
 struct RuntimeDependencies {
   std::shared_ptr<db::Repository> repository;
 
-  std::shared_ptr<service::PayloadService> payload_service;
+  std::shared_ptr<service::DataService> data_service;
   std::shared_ptr<service::CatalogService> catalog_service;
   std::shared_ptr<service::AdminService> admin_service;
 };

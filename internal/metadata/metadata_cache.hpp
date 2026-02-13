@@ -1,4 +1,4 @@
-#include "lineage_graph.hpp"
+#include "internal/lineage/lineage_graph.hpp"
 
 #include <queue>
 #include <unordered_set>
