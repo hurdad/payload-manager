@@ -10,9 +10,6 @@
 #include "internal/spill/spill_scheduler.hpp"
 #include "internal/spill/spill_worker.hpp"
 
-#include "internal/tiering/tiering_manager.hpp"
-#include "internal/tiering/tiering_policy.hpp"
-
 #include "internal/storage/storage_factory.hpp"
 
 #include "internal/service/service_context.hpp"
@@ -31,7 +28,7 @@ using namespace payload;
 /*
     Build full application dependency graph
 */
-Application Build(const payload::manager::v1::PayloadManagerConfig& config) {
+Application Build(const payload::runtime::config::RuntimeConfig& config) {
 
     Application app;
 
@@ -67,24 +64,6 @@ Application Build(const payload::manager::v1::PayloadManagerConfig& config) {
     spill_worker->Start();
 
     // ------------------------------------------------------------------
-    // Tiering system
-    // ------------------------------------------------------------------
-    tiering::PressureState pressure{};
-    pressure.ram_limit  = config.storage().ram().max_bytes();
-    pressure.disk_limit = config.storage().disk().max_bytes();
-
-    auto tier_policy = std::make_shared<tiering::TieringPolicy>(metadata_cache);
-
-    auto tier_manager = std::make_shared<tiering::TieringManager>(
-        tier_policy,
-        spill_scheduler,
-        payload_manager,
-        pressure
-    );
-
-    tier_manager->Start();
-
-    // ------------------------------------------------------------------
     // Services
     // ------------------------------------------------------------------
     service::ServiceContext ctx;
@@ -105,7 +84,6 @@ Application Build(const payload::manager::v1::PayloadManagerConfig& config) {
 
     // Keep ownership of workers so they live for process lifetime
     app.background_workers.push_back(spill_worker);
-    app.background_workers.push_back(tier_manager);
 
     return app;
 }

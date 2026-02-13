@@ -6,12 +6,12 @@ namespace payload::grpc {
 AdminServer::AdminServer(std::shared_ptr<payload::service::AdminService> svc)
     : service_(std::move(svc)) {}
 
-grpc::Status AdminServer::Stats(grpc::ServerContext*,
+::grpc::Status AdminServer::Stats(::grpc::ServerContext*,
                                 const payload::manager::v1::StatsRequest* req,
                                 payload::manager::v1::StatsResponse* resp) {
   try {
     *resp = service_->Stats(*req);
-    return grpc::Status::OK;
+    return ::grpc::Status::OK;
   } catch (const std::exception& e) {
     return ToStatus(e);
   }

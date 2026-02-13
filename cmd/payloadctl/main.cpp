@@ -57,7 +57,7 @@ int main(int argc, char** argv) {
             return 2;
         }
 
-        std::cout << "tier=" << resp.placement().tier() << "\n";
+        std::cout << "tier=" << resp.payload_descriptor().tier() << "\n";
         return 0;
     }
 
@@ -68,7 +68,7 @@ int main(int argc, char** argv) {
 
         AcquireReadLeaseRequest req;
         *req.mutable_id() = MakeID(argv[3]);
-        req.set_min_duration_ms(5000);
+        req.set_min_lease_duration_ms(5000);
 
         AcquireReadLeaseResponse resp;
 

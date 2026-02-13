@@ -1,4 +1,5 @@
 #include "data_service.hpp"
+#include "internal/core/payload_manager.hpp"
 
 namespace payload::service {
 
@@ -11,7 +12,7 @@ ResolveSnapshotResponse
 DataService::ResolveSnapshot(const ResolveSnapshotRequest& req) {
 
   ResolveSnapshotResponse resp;
-  *resp.mutable_placement() = ctx_.manager->ResolveSnapshot(req.id());
+  *resp.mutable_payload_descriptor() = ctx_.manager->ResolveSnapshot(req.id());
   return resp;
 }
 
@@ -21,7 +22,7 @@ DataService::AcquireReadLease(const AcquireReadLeaseRequest& req) {
   return ctx_.manager->AcquireReadLease(
       req.id(),
       req.min_tier(),
-      req.min_duration_ms());
+      req.min_lease_duration_ms());
 }
 
 void DataService::ReleaseLease(const ReleaseLeaseRequest& req) {

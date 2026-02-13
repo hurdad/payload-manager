@@ -1,4 +1,7 @@
 #include "catalog_service.hpp"
+#include "internal/core/payload_manager.hpp"
+#include "internal/metadata/metadata_cache.hpp"
+#include "internal/lineage/lineage_graph.hpp"
 
 namespace payload::service {
 
@@ -11,7 +14,7 @@ AllocatePayloadResponse
 CatalogService::Allocate(const AllocatePayloadRequest& req) {
 
   AllocatePayloadResponse resp;
-  *resp.mutable_placement() =
+  *resp.mutable_payload_descriptor() =
       ctx_.manager->Allocate(req.size_bytes(), req.preferred_tier());
 
   return resp;
@@ -21,7 +24,7 @@ CommitPayloadResponse
 CatalogService::Commit(const CommitPayloadRequest& req) {
 
   CommitPayloadResponse resp;
-  *resp.mutable_placement() = ctx_.manager->Commit(req.id());
+  *resp.mutable_payload_descriptor() = ctx_.manager->Commit(req.id());
   return resp;
 }
 
@@ -40,7 +43,7 @@ CatalogService::UpdateMetadata(const UpdatePayloadMetadataRequest& req) {
   else
     ctx_.metadata->Merge(req.id(), req.metadata());
 
-  resp.set_id(req.id());
+  *resp.mutable_id() = req.id();
   *resp.mutable_metadata() = req.metadata();
   return resp;
 }

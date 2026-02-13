@@ -1,51 +1,34 @@
 #include "server.hpp"
 
-#include <iostream>
-#include <csignal>
-
-// gRPC service implementations (transport adapters)
-#include "internal/grpc/data_server.hpp"
-#include "internal/grpc/catalog_server.hpp"
-#include "internal/grpc/admin_server.hpp"
+#include <utility>
 
 namespace payload::runtime {
 
-Server::Server(std::string bind_address)
-    : bind_address_(std::move(bind_address)) {}
+Server::Server(std::string bind_address, std::vector<std::unique_ptr<grpc::Service>> services)
+    : bind_address_(std::move(bind_address)), services_(std::move(services)) {}
 
-Server::~Server() {
-  Shutdown();
-}
+Server::~Server() { Stop(); }
 
 void Server::Start() {
   grpc::ServerBuilder builder;
-
   builder.AddListeningPort(bind_address_, grpc::InsecureServerCredentials());
-
-  // Register gRPC services (thin adapters)
-  static payload::grpc::DataServer data_service;
-  static payload::grpc::CatalogServer catalog_service;
-  static payload::grpc::AdminServer admin_service;
-
-  builder.RegisterService(&data_service);
-  builder.RegisterService(&catalog_service);
-  builder.RegisterService(&admin_service);
+  for (const auto& service : services_) {
+    builder.RegisterService(service.get());
+  }
 
   grpc_server_ = builder.BuildAndStart();
-
   if (!grpc_server_) {
     throw std::runtime_error("Failed to start gRPC server");
   }
-
-  std::cout << "Payload Manager listening on " << bind_address_ << std::endl;
 }
 
 void Server::Wait() {
-  if (grpc_server_)
+  if (grpc_server_) {
     grpc_server_->Wait();
+  }
 }
 
-void Server::Shutdown() {
+void Server::Stop() {
   if (grpc_server_) {
     grpc_server_->Shutdown();
     grpc_server_.reset();

@@ -16,6 +16,11 @@ T Unwrap(const arrow::Result<T>& result) {
   return *result;
 }
 
+inline void Unwrap(const arrow::Status& status) {
+  if (!status.ok())
+    throw std::runtime_error(status.ToString());
+}
+
 /*
   Read entire file into buffer
 */

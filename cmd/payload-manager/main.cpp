@@ -1,5 +1,7 @@
 #include <iostream>
 #include <csignal>
+#include <thread>
+#include <chrono>
 
 #include "internal/runtime/server.hpp"
 #include "internal/config/config_loader.hpp"
@@ -26,7 +28,7 @@ int main(int argc, char** argv) {
     // ------------------------------------------------------------
     // Load configuration
     // ------------------------------------------------------------
-    auto config = payload::config::LoadConfig(argv[1]);
+    auto config = payload::config::ConfigLoader::LoadFromYaml(argv[1]);
 
     // ------------------------------------------------------------
     // Build application (dependency graph)
@@ -36,7 +38,7 @@ int main(int argc, char** argv) {
     // ------------------------------------------------------------
     // Start server
     // ------------------------------------------------------------
-    Server server(config.node_id(), app.grpc_services);
+    Server server(config.server().bind_address(), std::move(app.grpc_services));
 
     server.Start();
 

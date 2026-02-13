@@ -13,7 +13,7 @@ public:
   LeaseManager();
 
   Lease Acquire(const payload::manager::v1::PayloadID& id,
-                const payload::manager::v1::Placement& placement,
+                const payload::manager::v1::PayloadDescriptor& payload_descriptor,
                 uint64_t min_duration_ms);
 
   void Release(const std::string& lease_id);

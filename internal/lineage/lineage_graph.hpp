@@ -1,43 +1,30 @@
-#include "internal/lease/lease_manager.hpp"
-#include <random>
+#pragma once
 
-namespace payload::lease {
+#include <string>
+#include <unordered_map>
+#include <vector>
 
-LeaseManager::LeaseManager() = default;
+#include "payload/manager/v1/lineage.pb.h"
 
-static std::string RandomID() {
-  static thread_local std::mt19937_64 rng{std::random_device{}()};
-  return std::to_string(rng());
-}
+namespace payload::lineage {
 
-std::string LeaseManager::GenerateLeaseID() {
-  return RandomID();
-}
+class LineageGraph {
+public:
+  void Add(const payload::manager::v1::AddLineageRequest& req);
 
-Lease LeaseManager::Acquire(const payload::manager::v1::PayloadID& id,
-                            const payload::manager::v1::Placement& placement,
-                            uint64_t min_duration_ms) {
+  std::vector<payload::manager::v1::LineageEdge>
+  Query(const payload::manager::v1::GetLineageRequest& req) const;
 
-  Lease lease;
-  lease.lease_id = GenerateLeaseID();
-  lease.payload_id = id;
-  lease.placement = placement;
-  lease.expires_at = std::chrono::system_clock::now()
-      + std::chrono::milliseconds(min_duration_ms);
+private:
+  struct EdgeRecord {
+    std::string other;
+    payload::manager::v1::LineageEdge edge;
+  };
 
-  return table_.Insert(lease);
-}
+  static std::string Key(const payload::manager::v1::PayloadID& id);
 
-void LeaseManager::Release(const std::string& lease_id) {
-  table_.Remove(lease_id);
-}
+  std::unordered_map<std::string, std::vector<EdgeRecord>> parents_;
+  std::unordered_map<std::string, std::vector<EdgeRecord>> children_;
+};
 
-bool LeaseManager::HasActiveLeases(const payload::manager::v1::PayloadID& id) {
-  return table_.HasActive(id);
-}
-
-void LeaseManager::InvalidateAll(const payload::manager::v1::PayloadID& id) {
-  table_.RemoveAll(id);
-}
-
-}
+} // namespace payload::lineage
