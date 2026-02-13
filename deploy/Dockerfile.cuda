@@ -36,7 +36,7 @@ RUN apt-get update \
 COPY . ./src
 
 RUN cmake -S ./src -B /workspace/build -G Ninja -DCMAKE_BUILD_TYPE=Release \
-    && cmake --build /workspace/build --target payload_manager_service
+    && cmake --build /workspace/build --target payload-manager
 
 
 FROM nvidia/cuda:12.6.3-runtime-ubuntu24.04 AS runtime
@@ -61,12 +61,8 @@ RUN apt-get update \
         libgrpc++1.51t64 \
         libgrpc29t64 \
         libyaml-cpp0.8 \
-        libpqxx-7.7 \
+        libpqxx-7.8t64 \
         libsqlite3-0 \
     && rm -rf /var/lib/apt/lists/*
 
-COPY --from=builder /workspace/build/service/payload_manager_service ./payload_manager_service
-
-EXPOSE 50051
-ENTRYPOINT ["./payload_manager_service"]
-CMD ["0.0.0.0:50051"]
+COPY --from=builder /workspace/build/bin/payload-manager ./payload-manager
