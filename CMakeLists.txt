@@ -7,6 +7,7 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 add_subdirectory(api)
 add_subdirectory(internal)
+add_subdirectory(internal/db)
 add_subdirectory(cmd/payload-manager)
 add_subdirectory(cmd/payloadctl)
 add_subdirectory(client/cpp)

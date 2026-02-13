@@ -127,6 +127,7 @@ target_link_libraries(payload_manager_internal
         Arrow::arrow_shared
         gRPC::grpc++
         Threads::Threads
+        payload_manager::db
 )
 
 # Arrow CUDA optional
