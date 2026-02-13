@@ -10,6 +10,16 @@ namespace payload::core {
 
 using namespace payload::manager::v1;
 
+namespace {
+
+bool IsReadableState(PayloadState state) {
+    return state == PAYLOAD_STATE_ACTIVE ||
+           state == PAYLOAD_STATE_SPILLING ||
+           state == PAYLOAD_STATE_DURABLE;
+}
+
+} // namespace
+
 PayloadManager::PayloadManager(
     payload::storage::StorageFactory::TierMap storage,
     std::shared_ptr<payload::lease::LeaseManager> lease_mgr,
@@ -69,6 +79,9 @@ AcquireReadLeaseResponse PayloadManager::AcquireReadLease(const PayloadID& id,
     auto desc = ResolveSnapshot(id);
     if (desc.tier() < min_tier) {
       desc = Promote(id, min_tier);
+    }
+    if (!IsReadableState(desc.state())) {
+        throw std::runtime_error("acquire lease: payload not committed");
     }
     auto lease = lease_mgr_->Acquire(id, desc, min_duration_ms);
 
