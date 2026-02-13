@@ -46,14 +46,14 @@ int main(int argc, char** argv) {
     writable_payload.buffer->mutable_data()[i] = static_cast<uint8_t>(i & 0xFFu);
   }
 
-  const std::string uuid = writable_payload.descriptor.uuid();
-  auto commit_status = client.CommitPayload(uuid);
+  const std::string uuid = writable_payload.descriptor.id().value();
+  auto commit_status = client.CommitPayload(UuidToHex(uuid));
   if (!commit_status.ok()) {
     std::cerr << "CommitPayload failed: " << commit_status.ToString() << '\n';
     return 1;
   }
 
-  auto readable = client.AcquireReadableBuffer(uuid);
+  auto readable = client.AcquireReadableBuffer(UuidToHex(uuid));
   if (!readable.ok()) {
     std::cerr << "AcquireReadableBuffer failed: " << readable.status().ToString() << '\n';
     return 1;

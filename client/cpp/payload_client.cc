@@ -31,6 +31,53 @@ arrow::Status ErrnoToArrow(std::string_view action, std::string_view target) {
                                 std::strerror(errno));
 }
 
+int HexNibble(char c) {
+  if (c >= '0' && c <= '9') {
+    return c - '0';
+  }
+  if (c >= 'a' && c <= 'f') {
+    return 10 + (c - 'a');
+  }
+  if (c >= 'A' && c <= 'F') {
+    return 10 + (c - 'A');
+  }
+  return -1;
+}
+
+arrow::Result<std::string> ParseUuidBytes(std::string_view uuid) {
+  std::string hex;
+  hex.reserve(32);
+  for (char c : uuid) {
+    if (c == '-') {
+      continue;
+    }
+    const int nibble = HexNibble(c);
+    if (nibble < 0) {
+      return arrow::Status::Invalid("uuid contains non-hex character: ", uuid);
+    }
+    hex.push_back(c);
+  }
+
+  if (hex.size() != 32) {
+    return arrow::Status::Invalid("uuid must contain 32 hex chars after removing dashes");
+  }
+
+  std::string bytes;
+  bytes.resize(16);
+  for (size_t i = 0; i < 16; ++i) {
+    const int hi = HexNibble(hex[2 * i]);
+    const int lo = HexNibble(hex[2 * i + 1]);
+    bytes[i] = static_cast<char>((hi << 4) | lo);
+  }
+  return bytes;
+}
+
+arrow::Status SetPayloadIdFromUuid(std::string_view uuid, payload::manager::v1::PayloadID* id) {
+  ARROW_ASSIGN_OR_RAISE(auto value, ParseUuidBytes(uuid));
+  id->set_value(value);
+  return arrow::Status::OK();
+}
+
 class ReadOnlyMMapBuffer final : public arrow::Buffer {
  public:
   ReadOnlyMMapBuffer(const uint8_t* data, int64_t size, void* base_addr, size_t mapped_size, int fd)
@@ -125,7 +172,9 @@ arrow::Result<int> OpenShm(std::string_view shm_name, bool writable) {
 }  // namespace
 
 PayloadClient::PayloadClient(std::shared_ptr<grpc::Channel> channel)
-    : stub_(payload::manager::v1::PayloadManager::NewStub(std::move(channel))) {}
+    : catalog_stub_(payload::manager::v1::PayloadCatalogService::NewStub(channel)),
+      data_stub_(payload::manager::v1::PayloadDataService::NewStub(channel)),
+      admin_stub_(payload::manager::v1::PayloadAdminService::NewStub(std::move(channel))) {}
 
 arrow::Result<PayloadClient::WritablePayload> PayloadClient::AllocateWritableBuffer(
     uint64_t size_bytes, payload::manager::v1::Tier preferred_tier, uint64_t ttl_ms,
@@ -139,7 +188,7 @@ arrow::Result<PayloadClient::WritablePayload> PayloadClient::AllocateWritableBuf
   payload::manager::v1::AllocatePayloadResponse resp;
   grpc::ClientContext ctx;
 
-  ARROW_RETURN_NOT_OK(GrpcToArrow(stub_->AllocatePayload(&ctx, req, &resp), "AllocatePayload"));
+  ARROW_RETURN_NOT_OK(GrpcToArrow(catalog_stub_->AllocatePayload(&ctx, req, &resp), "AllocatePayload"));
   ARROW_RETURN_NOT_OK(ValidateHasLocation(resp.payload_descriptor()));
 
   ARROW_ASSIGN_OR_RAISE(auto buffer, OpenMutableBuffer(resp.payload_descriptor()));
@@ -148,45 +197,40 @@ arrow::Result<PayloadClient::WritablePayload> PayloadClient::AllocateWritableBuf
 
 arrow::Status PayloadClient::CommitPayload(const std::string& uuid) const {
   payload::manager::v1::CommitPayloadRequest req;
-  req.set_uuid(uuid);
+  ARROW_RETURN_NOT_OK(SetPayloadIdFromUuid(uuid, req.mutable_id()));
 
   payload::manager::v1::CommitPayloadResponse resp;
   grpc::ClientContext ctx;
 
-  return GrpcToArrow(stub_->CommitPayload(&ctx, req, &resp), "CommitPayload");
+  return GrpcToArrow(catalog_stub_->CommitPayload(&ctx, req, &resp), "CommitPayload");
 }
 
-arrow::Result<payload::manager::v1::ResolveResponse> PayloadClient::Resolve(
-    const payload::manager::v1::ResolveRequest& request) const {
-  payload::manager::v1::ResolveResponse response;
+arrow::Result<payload::manager::v1::ResolveSnapshotResponse> PayloadClient::Resolve(
+    const std::string& uuid) const {
+  payload::manager::v1::ResolveSnapshotRequest request;
+  ARROW_RETURN_NOT_OK(SetPayloadIdFromUuid(uuid, request.mutable_id()));
+
+  payload::manager::v1::ResolveSnapshotResponse response;
   grpc::ClientContext ctx;
 
-  ARROW_RETURN_NOT_OK(GrpcToArrow(stub_->Resolve(&ctx, request, &response), "Resolve"));
-  return response;
-}
-
-arrow::Result<payload::manager::v1::BatchResolveResponse> PayloadClient::BatchResolve(
-    const payload::manager::v1::BatchResolveRequest& request) const {
-  payload::manager::v1::BatchResolveResponse response;
-  grpc::ClientContext ctx;
-
-  ARROW_RETURN_NOT_OK(GrpcToArrow(stub_->BatchResolve(&ctx, request, &response), "BatchResolve"));
+  ARROW_RETURN_NOT_OK(GrpcToArrow(data_stub_->ResolveSnapshot(&ctx, request, &response), "ResolveSnapshot"));
   return response;
 }
 
 arrow::Result<PayloadClient::ReadablePayload> PayloadClient::AcquireReadableBuffer(
     const std::string& uuid, payload::manager::v1::Tier min_tier,
     payload::manager::v1::PromotionPolicy promotion_policy, uint64_t min_lease_duration_ms) const {
-  payload::manager::v1::AcquireRequest req;
-  req.set_uuid(uuid);
+  payload::manager::v1::AcquireReadLeaseRequest req;
+  ARROW_RETURN_NOT_OK(SetPayloadIdFromUuid(uuid, req.mutable_id()));
   req.set_min_tier(min_tier);
   req.set_promotion_policy(promotion_policy);
   req.set_min_lease_duration_ms(min_lease_duration_ms);
+  req.set_mode(payload::manager::v1::LEASE_MODE_READ);
 
-  payload::manager::v1::AcquireResponse resp;
+  payload::manager::v1::AcquireReadLeaseResponse resp;
   grpc::ClientContext ctx;
 
-  ARROW_RETURN_NOT_OK(GrpcToArrow(stub_->Acquire(&ctx, req, &resp), "Acquire"));
+  ARROW_RETURN_NOT_OK(GrpcToArrow(data_stub_->AcquireReadLease(&ctx, req, &resp), "AcquireReadLease"));
   ARROW_RETURN_NOT_OK(ValidateHasLocation(resp.payload_descriptor()));
 
   ARROW_ASSIGN_OR_RAISE(auto buffer, OpenReadableBuffer(resp.payload_descriptor()));
@@ -194,13 +238,13 @@ arrow::Result<PayloadClient::ReadablePayload> PayloadClient::AcquireReadableBuff
 }
 
 arrow::Status PayloadClient::Release(const std::string& lease_id) const {
-  payload::manager::v1::ReleaseRequest req;
+  payload::manager::v1::ReleaseLeaseRequest req;
   req.set_lease_id(lease_id);
 
   google::protobuf::Empty resp;
   grpc::ClientContext ctx;
 
-  return GrpcToArrow(stub_->Release(&ctx, req, &resp), "Release");
+  return GrpcToArrow(data_stub_->ReleaseLease(&ctx, req, &resp), "ReleaseLease");
 }
 
 arrow::Result<payload::manager::v1::PromoteResponse> PayloadClient::Promote(
@@ -208,7 +252,7 @@ arrow::Result<payload::manager::v1::PromoteResponse> PayloadClient::Promote(
   payload::manager::v1::PromoteResponse response;
   grpc::ClientContext ctx;
 
-  ARROW_RETURN_NOT_OK(GrpcToArrow(stub_->Promote(&ctx, request, &response), "Promote"));
+  ARROW_RETURN_NOT_OK(GrpcToArrow(catalog_stub_->Promote(&ctx, request, &response), "Promote"));
   return response;
 }
 
@@ -217,7 +261,7 @@ arrow::Result<payload::manager::v1::SpillResponse> PayloadClient::Spill(
   payload::manager::v1::SpillResponse response;
   grpc::ClientContext ctx;
 
-  ARROW_RETURN_NOT_OK(GrpcToArrow(stub_->Spill(&ctx, request, &response), "Spill"));
+  ARROW_RETURN_NOT_OK(GrpcToArrow(catalog_stub_->Spill(&ctx, request, &response), "Spill"));
   return response;
 }
 
@@ -225,14 +269,14 @@ arrow::Status PayloadClient::Delete(const payload::manager::v1::DeleteRequest& r
   google::protobuf::Empty response;
   grpc::ClientContext ctx;
 
-  return GrpcToArrow(stub_->Delete(&ctx, request, &response), "Delete");
+  return GrpcToArrow(catalog_stub_->Delete(&ctx, request, &response), "Delete");
 }
 
 arrow::Status PayloadClient::AddLineage(const payload::manager::v1::AddLineageRequest& request) const {
   google::protobuf::Empty response;
   grpc::ClientContext ctx;
 
-  return GrpcToArrow(stub_->AddLineage(&ctx, request, &response), "AddLineage");
+  return GrpcToArrow(catalog_stub_->AddLineage(&ctx, request, &response), "AddLineage");
 }
 
 arrow::Result<payload::manager::v1::GetLineageResponse> PayloadClient::GetLineage(
@@ -240,7 +284,7 @@ arrow::Result<payload::manager::v1::GetLineageResponse> PayloadClient::GetLineag
   payload::manager::v1::GetLineageResponse response;
   grpc::ClientContext ctx;
 
-  ARROW_RETURN_NOT_OK(GrpcToArrow(stub_->GetLineage(&ctx, request, &response), "GetLineage"));
+  ARROW_RETURN_NOT_OK(GrpcToArrow(catalog_stub_->GetLineage(&ctx, request, &response), "GetLineage"));
   return response;
 }
 
@@ -250,7 +294,7 @@ arrow::Result<payload::manager::v1::UpdatePayloadMetadataResponse> PayloadClient
   grpc::ClientContext ctx;
 
   ARROW_RETURN_NOT_OK(
-      GrpcToArrow(stub_->UpdatePayloadMetadata(&ctx, request, &response), "UpdatePayloadMetadata"));
+      GrpcToArrow(catalog_stub_->UpdatePayloadMetadata(&ctx, request, &response), "UpdatePayloadMetadata"));
   return response;
 }
 
@@ -260,54 +304,9 @@ PayloadClient::AppendPayloadMetadataEvent(
   payload::manager::v1::AppendPayloadMetadataEventResponse response;
   grpc::ClientContext ctx;
 
-  ARROW_RETURN_NOT_OK(GrpcToArrow(stub_->AppendPayloadMetadataEvent(&ctx, request, &response),
+  ARROW_RETURN_NOT_OK(GrpcToArrow(catalog_stub_->AppendPayloadMetadataEvent(&ctx, request, &response),
                                   "AppendPayloadMetadataEvent"));
   return response;
-}
-
-arrow::Result<payload::manager::v1::GetPayloadMetadataResponse> PayloadClient::GetPayloadMetadata(
-    const payload::manager::v1::GetPayloadMetadataRequest& request) const {
-  payload::manager::v1::GetPayloadMetadataResponse response;
-  grpc::ClientContext ctx;
-
-  ARROW_RETURN_NOT_OK(
-      GrpcToArrow(stub_->GetPayloadMetadata(&ctx, request, &response), "GetPayloadMetadata"));
-  return response;
-}
-
-arrow::Result<payload::manager::v1::ListPayloadMetadataEventsResponse>
-PayloadClient::ListPayloadMetadataEvents(
-    const payload::manager::v1::ListPayloadMetadataEventsRequest& request) const {
-  payload::manager::v1::ListPayloadMetadataEventsResponse response;
-  grpc::ClientContext ctx;
-
-  ARROW_RETURN_NOT_OK(GrpcToArrow(stub_->ListPayloadMetadataEvents(&ctx, request, &response),
-                                  "ListPayloadMetadataEvents"));
-  return response;
-}
-
-arrow::Result<payload::manager::v1::UpdateEvictionPolicyResponse> PayloadClient::UpdateEvictionPolicy(
-    const payload::manager::v1::UpdateEvictionPolicyRequest& request) const {
-  payload::manager::v1::UpdateEvictionPolicyResponse response;
-  grpc::ClientContext ctx;
-
-  ARROW_RETURN_NOT_OK(
-      GrpcToArrow(stub_->UpdateEvictionPolicy(&ctx, request, &response), "UpdateEvictionPolicy"));
-  return response;
-}
-
-arrow::Status PayloadClient::Prefetch(const payload::manager::v1::PrefetchRequest& request) const {
-  google::protobuf::Empty response;
-  grpc::ClientContext ctx;
-
-  return GrpcToArrow(stub_->Prefetch(&ctx, request, &response), "Prefetch");
-}
-
-arrow::Status PayloadClient::Pin(const payload::manager::v1::PinRequest& request) const {
-  google::protobuf::Empty response;
-  grpc::ClientContext ctx;
-
-  return GrpcToArrow(stub_->Pin(&ctx, request, &response), "Pin");
 }
 
 arrow::Result<payload::manager::v1::StatsResponse> PayloadClient::Stats(
@@ -315,7 +314,7 @@ arrow::Result<payload::manager::v1::StatsResponse> PayloadClient::Stats(
   payload::manager::v1::StatsResponse response;
   grpc::ClientContext ctx;
 
-  ARROW_RETURN_NOT_OK(GrpcToArrow(stub_->Stats(&ctx, request, &response), "Stats"));
+  ARROW_RETURN_NOT_OK(GrpcToArrow(admin_stub_->Stats(&ctx, request, &response), "Stats"));
   return response;
 }
 

@@ -1,7 +1,7 @@
 #pragma once
 
 #include <string>
-#include "internal/config/config.pb.h"
+#include "config/config.pb.h"
 
 namespace payload::config {
 
@@ -12,7 +12,7 @@ namespace payload::config {
 */
 class ConfigLoader {
 public:
-  static RuntimeConfig LoadFromYaml(const std::string& path);
+  static payload::runtime::config::RuntimeConfig LoadFromYaml(const std::string& path);
 };
 
 } // namespace payload::config

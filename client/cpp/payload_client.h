@@ -8,7 +8,9 @@
 #include <arrow/result.h>
 #include <grpcpp/channel.h>
 
-#include "payload/manager/v1/service.grpc.pb.h"
+#include "payload/manager/v1/payload_admin_service.grpc.pb.h"
+#include "payload/manager/v1/payload_catalog_service.grpc.pb.h"
+#include "payload/manager/v1/payload_data_service.grpc.pb.h"
 
 namespace payload::manager::client {
 
@@ -35,11 +37,8 @@ class PayloadClient {
 
   arrow::Status CommitPayload(const std::string& uuid) const;
 
-  arrow::Result<payload::manager::v1::ResolveResponse> Resolve(
-      const payload::manager::v1::ResolveRequest& request) const;
-
-  arrow::Result<payload::manager::v1::BatchResolveResponse> BatchResolve(
-      const payload::manager::v1::BatchResolveRequest& request) const;
+  arrow::Result<payload::manager::v1::ResolveSnapshotResponse> Resolve(
+      const std::string& uuid) const;
 
   arrow::Result<ReadablePayload> AcquireReadableBuffer(
       const std::string& uuid,
@@ -69,19 +68,6 @@ class PayloadClient {
   arrow::Result<payload::manager::v1::AppendPayloadMetadataEventResponse> AppendPayloadMetadataEvent(
       const payload::manager::v1::AppendPayloadMetadataEventRequest& request) const;
 
-  arrow::Result<payload::manager::v1::GetPayloadMetadataResponse> GetPayloadMetadata(
-      const payload::manager::v1::GetPayloadMetadataRequest& request) const;
-
-  arrow::Result<payload::manager::v1::ListPayloadMetadataEventsResponse> ListPayloadMetadataEvents(
-      const payload::manager::v1::ListPayloadMetadataEventsRequest& request) const;
-
-  arrow::Result<payload::manager::v1::UpdateEvictionPolicyResponse> UpdateEvictionPolicy(
-      const payload::manager::v1::UpdateEvictionPolicyRequest& request) const;
-
-  arrow::Status Prefetch(const payload::manager::v1::PrefetchRequest& request) const;
-
-  arrow::Status Pin(const payload::manager::v1::PinRequest& request) const;
-
   arrow::Result<payload::manager::v1::StatsResponse> Stats(
       const payload::manager::v1::StatsRequest& request) const;
 
@@ -94,7 +80,9 @@ class PayloadClient {
   static arrow::Status ValidateHasLocation(const payload::manager::v1::PayloadDescriptor& descriptor);
   static uint64_t DescriptorLengthBytes(const payload::manager::v1::PayloadDescriptor& descriptor);
 
-  std::unique_ptr<payload::manager::v1::PayloadManager::Stub> stub_;
+  std::unique_ptr<payload::manager::v1::PayloadCatalogService::Stub> catalog_stub_;
+  std::unique_ptr<payload::manager::v1::PayloadDataService::Stub> data_stub_;
+  std::unique_ptr<payload::manager::v1::PayloadAdminService::Stub> admin_stub_;
 };
 
 }  // namespace payload::manager::client
