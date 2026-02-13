@@ -1,0 +1,66 @@
+syntax = "proto3";
+
+package payload.manager.v1;
+
+import "payload/manager/v1/types.proto";
+
+/*
+  Promotion policy controls behavior when a payload must move to a higher tier.
+*/
+enum PromotionPolicy {
+  PROMOTION_POLICY_UNSPECIFIED = 0;
+
+  // Schedule asynchronously if possible
+  PROMOTION_POLICY_BEST_EFFORT = 1;
+
+  // RPC returns only when target tier satisfied or fails
+  PROMOTION_POLICY_BLOCKING = 2;
+}
+
+/*
+  Spill policy controls durability operations.
+*/
+enum SpillPolicy {
+  SPILL_POLICY_UNSPECIFIED = 0;
+
+  // Background durability
+  SPILL_POLICY_BEST_EFFORT = 1;
+
+  // Wait until durable or failure
+  SPILL_POLICY_BLOCKING = 2;
+}
+
+/*
+  Metadata update behavior.
+  This only affects stored opaque metadata — not placement state.
+*/
+enum MetadataUpdateMode {
+  METADATA_UPDATE_MODE_UNSPECIFIED = 0;
+
+  // Implementation-defined merge semantics
+  METADATA_UPDATE_MODE_MERGE = 1;
+
+  // Replace entire metadata blob
+  METADATA_UPDATE_MODE_REPLACE = 2;
+}
+
+/*
+  Advisory eviction hints.
+
+  These are not strict guarantees — the system MAY violate them
+  under critical resource pressure.
+*/
+message EvictionPolicy {
+
+  // Relative eviction importance
+  EvictionPriority priority = 1;
+
+  // Require durable copy before removing from volatile tier
+  bool require_durable = 2;
+
+  // Preferred durability tier (usually DISK)
+  Tier spill_target = 3;
+
+  // Attempt to keep payload at or above this tier
+  Tier min_residency_tier = 4;
+}

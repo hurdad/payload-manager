@@ -1,0 +1,72 @@
+syntax = "proto3";
+
+package payload.manager.v1;
+
+import "google/protobuf/timestamp.proto";
+import "payload/manager/v1/id.proto";
+import "payload/manager/v1/metadata.proto";
+import "payload/manager/v1/policy.proto";
+
+/*
+  Catalog operations manage semantic metadata attached to a payload.
+
+  IMPORTANT:
+  - The payload manager does NOT interpret metadata contents.
+  - Metadata is small (KBs), not bulk data.
+  - Last-write-wins unless client coordinates externally.
+*/
+
+
+// ============================================================================
+// Update current metadata
+// ============================================================================
+
+/*
+  Updates the "current" metadata view.
+
+  MERGE vs REPLACE behavior is implementation-defined and applies only
+  to the opaque metadata blob — not placement state.
+*/
+message UpdatePayloadMetadataRequest {
+
+  // Target payload
+  PayloadID id = 1;
+
+  // How to apply update
+  MetadataUpdateMode mode = 2;
+
+  // New metadata
+  PayloadMetadata metadata = 3;
+
+  // Optional attribution
+  string actor = 4;
+  string reason = 5;
+}
+
+message UpdatePayloadMetadataResponse {
+  PayloadID id = 1;
+  PayloadMetadata metadata = 2;
+  google.protobuf.Timestamp updated_at = 3;
+}
+
+
+// ============================================================================
+// Immutable metadata history (audit trail)
+// ============================================================================
+
+/*
+  Append-only history event.
+
+  Used for provenance tracking, reproducibility, and lineage context.
+*/
+message AppendPayloadMetadataEventRequest {
+  PayloadID id = 1;
+  PayloadMetadata metadata = 2;
+  string source = 3;
+  string version = 4;
+}
+
+message AppendPayloadMetadataEventResponse {
+  PayloadID id = 1;
+  google.protobuf.Timestamp event_time = 2;
+}

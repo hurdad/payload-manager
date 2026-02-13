@@ -1,112 +1,28 @@
 syntax = "proto3";
-
 package payload.manager.v1;
 
 import "google/protobuf/timestamp.proto";
-import "payload/manager/v1/payload.proto";
+import "payload/manager/v1/id.proto";
 
+/*
+  Opaque application metadata.
 
-// ============================================================
-// MAIN METADATA MESSAGE
-// ============================================================
-
+  The payload manager stores but NEVER interprets this.
+  Keep size small (KBs).
+*/
 message PayloadMetadata {
+  PayloadID id = 1;
+  bytes data = 2;
+  string schema = 3;
+}
 
-  // ----------------------------------------------------------------
-  // Identity
-  // ----------------------------------------------------------------
-
-  // 128-bit UUID stored as raw bytes
-  // Must be exactly 16 bytes
-  bytes uuid = 1;
-
-  // Human-readable tag (optional)
-  string name = 2;
-
-  // Optional grouping ID (e.g., recording session)
-  string group_id = 3;
-
-
-  // ----------------------------------------------------------------
-  // Size + Layout
-  // ----------------------------------------------------------------
-
-  // Original uncompressed size in bytes
-  uint64 size_bytes = 4;
-
-  // Compressed size (if applicable)
-  uint64 compressed_size_bytes = 5;
-
-  // Logical format of payload
-  payload.manager.v1.PayloadFormat format = 6;
-
-  // Compression applied at rest
-  payload.manager.v1.Compression compression = 7;
-
-
-  // ----------------------------------------------------------------
-  // Tier + Location
-  // ----------------------------------------------------------------
-
-  // Current primary tier
-  payload.manager.v1.Tier current_tier = 8;
-
-  // All tiers where payload currently exists (replication / promotion)
-  repeated payload.manager.v1.Tier available_tiers = 9;
-
-  // Path for disk tier (if applicable)
-  string disk_path = 10;
-
-  // Object key for S3/MinIO (if applicable)
-  string object_key = 11;
-
-
-  // ----------------------------------------------------------------
-  // Lifecycle
-  // ----------------------------------------------------------------
-
-  payload.manager.v1.PayloadState state = 12;
-
-  google.protobuf.Timestamp created_at = 13;
-  google.protobuf.Timestamp last_accessed_at = 14;
-  google.protobuf.Timestamp last_spilled_at = 15;
-
-  // Access counter (for eviction policy)
-  uint64 access_count = 16;
-
-
-  // ----------------------------------------------------------------
-  // Integrity
-  // ----------------------------------------------------------------
-
-  // Optional checksum (e.g., SHA256 hex string)
-  string checksum = 17;
-
-  // If true, must be persisted before eviction from hot tier
-  bool require_durability = 18;
-
-  // If true, cannot be automatically evicted
-  bool pinned = 19;
-
-
-  // ----------------------------------------------------------------
-  // Spill + Backpressure Observability
-  // ----------------------------------------------------------------
-
-  // True if currently in spill queue
-  bool spill_pending = 20;
-
-  // Spill attempt count
-  uint32 spill_attempts = 21;
-
-  // Last spill error (if any)
-  string last_spill_error = 22;
-
-
-  // ----------------------------------------------------------------
-  // Extensibility
-  // ----------------------------------------------------------------
-
-  // Arbitrary key-value metadata
-  map<string, string> attributes = 23;
+/*
+  Immutable audit history entry.
+*/
+message PayloadMetadataEvent {
+  PayloadID id = 1;
+  google.protobuf.Timestamp ts = 2;
+  bytes data = 3;
+  string source = 4;
+  string version = 5;
 }

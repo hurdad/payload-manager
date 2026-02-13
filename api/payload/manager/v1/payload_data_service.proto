@@ -1,0 +1,23 @@
+syntax = "proto3";
+package payload.manager.v1;
+
+import "google/protobuf/empty.proto";
+import "payload/manager/v1/lease.proto";
+
+/*
+  High-frequency runtime operations.
+
+  ResolveSnapshot → advisory
+  AcquireReadLease → safe descriptor
+*/
+service PayloadDataService {
+
+  rpc ResolveSnapshot(ResolveSnapshotRequest)
+      returns (ResolveSnapshotResponse);
+
+  rpc AcquireReadLease(AcquireReadLeaseRequest)
+      returns (AcquireReadLeaseResponse);
+
+  rpc ReleaseLease(ReleaseLeaseRequest)
+      returns (google.protobuf.Empty);
+}

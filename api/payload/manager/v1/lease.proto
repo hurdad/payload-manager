@@ -1,0 +1,61 @@
+syntax = "proto3";
+package payload.manager.v1;
+
+import "google/protobuf/timestamp.proto";
+import "payload/manager/v1/placement.proto";
+import "payload/manager/v1/policy.proto";
+import "payload/manager/v1/types.proto";
+import "payload/manager/v1/id.proto";
+
+
+/*
+  A lease guarantees:
+
+  - placement stability
+  - immutable bytes
+  - tier >= requested minimum
+
+  After expiration the payload MAY move immediately.
+  Clients MUST treat the descriptor as invalid.
+*/
+
+enum LeaseMode {
+  LEASE_MODE_UNSPECIFIED = 0;
+  LEASE_MODE_READ = 1;
+}
+
+/*
+  Advisory snapshot only.
+  NEVER safe for reading bytes.
+*/
+message ResolveSnapshotRequest {
+  PayloadID id = 1;
+}
+
+message ResolveSnapshotResponse {
+  PayloadDescriptor payload_descriptor = 1;
+}
+
+/*
+  Safe read access.
+*/
+message AcquireReadLeaseRequest {
+  PayloadID id = 1;
+  Tier min_tier = 2;
+  PromotionPolicy promotion_policy = 3;
+  uint64 min_lease_duration_ms = 4;
+  LeaseMode mode = 5;
+}
+
+message AcquireReadLeaseResponse {
+  PayloadDescriptor payload_descriptor = 1;
+  string lease_id = 2;
+  google.protobuf.Timestamp lease_expires_at = 3;
+}
+
+/*
+  Idempotent.
+*/
+message ReleaseLeaseRequest {
+  string lease_id = 1;
+}

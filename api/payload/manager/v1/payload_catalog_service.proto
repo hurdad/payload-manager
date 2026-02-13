@@ -1,0 +1,109 @@
+syntax = "proto3";
+
+package payload.manager.v1;
+
+import "google/protobuf/empty.proto";
+
+import "payload/manager/v1/lifecycle.proto";
+import "payload/manager/v1/tiering.proto";
+import "payload/manager/v1/catalog.proto";
+import "payload/manager/v1/lineage.proto";
+
+/*
+  PayloadCatalogService
+
+  This service manages durable state and semantic meaning of payloads.
+
+  Responsibilities:
+    - Allocate and commit payload lifecycle
+    - Promotion and durability operations
+    - Deletion
+    - Metadata storage
+    - Lineage tracking
+
+  This is NOT the data plane.
+  Workers should use PayloadDataService for reading bytes.
+*/
+
+service PayloadCatalogService {
+
+  // ---------------------------------------------------------------------------
+  // Lifecycle
+  // ---------------------------------------------------------------------------
+
+  /*
+    Allocate reserves placement but the payload is invisible to readers
+    until CommitPayload succeeds.
+  */
+  rpc AllocatePayload(AllocatePayloadRequest)
+      returns (AllocatePayloadResponse);
+
+  /*
+    Marks payload immutable and readable.
+    After this point the payload must never change.
+  */
+  rpc CommitPayload(CommitPayloadRequest)
+      returns (CommitPayloadResponse);
+
+  /*
+    Deletes payload placement and metadata.
+
+    If force=true:
+      - active leases are invalidated immediately
+      - future reads must fail
+  */
+  rpc Delete(DeleteRequest)
+      returns (google.protobuf.Empty);
+
+
+  // ---------------------------------------------------------------------------
+  // Tiering & Durability
+  // ---------------------------------------------------------------------------
+
+  /*
+    Requests movement to a higher tier (RAM/GPU/etc).
+  */
+  rpc Promote(PromoteRequest)
+      returns (PromoteResponse);
+
+  /*
+    Requests durable storage (usually disk/object storage).
+
+    BLOCKING policy waits until durable or failure.
+  */
+  rpc Spill(SpillRequest)
+      returns (SpillResponse);
+
+
+  // ---------------------------------------------------------------------------
+  // Lineage
+  // ---------------------------------------------------------------------------
+
+  /*
+    Records descriptive relationships between payloads.
+
+    Does NOT enforce execution order.
+  */
+  rpc AddLineage(AddLineageRequest)
+      returns (google.protobuf.Empty);
+
+  rpc GetLineage(GetLineageRequest)
+      returns (GetLineageResponse);
+
+
+  // ---------------------------------------------------------------------------
+  // Metadata
+  // ---------------------------------------------------------------------------
+
+  /*
+    Updates current metadata view.
+  */
+  rpc UpdatePayloadMetadata(UpdatePayloadMetadataRequest)
+      returns (UpdatePayloadMetadataResponse);
+
+  /*
+    Appends immutable metadata history event.
+  */
+  rpc AppendPayloadMetadataEvent(AppendPayloadMetadataEventRequest)
+      returns (AppendPayloadMetadataEventResponse);
+}
