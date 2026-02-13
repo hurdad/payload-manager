@@ -10,10 +10,10 @@ using namespace payload::manager::v1;
 
 static void Usage() {
     std::cout << "Usage:\n"
-              << "  payloactl <addr> resolve <uuid>\n"
-              << "  payloactl <addr> lease <uuid>\n"
-              << "  payloactl <addr> delete <uuid>\n"
-              << "  payloactl <addr> stats\n";
+              << "  payloadctl <addr> resolve <uuid>\n"
+              << "  payloadctl <addr> lease <uuid>\n"
+              << "  payloadctl <addr> delete <uuid>\n"
+              << "  payloadctl <addr> stats\n";
 }
 
 static PayloadID MakeID(const std::string& s) {
