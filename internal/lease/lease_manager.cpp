@@ -15,13 +15,13 @@ std::string LeaseManager::GenerateLeaseID() {
 }
 
 Lease LeaseManager::Acquire(const payload::manager::v1::PayloadID& id,
-                            const payload::manager::v1::Placement& placement,
+                            const payload::manager::v1::PayloadDescriptor& payload_descriptor,
                             uint64_t min_duration_ms) {
 
   Lease lease;
   lease.lease_id = GenerateLeaseID();
   lease.payload_id = id;
-  lease.placement = placement;
+  lease.payload_descriptor = payload_descriptor;
   lease.expires_at = std::chrono::system_clock::now()
       + std::chrono::milliseconds(min_duration_ms);
 

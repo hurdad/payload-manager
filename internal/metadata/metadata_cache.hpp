@@ -1,84 +1,32 @@
-#include "internal/lineage/lineage_graph.hpp"
+#pragma once
 
-#include <queue>
-#include <unordered_set>
+#include <optional>
+#include <shared_mutex>
+#include <string>
+#include <unordered_map>
 
-namespace payload::lineage {
+#include "payload/manager/v1/catalog.pb.h"
 
-using namespace payload::manager::v1;
+namespace payload::metadata {
 
-std::string LineageGraph::Key(const PayloadID& id) {
-  return id.value();
-}
+class MetadataCache {
+public:
+  void Put(const payload::manager::v1::PayloadID& id,
+           const payload::manager::v1::PayloadMetadata& metadata);
 
-// ------------------------------------------------------------
-// Add lineage edges
-// ------------------------------------------------------------
+  void Merge(const payload::manager::v1::PayloadID& id,
+             const payload::manager::v1::PayloadMetadata& update);
 
-void LineageGraph::Add(const AddLineageRequest& req) {
-  const auto child_key = Key(req.child());
+  std::optional<payload::manager::v1::PayloadMetadata>
+  Get(const payload::manager::v1::PayloadID& id) const;
 
-  for (const auto& parent_edge : req.parents()) {
+  void Remove(const payload::manager::v1::PayloadID& id);
 
-    const auto parent_key = parent_edge.parent().value();
+private:
+  static std::string Key(const payload::manager::v1::PayloadID& id);
 
-    EdgeRecord p;
-    p.other = parent_key;
-    p.edge = parent_edge;
+  mutable std::shared_mutex mutex_;
+  std::unordered_map<std::string, payload::manager::v1::PayloadMetadata> cache_;
+};
 
-    parents_[child_key].push_back(p);
-
-    EdgeRecord c;
-    c.other = child_key;
-    c.edge = parent_edge;
-
-    children_[parent_key].push_back(c);
-  }
-}
-
-// ------------------------------------------------------------
-// Traversal
-// ------------------------------------------------------------
-
-std::vector<LineageEdge>
-LineageGraph::Query(const GetLineageRequest& req) const {
-
-  std::vector<LineageEdge> result;
-
-  const auto start = Key(req.id());
-  const bool upstream = req.upstream();
-  const uint32_t max_depth = req.max_depth();
-
-  std::queue<std::pair<std::string, uint32_t>> q;
-  std::unordered_set<std::string> visited;
-
-  q.emplace(start, 0);
-  visited.insert(start);
-
-  while (!q.empty()) {
-    auto [node, depth] = q.front();
-    q.pop();
-
-    if (max_depth && depth >= max_depth)
-      continue;
-
-    const auto& map = upstream ? parents_ : children_;
-    auto it = map.find(node);
-    if (it == map.end())
-      continue;
-
-    for (const auto& edge : it->second) {
-
-      result.push_back(edge.edge);
-
-      if (!visited.insert(edge.other).second)
-        continue;
-
-      q.emplace(edge.other, depth + 1);
-    }
-  }
-
-  return result;
-}
-
-} // namespace payload::lineage
+} // namespace payload::metadata

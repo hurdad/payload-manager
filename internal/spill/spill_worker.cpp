@@ -1,4 +1,5 @@
 #include "spill_worker.hpp"
+#include "internal/core/payload_manager.hpp"
 #include <iostream>
 
 namespace payload::spill {

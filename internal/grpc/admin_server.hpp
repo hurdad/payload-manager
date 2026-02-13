@@ -12,7 +12,7 @@ class AdminServer final : public payload::manager::v1::PayloadAdminService::Serv
 public:
   explicit AdminServer(std::shared_ptr<payload::service::AdminService> svc);
 
-  grpc::Status Stats(grpc::ServerContext*,
+  ::grpc::Status Stats(::grpc::ServerContext*,
                      const payload::manager::v1::StatsRequest*,
                      payload::manager::v1::StatsResponse*) override;
 

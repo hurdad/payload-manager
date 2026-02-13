@@ -12,15 +12,15 @@ class CatalogServer final : public payload::manager::v1::PayloadCatalogService::
 public:
   explicit CatalogServer(std::shared_ptr<payload::service::CatalogService> svc);
 
-  grpc::Status AllocatePayload(grpc::ServerContext*,
+  ::grpc::Status AllocatePayload(::grpc::ServerContext*,
                                const payload::manager::v1::AllocatePayloadRequest*,
                                payload::manager::v1::AllocatePayloadResponse*) override;
 
-  grpc::Status CommitPayload(grpc::ServerContext*,
+  ::grpc::Status CommitPayload(::grpc::ServerContext*,
                              const payload::manager::v1::CommitPayloadRequest*,
                              payload::manager::v1::CommitPayloadResponse*) override;
 
-  grpc::Status Delete(grpc::ServerContext*,
+  ::grpc::Status Delete(::grpc::ServerContext*,
                       const payload::manager::v1::DeleteRequest*,
                       google::protobuf::Empty*) override;
 

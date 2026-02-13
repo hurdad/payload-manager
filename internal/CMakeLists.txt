@@ -82,15 +82,12 @@ set(INTERNAL_SRC
         # spill + tiering
         spill/spill_scheduler.cpp
         spill/spill_worker.cpp
-        tiering/tiering_policy.cpp
-        tiering/tiering_manager.cpp
-
         # storage
-        storage/ram/ram_arrow_store.cpp
-        storage/disk/disk_arrow_store.cpp
-        storage/object/object_arrow_store.cpp
-        storage/gpu/cuda_arrow_store.cpp
-        storage/gpu/cuda_context.cpp
+        storage/storage_factory.cpp
+
+        # util
+        util/time.cpp
+        util/uuid.cpp
 
         # generated config proto
         ${CONFIG_PROTO_SRC}
@@ -115,26 +112,22 @@ target_include_directories(payload_manager_internal
 # Dependencies
 # ================================================================
 
-find_package(Arrow REQUIRED)
 find_package(gRPC REQUIRED)
 find_package(Threads REQUIRED)
+find_package(yaml-cpp REQUIRED)
 
 target_link_libraries(payload_manager_internal
         PUBLIC
         payload_manager::proto
         payload_manager::grpc
         protobuf::libprotobuf
-        Arrow::arrow_shared
         gRPC::grpc++
         Threads::Threads
         payload_manager::db
+        yaml-cpp::yaml-cpp
 )
 
 # Arrow CUDA optional
-if (TARGET ArrowCUDA::arrow_cuda)
-    target_link_libraries(payload_manager_internal PUBLIC ArrowCUDA::arrow_cuda)
-endif()
-
 # ================================================================
 # Compile settings
 # ================================================================

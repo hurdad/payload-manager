@@ -12,15 +12,15 @@ class DataServer final : public payload::manager::v1::PayloadDataService::Servic
 public:
   explicit DataServer(std::shared_ptr<payload::service::DataService> svc);
 
-  grpc::Status ResolveSnapshot(grpc::ServerContext* ctx,
+  ::grpc::Status ResolveSnapshot(::grpc::ServerContext* ctx,
                                const payload::manager::v1::ResolveSnapshotRequest* req,
                                payload::manager::v1::ResolveSnapshotResponse* resp) override;
 
-  grpc::Status AcquireReadLease(grpc::ServerContext* ctx,
+  ::grpc::Status AcquireReadLease(::grpc::ServerContext* ctx,
                                 const payload::manager::v1::AcquireReadLeaseRequest* req,
                                 payload::manager::v1::AcquireReadLeaseResponse* resp) override;
 
-  grpc::Status ReleaseLease(grpc::ServerContext* ctx,
+  ::grpc::Status ReleaseLease(::grpc::ServerContext* ctx,
                             const payload::manager::v1::ReleaseLeaseRequest* req,
                             google::protobuf::Empty* resp) override;
 

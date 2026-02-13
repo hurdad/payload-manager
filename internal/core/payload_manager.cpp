@@ -2,192 +2,96 @@
 
 #include <stdexcept>
 
-using namespace payload::manager::v1;
+#include "internal/lease/lease_manager.hpp"
+#include "internal/util/time.hpp"
+#include "internal/util/uuid.hpp"
 
 namespace payload::core {
 
+using namespace payload::manager::v1;
+
 PayloadManager::PayloadManager(
+    payload::storage::StorageFactory::TierMap storage,
     std::shared_ptr<payload::lease::LeaseManager> lease_mgr,
-    std::shared_ptr<payload::storage::StorageRouter> storage,
-    std::shared_ptr<payload::db::PayloadRepository> repo)
-    : lease_mgr_(std::move(lease_mgr)),
-      storage_(std::move(storage)),
-      repo_(std::move(repo))
-{
-}
+    std::shared_ptr<payload::metadata::MetadataCache>,
+    std::shared_ptr<payload::lineage::LineageGraph>)
+    : storage_(std::move(storage)), lease_mgr_(std::move(lease_mgr)) {}
 
-/*
-  Allocate
+std::string PayloadManager::Key(const PayloadID& id) { return id.value(); }
 
-  Creates payload in ALLOCATED state and reserves storage capacity.
-*/
-PayloadDescriptor
-PayloadManager::Allocate(uint64_t size_bytes, Tier preferred)
-{
-    auto tx = repo_->Begin();
-
-    // storage decides placement
-    auto placement = storage_->Allocate(size_bytes, preferred);
-
+PayloadDescriptor PayloadManager::Allocate(uint64_t size_bytes, Tier preferred) {
     PayloadDescriptor desc;
-    *desc.mutable_uuid() = placement.uuid();
+    *desc.mutable_id() = payload::util::ToProto(payload::util::GenerateUUID());
     desc.set_tier(preferred);
     desc.set_state(PAYLOAD_STATE_ALLOCATED);
     desc.set_version(1);
+    *desc.mutable_created_at() = payload::util::ToProto(payload::util::Now());
 
-    *desc.mutable_location() = placement.location();
+    RamLocation ram;
+    ram.set_length_bytes(size_bytes);
+    ram.set_slab_id(0);
+    ram.set_block_index(0);
+    ram.set_shm_name("payload");
+    *desc.mutable_ram() = ram;
 
-    repo_->InsertPayload(*tx, desc);
-
-    tx->Commit();
+    std::lock_guard<std::mutex> lock(mutex_);
+    payloads_[Key(desc.id())] = desc;
     return desc;
 }
 
-/*
-  Commit
-
-  Makes payload visible to readers.
-*/
-PayloadDescriptor
-PayloadManager::Commit(const PayloadID& id)
-{
-    auto tx = repo_->Begin();
-
-    auto desc = repo_->GetPayload(*tx, id.uuid());
-    if (!desc)
-        throw std::runtime_error("commit: payload not found");
-
-    if (desc->state() != PAYLOAD_STATE_ALLOCATED)
-        throw std::runtime_error("commit: invalid state");
-
-    desc->set_state(PAYLOAD_STATE_ACTIVE);
-    desc->set_version(desc->version() + 1);
-
-    repo_->UpdatePayload(*tx, *desc);
-
-    tx->Commit();
-    return *desc;
+PayloadDescriptor PayloadManager::Commit(const PayloadID& id) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    auto it = payloads_.find(Key(id));
+    if (it == payloads_.end()) throw std::runtime_error("commit: payload not found");
+    it->second.set_state(PAYLOAD_STATE_ACTIVE);
+    it->second.set_version(it->second.version() + 1);
+    return it->second;
 }
 
-/*
-  Delete
-
-  Removes payload (honors leases unless force).
-*/
-void PayloadManager::Delete(const PayloadID& id, bool force)
-{
-    auto tx = repo_->Begin();
-
-    if (!force && lease_mgr_->HasActiveLease(id.uuid()))
+void PayloadManager::Delete(const PayloadID& id, bool force) {
+    if (!force && lease_mgr_->HasActiveLeases(id)) {
         throw std::runtime_error("delete: active lease");
-
-    auto desc = repo_->GetPayload(*tx, id.uuid());
-    if (!desc)
-        return;
-
-    storage_->Remove(*desc);
-    repo_->DeletePayload(*tx, id.uuid());
-
-    tx->Commit();
-}
-
-/*
-  ResolveSnapshot
-
-  Advisory lookup only — may move immediately.
-*/
-PayloadDescriptor
-PayloadManager::ResolveSnapshot(const PayloadID& id)
-{
-    auto tx = repo_->Begin();
-
-    auto desc = repo_->GetPayload(*tx, id.uuid());
-    if (!desc)
-        throw std::runtime_error("resolve: not found");
-
-    tx->Commit();
-    return *desc;
-}
-
-/*
-  AcquireReadLease
-
-  Guarantees descriptor stability for lease duration.
-*/
-AcquireReadLeaseResponse
-PayloadManager::AcquireReadLease(
-    const PayloadID& id,
-    Tier min_tier,
-    uint64_t min_duration_ms)
-{
-    auto tx = repo_->Begin();
-
-    auto desc = repo_->GetPayload(*tx, id.uuid());
-    if (!desc)
-        throw std::runtime_error("lease: not found");
-
-    // ensure tier requirement
-    if (desc->tier() < min_tier) {
-        auto promoted = storage_->Promote(*desc, min_tier);
-        *desc = promoted;
-        repo_->UpdatePayload(*tx, *desc);
     }
+    std::lock_guard<std::mutex> lock(mutex_);
+    payloads_.erase(Key(id));
+}
 
-    EnsureReadable(*desc);
+PayloadDescriptor PayloadManager::ResolveSnapshot(const PayloadID& id) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    auto it = payloads_.find(Key(id));
+    if (it == payloads_.end()) throw std::runtime_error("resolve: not found");
+    return it->second;
+}
 
-    // create lease AFTER stable location ensured
-    auto lease = lease_mgr_->CreateLease(desc->uuid(), min_duration_ms);
+AcquireReadLeaseResponse PayloadManager::AcquireReadLease(const PayloadID& id,
+                                                          Tier min_tier,
+                                                          uint64_t min_duration_ms) {
+    auto desc = ResolveSnapshot(id);
+    if (desc.tier() < min_tier) {
+      desc = Promote(id, min_tier);
+    }
+    auto lease = lease_mgr_->Acquire(id, desc, min_duration_ms);
 
     AcquireReadLeaseResponse resp;
-    *resp.mutable_payload_descriptor() = *desc;
+    *resp.mutable_payload_descriptor() = desc;
     resp.set_lease_id(lease.lease_id);
-    *resp.mutable_lease_expires_at() = lease.expires_at;
-
-    tx->Commit();
+    *resp.mutable_lease_expires_at() = payload::util::ToProto(lease.expires_at);
     return resp;
 }
 
-void PayloadManager::ReleaseLease(const std::string& lease_id)
-{
-    lease_mgr_->Release(lease_id);
+void PayloadManager::ReleaseLease(const std::string& lease_id) { lease_mgr_->Release(lease_id); }
+
+PayloadDescriptor PayloadManager::Promote(const PayloadID& id, Tier target) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    auto it = payloads_.find(Key(id));
+    if (it == payloads_.end()) throw std::runtime_error("promote: not found");
+    it->second.set_tier(target);
+    it->second.set_version(it->second.version() + 1);
+    return it->second;
 }
 
-/*
-  Promote
-
-  Explicit tier movement.
-*/
-PayloadDescriptor
-PayloadManager::Promote(const PayloadID& id, Tier target)
-{
-    auto tx = repo_->Begin();
-
-    auto desc = repo_->GetPayload(*tx, id.uuid());
-    if (!desc)
-        throw std::runtime_error("promote: not found");
-
-    auto promoted = storage_->Promote(*desc, target);
-
-    promoted.set_version(desc->version() + 1);
-    repo_->UpdatePayload(*tx, promoted);
-
-    tx->Commit();
-    return promoted;
+void PayloadManager::ExecuteSpill(const PayloadID& id, Tier target, bool) {
+    (void)Promote(id, target);
 }
 
-/*
-  EnsureReadable
-
-  Validates descriptor correctness before returning to client.
-*/
-void PayloadManager::EnsureReadable(const PayloadDescriptor& desc) const
-{
-    if (desc.state() != PAYLOAD_STATE_ACTIVE &&
-        desc.state() != PAYLOAD_STATE_DURABLE)
-        throw std::runtime_error("payload not readable");
-
-    if (!storage_->Exists(desc))
-        throw std::runtime_error("payload location missing");
-}
-
-}
+} // namespace payload::core
