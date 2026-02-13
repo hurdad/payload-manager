@@ -17,7 +17,7 @@ find_package(gRPC CONFIG REQUIRED)
 # Paths
 # ------------------------------------------------------------------------------
 
-# IMPORTANT: root is the directory that directly contains "payload/"
+# Root directory that directly contains "payload/"
 set(PROTO_ROOT ${CMAKE_CURRENT_SOURCE_DIR})
 set(GENERATED_DIR ${CMAKE_CURRENT_BINARY_DIR}/generated)
 file(MAKE_DIRECTORY ${GENERATED_DIR})
@@ -41,7 +41,7 @@ set(ALL_PROTO_FILES
 )
 
 # ------------------------------------------------------------------------------
-# Service protos only (gRPC)
+# Service protos (gRPC only)
 # ------------------------------------------------------------------------------
 
 set(SERVICE_PROTO_FILES
@@ -86,6 +86,54 @@ foreach(PROTO_FILE IN LISTS SERVICE_PROTO_FILES)
 endforeach()
 
 # ------------------------------------------------------------------------------
+# Python protobuf generation (optional)
+# ------------------------------------------------------------------------------
+
+find_package(Python3 COMPONENTS Interpreter QUIET)
+
+if(Python3_FOUND)
+  execute_process(
+          COMMAND ${Python3_EXECUTABLE} -c "import grpc_tools"
+          RESULT_VARIABLE GRPC_TOOLS_AVAILABLE
+          OUTPUT_QUIET ERROR_QUIET
+  )
+
+  if(GRPC_TOOLS_AVAILABLE EQUAL 0)
+    set(ENABLE_PYTHON_PROTO ON)
+    message(STATUS "Python grpc_tools detected — enabling Python proto generation")
+  else()
+    set(ENABLE_PYTHON_PROTO OFF)
+    message(STATUS "grpc_tools not found — Python generation disabled")
+  endif()
+else()
+  set(ENABLE_PYTHON_PROTO OFF)
+endif()
+
+set(PY_PROTO_SRCS)
+set(PY_GRPC_SRCS)
+
+if(ENABLE_PYTHON_PROTO)
+  set(PYTHON_OUT_DIR ${CMAKE_CURRENT_BINARY_DIR}/python)
+  file(MAKE_DIRECTORY ${PYTHON_OUT_DIR})
+
+  foreach(PROTO_FILE IN LISTS ALL_DEP_PROTOS)
+    get_filename_component(PROTO_WE ${PROTO_FILE} NAME_WE)
+    get_filename_component(PROTO_DIR ${PROTO_FILE} DIRECTORY)
+
+    list(APPEND PY_PROTO_SRCS
+            ${PYTHON_OUT_DIR}/${PROTO_DIR}/${PROTO_WE}_pb2.py)
+  endforeach()
+
+  foreach(PROTO_FILE IN LISTS SERVICE_PROTO_FILES)
+    get_filename_component(PROTO_WE ${PROTO_FILE} NAME_WE)
+    get_filename_component(PROTO_DIR ${PROTO_FILE} DIRECTORY)
+
+    list(APPEND PY_GRPC_SRCS
+            ${PYTHON_OUT_DIR}/${PROTO_DIR}/${PROTO_WE}_pb2_grpc.py)
+  endforeach()
+endif()
+
+# ------------------------------------------------------------------------------
 # Tools
 # ------------------------------------------------------------------------------
 
@@ -102,7 +150,7 @@ else()
 endif()
 
 # ------------------------------------------------------------------------------
-# Generate protobuf sources
+# Generate protobuf C++ sources
 # ------------------------------------------------------------------------------
 
 add_custom_command(
@@ -113,12 +161,12 @@ add_custom_command(
         ${ALL_DEP_PROTOS}
         WORKING_DIRECTORY ${PROTO_ROOT}
         DEPENDS ${PROTO_ABS_FILES}
-        COMMENT "Generating protobuf sources"
+        COMMENT "Generating protobuf C++ sources"
         VERBATIM
 )
 
 # ------------------------------------------------------------------------------
-# Generate gRPC sources
+# Generate gRPC C++ sources
 # ------------------------------------------------------------------------------
 
 add_custom_command(
@@ -130,9 +178,28 @@ add_custom_command(
         ${SERVICE_PROTO_FILES}
         WORKING_DIRECTORY ${PROTO_ROOT}
         DEPENDS ${PROTO_ABS_FILES}
-        COMMENT "Generating gRPC sources"
+        COMMENT "Generating gRPC C++ sources"
         VERBATIM
 )
+
+# ------------------------------------------------------------------------------
+# Generate Python sources
+# ------------------------------------------------------------------------------
+
+if(ENABLE_PYTHON_PROTO)
+  add_custom_command(
+          OUTPUT ${PY_PROTO_SRCS} ${PY_GRPC_SRCS}
+          COMMAND ${Python3_EXECUTABLE} -m grpc_tools.protoc
+          -I ${PROTO_ROOT}
+          --python_out=${PYTHON_OUT_DIR}
+          --grpc_python_out=${PYTHON_OUT_DIR}
+          ${ALL_DEP_PROTOS}
+          WORKING_DIRECTORY ${PROTO_ROOT}
+          DEPENDS ${PROTO_ABS_FILES}
+          COMMENT "Generating Python protobuf + gRPC sources"
+          VERBATIM
+  )
+endif()
 
 # ------------------------------------------------------------------------------
 # Aggregate generation target
@@ -144,10 +211,12 @@ add_custom_target(generate_protos ALL
         ${PROTO_HDRS}
         ${GRPC_SRCS}
         ${GRPC_HDRS}
+        ${PY_PROTO_SRCS}
+        ${PY_GRPC_SRCS}
 )
 
 # ------------------------------------------------------------------------------
-# Proto-only library (schema)
+# Proto-only library
 # ------------------------------------------------------------------------------
 
 add_library(payload_manager_proto STATIC ${PROTO_SRCS})
@@ -185,3 +254,13 @@ target_link_libraries(payload_manager_grpc
 )
 
 add_dependencies(payload_manager_grpc generate_protos)
+
+# ------------------------------------------------------------------------------
+# Python convenience target
+# ------------------------------------------------------------------------------
+
+if(ENABLE_PYTHON_PROTO)
+  add_custom_target(payload_manager_py
+          DEPENDS ${PY_PROTO_SRCS} ${PY_GRPC_SRCS}
+  )
+endif()

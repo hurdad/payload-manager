@@ -23,9 +23,12 @@ RUN apt-get update \
         libprotobuf-dev \
         libgrpc++-dev \
         libgrpc-dev \
+        libyaml-cpp-dev \
         protobuf-compiler-grpc \
         python3 \
         python3-pip \
+        python3-grpcio \
+        python3-grpc-tools \
     && rm -rf /var/lib/apt/lists/*
 
 COPY . ./src

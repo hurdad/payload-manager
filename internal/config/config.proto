@@ -1,0 +1,104 @@
+syntax = "proto3";
+
+package payload.runtime.config;
+
+import "google/protobuf/duration.proto";
+
+/*
+  Payload Manager Runtime Configuration
+
+  This describes how a single node runs:
+  storage tiers, database backend, worker behavior, etc.
+
+  This file MUST NOT be used by clients.
+*/
+
+message ServerConfig {
+  string bind_address = 1; // "0.0.0.0:50051"
+}
+
+// ------------------------------------------------------------------
+// Database
+// ------------------------------------------------------------------
+
+message PostgresConfig {
+  string connection_uri = 1;
+  uint32 max_connections = 2;
+}
+
+message SqliteConfig {
+  string path = 1;
+  bool wal_mode = 2;
+}
+
+message DatabaseConfig {
+  oneof backend {
+    PostgresConfig postgres = 1;
+    SqliteConfig sqlite = 2;
+  }
+}
+
+// ------------------------------------------------------------------
+// Storage tiers
+// ------------------------------------------------------------------
+
+message RamTierConfig {
+  uint64 capacity_bytes = 1;
+  bool use_hugepages = 2;
+}
+
+message DiskTierConfig {
+  string root_path = 1;
+  uint64 capacity_bytes = 2;
+  bool fsync = 3;
+}
+
+message ObjectStoreConfig {
+  string endpoint = 1;
+  string bucket = 2;
+  string access_key = 3;
+  string secret_key = 4;
+  bool tls = 5;
+}
+
+message GpuDeviceConfig {
+  uint32 device_id = 1;
+  uint64 capacity_bytes = 2;
+}
+
+message GpuTierConfig {
+  repeated GpuDeviceConfig devices = 1;
+}
+
+message StorageConfig {
+  RamTierConfig ram = 1;
+  DiskTierConfig disk = 2;
+  ObjectStoreConfig object = 3;
+  GpuTierConfig gpu = 4;
+}
+
+// ------------------------------------------------------------------
+// Workers
+// ------------------------------------------------------------------
+
+message SpillWorkerConfig {
+  uint32 threads = 1;
+  google.protobuf.Duration retry_backoff = 2;
+}
+
+message LeaseConfig {
+  google.protobuf.Duration default_lease = 1;
+  google.protobuf.Duration max_lease = 2;
+}
+
+// ------------------------------------------------------------------
+// Top-level
+// ------------------------------------------------------------------
+
+message RuntimeConfig {
+  ServerConfig server = 1;
+  DatabaseConfig database = 2;
+  StorageConfig storage = 3;
+  SpillWorkerConfig spill_workers = 4;
+  LeaseConfig leases = 5;
+}

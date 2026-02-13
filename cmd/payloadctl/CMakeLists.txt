@@ -1,8 +1,25 @@
-add_executable(payloadctl
-  main.cpp
+cmake_minimum_required(VERSION 3.20)
+
+add_executable(payloactl
+        main.cpp
 )
 
-target_link_libraries(payloadctl
-  PRIVATE
-    payload_manager::client
+target_include_directories(payloactl
+        PRIVATE
+        ${PROJECT_SOURCE_DIR}
+)
+
+find_package(gRPC REQUIRED)
+find_package(Protobuf REQUIRED)
+
+target_link_libraries(payloactl
+        PRIVATE
+        payload_manager::proto
+        payload_manager::grpc
+        gRPC::grpc++
+        protobuf::libprotobuf
+)
+
+set_target_properties(payloactl PROPERTIES
+        RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin
 )
