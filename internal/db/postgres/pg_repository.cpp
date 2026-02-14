@@ -260,6 +260,39 @@ std::vector<model::StreamEntryRecord> PgRepository::ReadStreamEntriesRange(
     return out;
 }
 
+Result PgRepository::TrimStreamEntriesToMaxCount(
+    Transaction& t, uint64_t stream_id, uint64_t max_entries) {
+    if (max_entries == 0) {
+        return Result::Ok();
+    }
+
+    try {
+        TX(t).Work().exec_params(
+            "DELETE FROM stream_entries "
+            "WHERE stream_id=$1 AND offset IN ("
+            "SELECT offset FROM stream_entries WHERE stream_id=$1 ORDER BY offset ASC "
+            "LIMIT GREATEST((SELECT COUNT(*)::bigint FROM stream_entries WHERE stream_id=$1) - $2::bigint, 0)"
+            ");",
+            stream_id, max_entries);
+        return Result::Ok();
+    } catch (const std::exception& e) {
+        return Translate(e);
+    }
+}
+
+Result PgRepository::DeleteStreamEntriesOlderThan(
+    Transaction& t, uint64_t stream_id, uint64_t min_append_time_ms) {
+    try {
+        TX(t).Work().exec_params(
+            "DELETE FROM stream_entries "
+            "WHERE stream_id=$1 AND append_time < to_timestamp($2 / 1000.0);",
+            stream_id, min_append_time_ms);
+        return Result::Ok();
+    } catch (const std::exception& e) {
+        return Translate(e);
+    }
+}
+
 Result PgRepository::CommitConsumerOffset(
     Transaction& t, const model::StreamConsumerOffsetRecord& record) {
     try {

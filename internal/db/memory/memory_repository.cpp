@@ -244,6 +244,41 @@ std::vector<model::StreamEntryRecord> MemoryRepository::ReadStreamEntriesRange(
     return out;
 }
 
+Result MemoryRepository::TrimStreamEntriesToMaxCount(
+    Transaction& t, uint64_t stream_id, uint64_t max_entries) {
+    auto& s = TX(t).Mutable();
+    auto it = s.stream_entries.find(stream_id);
+    if (it == s.stream_entries.end() || max_entries == 0) {
+        return Result::Ok();
+    }
+
+    auto& entries = it->second;
+    if (entries.size() <= max_entries) {
+        return Result::Ok();
+    }
+
+    const auto remove_count = entries.size() - static_cast<size_t>(max_entries);
+    entries.erase(entries.begin(), entries.begin() + static_cast<std::ptrdiff_t>(remove_count));
+    return Result::Ok();
+}
+
+Result MemoryRepository::DeleteStreamEntriesOlderThan(
+    Transaction& t, uint64_t stream_id, uint64_t min_append_time_ms) {
+    auto& s = TX(t).Mutable();
+    auto it = s.stream_entries.find(stream_id);
+    if (it == s.stream_entries.end()) {
+        return Result::Ok();
+    }
+
+    auto& entries = it->second;
+    entries.erase(
+        std::remove_if(entries.begin(), entries.end(), [&](const model::StreamEntryRecord& entry) {
+            return entry.append_time_ms < min_append_time_ms;
+        }),
+        entries.end());
+    return Result::Ok();
+}
+
 Result MemoryRepository::CommitConsumerOffset(
     Transaction& t, const model::StreamConsumerOffsetRecord& record) {
     auto& s = TX(t).Mutable();

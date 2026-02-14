@@ -560,6 +560,57 @@ std::vector<model::StreamEntryRecord> SqliteRepository::ReadStreamEntriesRange(
     return out;
 }
 
+Result SqliteRepository::TrimStreamEntriesToMaxCount(
+    Transaction& t, uint64_t stream_id, uint64_t max_entries) {
+    auto* db = TX(t).Handle();
+    if (max_entries == 0) {
+        return Result::Ok();
+    }
+
+    const char* sql =
+        "DELETE FROM stream_entries "
+        "WHERE stream_id=? AND offset IN ("
+        "SELECT offset FROM stream_entries WHERE stream_id=? ORDER BY offset ASC "
+        "LIMIT (SELECT CASE WHEN COUNT(*) > ? THEN COUNT(*) - ? ELSE 0 END "
+        "FROM stream_entries WHERE stream_id=?)"
+        ");";
+
+    sqlite3_stmt* st = nullptr;
+    if (sqlite3_prepare_v2(db, sql, -1, &st, nullptr) != SQLITE_OK) {
+        return Result::Err(ErrorCode::InternalError, sqlite3_errmsg(db));
+    }
+
+    BindU64(st, 1, stream_id);
+    BindU64(st, 2, stream_id);
+    BindU64(st, 3, max_entries);
+    BindU64(st, 4, max_entries);
+    BindU64(st, 5, stream_id);
+
+    const int rc = sqlite3_step(st);
+    sqlite3_finalize(st);
+    return Translate(db, rc);
+}
+
+Result SqliteRepository::DeleteStreamEntriesOlderThan(
+    Transaction& t, uint64_t stream_id, uint64_t min_append_time_ms) {
+    auto* db = TX(t).Handle();
+
+    const char* sql =
+        "DELETE FROM stream_entries WHERE stream_id=? AND append_time<?;";
+
+    sqlite3_stmt* st = nullptr;
+    if (sqlite3_prepare_v2(db, sql, -1, &st, nullptr) != SQLITE_OK) {
+        return Result::Err(ErrorCode::InternalError, sqlite3_errmsg(db));
+    }
+
+    BindU64(st, 1, stream_id);
+    BindU64(st, 2, min_append_time_ms);
+
+    const int rc = sqlite3_step(st);
+    sqlite3_finalize(st);
+    return Translate(db, rc);
+}
+
 Result SqliteRepository::CommitConsumerOffset(
     Transaction& t, const model::StreamConsumerOffsetRecord& record) {
     auto* db = TX(t).Handle();

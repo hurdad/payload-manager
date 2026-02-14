@@ -39,6 +39,10 @@ public:
       std::optional<uint64_t> min_append_time_ms) override;
   std::vector<model::StreamEntryRecord> ReadStreamEntriesRange(
       Transaction&, uint64_t stream_id, uint64_t start_offset, uint64_t end_offset) override;
+  Result TrimStreamEntriesToMaxCount(Transaction&, uint64_t stream_id,
+                                     uint64_t max_entries) override;
+  Result DeleteStreamEntriesOlderThan(Transaction&, uint64_t stream_id,
+                                      uint64_t min_append_time_ms) override;
   Result CommitConsumerOffset(Transaction&, const model::StreamConsumerOffsetRecord&) override;
   std::optional<model::StreamConsumerOffsetRecord> GetConsumerOffset(
       Transaction&, uint64_t stream_id, const std::string& consumer_group) override;
