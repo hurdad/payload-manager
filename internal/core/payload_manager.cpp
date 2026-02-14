@@ -58,6 +58,11 @@ PayloadDescriptor PayloadManager::Commit(const PayloadID& id) {
 }
 
 void PayloadManager::Delete(const PayloadID& id, bool force) {
+  // Lock ordering: never hold payload mutex_ while calling into lease_mgr_.
+  // Lease operations must complete before mutating payloads_ to avoid lock inversion.
+  if (force) {
+    lease_mgr_->InvalidateAll(id);
+  }
   if (!force && lease_mgr_->HasActiveLeases(id)) {
     throw std::runtime_error("delete: active lease");
   }
