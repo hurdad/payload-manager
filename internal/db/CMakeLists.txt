@@ -95,10 +95,12 @@ if(PAYLOAD_MANAGER_ENABLE_POSTGRES)
             postgres/pg_pool.cpp
             postgres/pg_tx.cpp
             postgres/pg_repository.cpp
+            postgres/pqxx_compat.cpp
     )
 
     target_include_directories(payload_manager_db PUBLIC ${PQXX_INCLUDE_DIRS})
     target_link_libraries(payload_manager_db PUBLIC ${PQXX_LIBRARIES})
+
 
     target_compile_definitions(payload_manager_db PUBLIC PAYLOAD_DB_POSTGRES=1)
 
