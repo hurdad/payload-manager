@@ -4,6 +4,7 @@
 #include <stdexcept>
 
 #include "internal/core/payload_manager.hpp"
+#include "internal/db/memory/memory_repository.hpp"
 #include "internal/lease/lease_manager.hpp"
 
 namespace {
@@ -14,7 +15,8 @@ using payload::manager::v1::PAYLOAD_STATE_ACTIVE;
 using payload::manager::v1::TIER_RAM;
 
 PayloadManager MakeManager(const std::shared_ptr<LeaseManager>& lease_mgr) {
-  return PayloadManager(/*storage=*/{}, lease_mgr, /*metadata=*/nullptr, /*lineage=*/nullptr);
+  return PayloadManager(/*storage=*/{}, lease_mgr, /*metadata=*/nullptr, /*lineage=*/nullptr,
+                        std::make_shared<payload::db::memory::MemoryRepository>());
 }
 
 void TestForceDeleteRemovesPayloadAndLeases() {

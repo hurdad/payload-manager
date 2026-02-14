@@ -5,6 +5,7 @@
 #include <grpcpp/grpcpp.h>
 
 #include "internal/core/payload_manager.hpp"
+#include "internal/db/memory/memory_repository.hpp"
 #include "internal/grpc/catalog_server.hpp"
 #include "internal/grpc/data_server.hpp"
 #include "internal/lease/lease_manager.hpp"
@@ -21,8 +22,10 @@ using payload::manager::v1::TIER_RAM;
 
 payload::service::ServiceContext BuildServiceContext() {
   payload::service::ServiceContext ctx;
+  auto repository = std::make_shared<payload::db::memory::MemoryRepository>();
   ctx.manager = std::make_shared<payload::core::PayloadManager>(payload::storage::StorageFactory::TierMap{},
-                                                                std::make_shared<payload::lease::LeaseManager>(), nullptr, nullptr);
+                                                                std::make_shared<payload::lease::LeaseManager>(), nullptr, nullptr, repository);
+  ctx.repository = repository;
   ctx.metadata = std::make_shared<payload::metadata::MetadataCache>();
   ctx.lineage  = std::make_shared<payload::lineage::LineageGraph>();
   return ctx;

@@ -2,6 +2,7 @@
 
 #include <stdexcept>
 
+#include "internal/db/model/payload_record.hpp"
 #include "internal/lease/lease_manager.hpp"
 #include "internal/util/errors.hpp"
 #include "internal/util/time.hpp"
@@ -18,11 +19,57 @@ bool IsReadableState(PayloadState state) {
   return state == PAYLOAD_STATE_ACTIVE || state == PAYLOAD_STATE_SPILLING || state == PAYLOAD_STATE_DURABLE;
 }
 
+void ThrowIfDbError(const payload::db::Result& result, const std::string& context) {
+  if (result) {
+    return;
+  }
+
+  const auto message = result.message.empty() ? context : context + ": " + result.message;
+  switch (result.code) {
+    case payload::db::ErrorCode::AlreadyExists:
+      throw payload::util::AlreadyExists(message);
+    case payload::db::ErrorCode::NotFound:
+      throw payload::util::NotFound(message);
+    case payload::db::ErrorCode::Conflict:
+      throw payload::util::InvalidState(message);
+    default:
+      throw std::runtime_error(message);
+  }
+}
+
+db::model::PayloadRecord ToPayloadRecord(const PayloadDescriptor& descriptor) {
+  db::model::PayloadRecord record;
+  record.id         = descriptor.id().value();
+  record.tier       = descriptor.tier();
+  record.state      = descriptor.state();
+  record.version    = descriptor.version();
+  record.size_bytes = descriptor.has_ram() ? descriptor.ram().length_bytes() : 0;
+  return record;
+}
+
+PayloadDescriptor ToPayloadDescriptor(const db::model::PayloadRecord& record) {
+  PayloadDescriptor descriptor;
+  descriptor.mutable_id()->set_value(record.id);
+  descriptor.set_tier(record.tier);
+  descriptor.set_state(record.state);
+  descriptor.set_version(record.version);
+  if (record.size_bytes > 0) {
+    RamLocation ram;
+    ram.set_length_bytes(record.size_bytes);
+    ram.set_slab_id(0);
+    ram.set_block_index(0);
+    ram.set_shm_name("payload");
+    *descriptor.mutable_ram() = ram;
+  }
+  return descriptor;
+}
+
 } // namespace
 
 PayloadManager::PayloadManager(payload::storage::StorageFactory::TierMap storage, std::shared_ptr<payload::lease::LeaseManager> lease_mgr,
-                               std::shared_ptr<payload::metadata::MetadataCache>, std::shared_ptr<payload::lineage::LineageGraph>)
-    : storage_(std::move(storage)), lease_mgr_(std::move(lease_mgr)) {
+                               std::shared_ptr<payload::metadata::MetadataCache>, std::shared_ptr<payload::lineage::LineageGraph>,
+                               std::shared_ptr<payload::db::Repository> repository)
+    : storage_(std::move(storage)), lease_mgr_(std::move(lease_mgr)), repository_(std::move(repository)) {
 }
 
 std::string PayloadManager::Key(const PayloadID& id) {
@@ -44,38 +91,45 @@ PayloadDescriptor PayloadManager::Allocate(uint64_t size_bytes, Tier preferred) 
   ram.set_shm_name("payload");
   *desc.mutable_ram() = ram;
 
-  std::lock_guard<std::mutex> lock(mutex_);
-  payloads_[Key(desc.id())] = desc;
+  auto tx = repository_->Begin();
+  ThrowIfDbError(repository_->InsertPayload(*tx, ToPayloadRecord(desc)), "allocate payload");
+  tx->Commit();
   return desc;
 }
 
 PayloadDescriptor PayloadManager::Commit(const PayloadID& id) {
-  std::lock_guard<std::mutex> lock(mutex_);
-  auto                        it = payloads_.find(Key(id));
-  if (it == payloads_.end()) throw payload::util::NotFound("commit payload: payload not found; allocate first and retry");
-  it->second.set_state(PAYLOAD_STATE_ACTIVE);
-  it->second.set_version(it->second.version() + 1);
-  return it->second;
+  auto tx     = repository_->Begin();
+  auto record = repository_->GetPayload(*tx, Key(id));
+  if (!record.has_value()) throw payload::util::NotFound("commit payload: payload not found; allocate first and retry");
+  if (record->state != PAYLOAD_STATE_ALLOCATED) {
+    throw payload::util::InvalidState("commit payload: payload must be in allocated state before commit");
+  }
+  record->state = PAYLOAD_STATE_ACTIVE;
+  record->version++;
+  ThrowIfDbError(repository_->UpdatePayload(*tx, *record), "commit payload");
+  tx->Commit();
+  return ToPayloadDescriptor(*record);
 }
 
 void PayloadManager::Delete(const PayloadID& id, bool force) {
-  // Lock ordering: never hold payload mutex_ while calling into lease_mgr_.
-  // Lease operations must complete before mutating payloads_ to avoid lock inversion.
+  // Lease operations must complete before mutating persistent payload state.
   if (force) {
     lease_mgr_->InvalidateAll(id);
   }
   if (!force && lease_mgr_->HasActiveLeases(id)) {
     throw payload::util::LeaseConflict("delete payload: active lease present; release leases or set force=true");
   }
-  std::lock_guard<std::mutex> lock(mutex_);
-  payloads_.erase(Key(id));
+  auto tx = repository_->Begin();
+  ThrowIfDbError(repository_->DeletePayload(*tx, Key(id)), "delete payload");
+  tx->Commit();
 }
 
 PayloadDescriptor PayloadManager::ResolveSnapshot(const PayloadID& id) {
-  std::lock_guard<std::mutex> lock(mutex_);
-  auto                        it = payloads_.find(Key(id));
-  if (it == payloads_.end()) throw payload::util::NotFound("resolve snapshot: payload not found; verify payload id");
-  return it->second;
+  auto tx     = repository_->Begin();
+  auto record = repository_->GetPayload(*tx, Key(id));
+  if (!record.has_value()) throw payload::util::NotFound("resolve snapshot: payload not found; verify payload id");
+  tx->Commit();
+  return ToPayloadDescriptor(*record);
 }
 
 AcquireReadLeaseResponse PayloadManager::AcquireReadLease(const PayloadID& id, Tier min_tier, uint64_t min_duration_ms) {
@@ -100,12 +154,17 @@ void PayloadManager::ReleaseLease(const std::string& lease_id) {
 }
 
 PayloadDescriptor PayloadManager::Promote(const PayloadID& id, Tier target) {
-  std::lock_guard<std::mutex> lock(mutex_);
-  auto                        it = payloads_.find(Key(id));
-  if (it == payloads_.end()) throw payload::util::NotFound("promote payload: payload not found; verify payload id");
-  it->second.set_tier(target);
-  it->second.set_version(it->second.version() + 1);
-  return it->second;
+  auto tx     = repository_->Begin();
+  auto record = repository_->GetPayload(*tx, Key(id));
+  if (!record.has_value()) throw payload::util::NotFound("promote payload: payload not found; verify payload id");
+  if (record->state == PAYLOAD_STATE_DELETED) {
+    throw payload::util::InvalidState("promote payload: payload is deleted and cannot be promoted");
+  }
+  record->tier = target;
+  record->version++;
+  ThrowIfDbError(repository_->UpdatePayload(*tx, *record), "promote payload");
+  tx->Commit();
+  return ToPayloadDescriptor(*record);
 }
 
 void PayloadManager::ExecuteSpill(const PayloadID& id, Tier target, bool) {
