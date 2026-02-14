@@ -3,6 +3,7 @@
 #include <stdexcept>
 
 #include "internal/core/payload_manager.hpp"
+#include "internal/util/errors.hpp"
 #include "internal/lineage/lineage_graph.hpp"
 #include "internal/metadata/metadata_cache.hpp"
 #include "internal/util/time.hpp"
@@ -17,7 +18,7 @@ CatalogService::CatalogService(ServiceContext ctx) : ctx_(std::move(ctx)) {
 
 AllocatePayloadResponse CatalogService::Allocate(const AllocatePayloadRequest& req) {
   if (req.ttl_ms() > 0 || req.persist() || req.has_eviction_policy()) {
-    throw std::runtime_error("allocate: ttl_ms, persist, and eviction_policy are not implemented");
+    throw payload::util::InvalidState("allocate payload: ttl_ms, persist, and eviction_policy are not implemented; omit these fields and retry");
   }
 
   AllocatePayloadResponse resp;

@@ -8,12 +8,15 @@ add_executable(payload_manager_unit_lease_table
   lease_table_test.cpp
 )
 
+add_executable(payload_manager_unit_grpc_status
+  grpc_status_test.cpp
 add_executable(payload_manager_unit_payload_delete
   payload_manager_delete_test.cpp
 )
 
 target_compile_features(payload_manager_unit_skeleton PRIVATE cxx_std_20)
 target_compile_features(payload_manager_unit_lease_table PRIVATE cxx_std_20)
+target_compile_features(payload_manager_unit_grpc_status PRIVATE cxx_std_20)
 target_compile_features(payload_manager_unit_payload_delete PRIVATE cxx_std_20)
 
 target_include_directories(payload_manager_unit_skeleton
@@ -26,6 +29,7 @@ target_include_directories(payload_manager_unit_lease_table
   ${PROJECT_SOURCE_DIR}
 )
 
+target_include_directories(payload_manager_unit_grpc_status
 target_include_directories(payload_manager_unit_payload_delete
   PRIVATE
   ${PROJECT_SOURCE_DIR}
@@ -36,6 +40,7 @@ target_link_libraries(payload_manager_unit_lease_table
   payload_manager::internal
 )
 
+target_link_libraries(payload_manager_unit_grpc_status
 target_link_libraries(payload_manager_unit_payload_delete
   PRIVATE
   payload_manager::internal
@@ -43,4 +48,5 @@ target_link_libraries(payload_manager_unit_payload_delete
 
 payload_manager_register_test(payload_manager_unit_skeleton "unit;skeleton")
 payload_manager_register_test(payload_manager_unit_lease_table "unit;lease")
+payload_manager_register_test(payload_manager_unit_grpc_status "unit;grpc")
 payload_manager_register_test(payload_manager_unit_payload_delete "unit;payload")

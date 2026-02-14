@@ -3,6 +3,7 @@
 #include <stdexcept>
 
 #include "internal/lease/lease_manager.hpp"
+#include "internal/util/errors.hpp"
 #include "internal/util/time.hpp"
 #include "internal/util/uuid.hpp"
 #include "payload/manager/v1.hpp"
@@ -51,7 +52,7 @@ PayloadDescriptor PayloadManager::Allocate(uint64_t size_bytes, Tier preferred) 
 PayloadDescriptor PayloadManager::Commit(const PayloadID& id) {
   std::lock_guard<std::mutex> lock(mutex_);
   auto                        it = payloads_.find(Key(id));
-  if (it == payloads_.end()) throw std::runtime_error("commit: payload not found");
+  if (it == payloads_.end()) throw payload::util::NotFound("commit payload: payload not found; allocate first and retry");
   it->second.set_state(PAYLOAD_STATE_ACTIVE);
   it->second.set_version(it->second.version() + 1);
   return it->second;
@@ -64,7 +65,7 @@ void PayloadManager::Delete(const PayloadID& id, bool force) {
     lease_mgr_->InvalidateAll(id);
   }
   if (!force && lease_mgr_->HasActiveLeases(id)) {
-    throw std::runtime_error("delete: active lease");
+    throw payload::util::LeaseConflict("delete payload: active lease present; release leases or set force=true");
   }
   std::lock_guard<std::mutex> lock(mutex_);
   payloads_.erase(Key(id));
@@ -73,7 +74,7 @@ void PayloadManager::Delete(const PayloadID& id, bool force) {
 PayloadDescriptor PayloadManager::ResolveSnapshot(const PayloadID& id) {
   std::lock_guard<std::mutex> lock(mutex_);
   auto                        it = payloads_.find(Key(id));
-  if (it == payloads_.end()) throw std::runtime_error("resolve: not found");
+  if (it == payloads_.end()) throw payload::util::NotFound("resolve snapshot: payload not found; verify payload id");
   return it->second;
 }
 
@@ -83,7 +84,7 @@ AcquireReadLeaseResponse PayloadManager::AcquireReadLease(const PayloadID& id, T
     desc = Promote(id, min_tier);
   }
   if (!IsReadableState(desc.state())) {
-    throw std::runtime_error("acquire lease: payload not committed");
+    throw payload::util::InvalidState("acquire lease: payload is not readable; commit or promote payload before leasing");
   }
   auto lease = lease_mgr_->Acquire(id, desc, min_duration_ms);
 
@@ -101,7 +102,7 @@ void PayloadManager::ReleaseLease(const std::string& lease_id) {
 PayloadDescriptor PayloadManager::Promote(const PayloadID& id, Tier target) {
   std::lock_guard<std::mutex> lock(mutex_);
   auto                        it = payloads_.find(Key(id));
-  if (it == payloads_.end()) throw std::runtime_error("promote: not found");
+  if (it == payloads_.end()) throw payload::util::NotFound("promote payload: payload not found; verify payload id");
   it->second.set_tier(target);
   it->second.set_version(it->second.version() + 1);
   return it->second;

@@ -13,6 +13,7 @@
 #include "internal/db/model/stream_entry_record.hpp"
 #include "internal/db/model/stream_record.hpp"
 #include "internal/util/time.hpp"
+#include "internal/util/errors.hpp"
 #include "internal/util/uuid.hpp"
 #include "payload/manager/v1.hpp"
 
@@ -97,7 +98,7 @@ payload::db::model::StreamRecord GetStreamOrThrow(payload::db::Repository& repo,
                                                   const std::string& op) {
   auto stream_record = repo.GetStreamByName(tx, stream.namespace_(), stream.name());
   if (!stream_record.has_value()) {
-    throw std::runtime_error(op + ": stream not found");
+    throw payload::util::NotFound(op + ": stream not found; create the stream before retrying");
   }
   return *stream_record;
 }
@@ -113,14 +114,14 @@ std::string StreamService::Key(const StreamID& stream) {
 
 void StreamService::CreateStream(const CreateStreamRequest& req) {
   if (!req.has_stream() || req.stream().name().empty()) {
-    throw std::runtime_error("create stream: missing stream name");
+    throw payload::util::InvalidState("create stream: missing stream name; set stream.name and retry");
   }
 
   std::lock_guard<std::mutex> lock(mutex_);
   auto                        tx = ctx_.repository->Begin();
 
   if (ctx_.repository->GetStreamByName(*tx, req.stream().namespace_(), req.stream().name()).has_value()) {
-    throw std::runtime_error("create stream: stream already exists");
+    throw payload::util::AlreadyExists("create stream: stream already exists; choose a different stream name or delete existing stream");
   }
 
   payload::db::model::StreamRecord stream;
