@@ -5,7 +5,7 @@
 
 #include "payload/manager/services/v1/payload_data_service.grpc.pb.h"
 #include "internal/service/data_service.hpp"
-#include "payload/manager/v1_compat.hpp"
+#include "payload/manager/v1.hpp"
 
 namespace payload::grpc {
 

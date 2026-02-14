@@ -1,5 +1,5 @@
 #include "metadata_cache.hpp"
-#include "payload/manager/v1_compat.hpp"
+#include "payload/manager/v1.hpp"
 
 namespace payload::metadata {
 

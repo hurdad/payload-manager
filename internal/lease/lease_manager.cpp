@@ -1,6 +1,6 @@
 #include "lease_manager.hpp"
 #include <random>
-#include "payload/manager/v1_compat.hpp"
+#include "payload/manager/v1.hpp"
 
 namespace payload::lease {
 

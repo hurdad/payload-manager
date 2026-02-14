@@ -5,7 +5,7 @@
 #include "internal/lease/lease_manager.hpp"
 #include "internal/util/time.hpp"
 #include "internal/util/uuid.hpp"
-#include "payload/manager/v1_compat.hpp"
+#include "payload/manager/v1.hpp"
 
 namespace payload::core {
 

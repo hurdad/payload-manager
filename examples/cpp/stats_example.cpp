@@ -7,7 +7,7 @@
 #include <grpcpp/security/credentials.h>
 
 #include "client/cpp/payload_client.h"
-#include "payload/manager/v1_compat.hpp"
+#include "payload/manager/v1.hpp"
 
 int main(int argc, char** argv) {
   const std::string target = argc > 1 ? argv[1] : "localhost:50051";

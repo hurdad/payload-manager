@@ -5,7 +5,7 @@
 
 #include "payload/manager/core/v1/id.pb.h"
 #include "payload/manager/core/v1/placement.pb.h"
-#include "payload/manager/v1_compat.hpp"
+#include "payload/manager/v1.hpp"
 
 namespace payload::lease {
 

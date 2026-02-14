@@ -1,6 +1,7 @@
 #include "stream_service.hpp"
 
 #include <stdexcept>
+#include "payload/manager/v1.hpp"
 
 namespace payload::service {
 
