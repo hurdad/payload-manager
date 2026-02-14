@@ -10,7 +10,6 @@
 #include "config/config.pb.h"
 
 #ifdef ENABLE_OTEL
-#include <opentelemetry/context/runtime_context.h>
 #include <opentelemetry/trace/provider.h>
 #include <opentelemetry/trace/span.h>
 #endif
@@ -81,7 +80,7 @@ std::string TraceContextFields() {
     return {};
   }
 
-  auto span = opentelemetry::trace::GetSpan(opentelemetry::context::RuntimeContext::GetCurrent());
+  auto span = opentelemetry::trace::Tracer::GetCurrentSpan();
   if (!span) {
     return {};
   }
