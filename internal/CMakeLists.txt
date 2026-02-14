@@ -72,11 +72,13 @@ set(INTERNAL_SRC
         service/data_service.cpp
         service/catalog_service.cpp
         service/admin_service.cpp
+        service/stream_service.cpp
 
         # grpc adapters
         grpc/data_server.cpp
         grpc/catalog_server.cpp
         grpc/admin_server.cpp
+        grpc/stream_server.cpp
         grpc/grpc_error.cpp
 
         # spill + tiering
