@@ -15,19 +15,23 @@ namespace payload::db::sqlite {
     - avoids deadlock-y behavior later
 */
 class SqliteTransaction final : public db::Transaction {
-public:
+ public:
   explicit SqliteTransaction(std::shared_ptr<SqliteDB> db);
   ~SqliteTransaction();
 
-  sqlite3* Handle() const { return db_->Handle(); }
+  sqlite3* Handle() const {
+    return db_->Handle();
+  }
 
   void Commit() override;
   void Rollback() override;
-  bool IsCommitted() const override { return committed_; }
+  bool IsCommitted() const override {
+    return committed_;
+  }
 
-private:
+ private:
   std::shared_ptr<SqliteDB> db_;
-  bool committed_ = false;
+  bool                      committed_ = false;
 };
 
-}
+} // namespace payload::db::sqlite

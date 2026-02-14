@@ -1,10 +1,10 @@
 #pragma once
 
+#include <arrow/buffer.h>
+#include <arrow/filesystem/s3fs.h>
+
 #include <memory>
 #include <string>
-
-#include <arrow/filesystem/s3fs.h>
-#include <arrow/buffer.h>
 
 #include "internal/storage/storage_backend.hpp"
 #include "payload/manager/v1.hpp"
@@ -22,21 +22,14 @@ namespace payload::storage {
 */
 
 class ObjectArrowStore final : public StorageBackend {
-public:
-  ObjectArrowStore(std::shared_ptr<arrow::fs::S3FileSystem> fs,
-                   std::string bucket,
-                   std::string prefix);
+ public:
+  ObjectArrowStore(std::shared_ptr<arrow::fs::S3FileSystem> fs, std::string bucket, std::string prefix);
 
-  std::shared_ptr<arrow::Buffer>
-  Allocate(const payload::manager::v1::PayloadID& id,
-           uint64_t size_bytes) override;
+  std::shared_ptr<arrow::Buffer> Allocate(const payload::manager::v1::PayloadID& id, uint64_t size_bytes) override;
 
-  std::shared_ptr<arrow::Buffer>
-  Read(const payload::manager::v1::PayloadID& id) override;
+  std::shared_ptr<arrow::Buffer> Read(const payload::manager::v1::PayloadID& id) override;
 
-  void Write(const payload::manager::v1::PayloadID& id,
-             const std::shared_ptr<arrow::Buffer>& buffer,
-             bool fsync) override;
+  void Write(const payload::manager::v1::PayloadID& id, const std::shared_ptr<arrow::Buffer>& buffer, bool fsync) override;
 
   void Remove(const payload::manager::v1::PayloadID& id) override;
 
@@ -44,12 +37,12 @@ public:
     return payload::manager::v1::TIER_OBJECT;
   }
 
-private:
+ private:
   std::string ObjectPath(const payload::manager::v1::PayloadID& id) const;
 
   std::shared_ptr<arrow::fs::S3FileSystem> fs_;
-  std::string bucket_;
-  std::string prefix_;
+  std::string                              bucket_;
+  std::string                              prefix_;
 };
 
-}
+} // namespace payload::storage

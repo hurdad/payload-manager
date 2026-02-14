@@ -10,15 +10,14 @@
 namespace payload::lineage {
 
 class LineageGraph {
-public:
+ public:
   void Add(const payload::manager::v1::AddLineageRequest& req);
 
-  std::vector<payload::manager::v1::LineageEdge>
-  Query(const payload::manager::v1::GetLineageRequest& req) const;
+  std::vector<payload::manager::v1::LineageEdge> Query(const payload::manager::v1::GetLineageRequest& req) const;
 
-private:
+ private:
   struct EdgeRecord {
-    std::string other;
+    std::string                       other;
     payload::manager::v1::LineageEdge edge;
   };
 

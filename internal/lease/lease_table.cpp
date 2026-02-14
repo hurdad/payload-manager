@@ -1,4 +1,5 @@
 #include "lease_table.hpp"
+
 #include "payload/manager/v1.hpp"
 
 namespace payload::lease {
@@ -19,8 +20,7 @@ void LeaseTable::Remove(const std::string& lease_id) {
   std::lock_guard lock(mutex_);
 
   auto it = leases_.find(lease_id);
-  if (it == leases_.end())
-    return;
+  if (it == leases_.end()) return;
 
   auto range = by_payload_.equal_range(Key(it->second.payload_id));
   for (auto i = range.first; i != range.second; ++i) {
@@ -42,10 +42,9 @@ void LeaseTable::RemoveAll(const payload::manager::v1::PayloadID& id) {
   std::lock_guard lock(mutex_);
 
   auto range = by_payload_.equal_range(Key(id));
-  for (auto it = range.first; it != range.second; ++it)
-    leases_.erase(it->second);
+  for (auto it = range.first; it != range.second; ++it) leases_.erase(it->second);
 
   by_payload_.erase(Key(id));
 }
 
-}
+} // namespace payload::lease

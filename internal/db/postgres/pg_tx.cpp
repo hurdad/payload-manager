@@ -2,16 +2,17 @@
 
 namespace payload::db::postgres {
 
-PgTransaction::PgTransaction(std::shared_ptr<PgPool> pool)
-{
+PgTransaction::PgTransaction(std::shared_ptr<PgPool> pool) {
   conn_ = pool->Acquire();
-  tx_ = std::make_unique<pqxx::work>(*conn_);
+  tx_   = std::make_unique<pqxx::work>(*conn_);
 }
 
 PgTransaction::~PgTransaction() {
   if (!committed_) {
-    try { tx_->abort(); }
-    catch (...) {}
+    try {
+      tx_->abort();
+    } catch (...) {
+    }
   }
 }
 
@@ -25,4 +26,4 @@ void PgTransaction::Rollback() {
   committed_ = true;
 }
 
-}
+} // namespace payload::db::postgres

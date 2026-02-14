@@ -18,7 +18,7 @@ namespace payload::db {
 */
 
 class Transaction {
-public:
+ public:
   virtual ~Transaction() = default;
 
   // commit changes atomically
@@ -31,4 +31,4 @@ public:
   virtual bool IsCommitted() const = 0;
 };
 
-}
+} // namespace payload::db

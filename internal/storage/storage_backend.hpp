@@ -1,9 +1,9 @@
 #pragma once
 
+#include <arrow/buffer.h>
+
 #include <memory>
 #include <string>
-
-#include <arrow/buffer.h>
 
 #include "payload/manager/core/v1/id.pb.h"
 #include "payload/manager/core/v1/types.pb.h"
@@ -25,62 +25,57 @@ namespace payload::storage {
 */
 
 class StorageBackend {
-public:
-    virtual ~StorageBackend() = default;
+ public:
+  virtual ~StorageBackend() = default;
 
-    // ------------------------------------------------------------------
-    // Allocate
-    // ------------------------------------------------------------------
-    /*
-      Allocate writable storage in this tier.
+  // ------------------------------------------------------------------
+  // Allocate
+  // ------------------------------------------------------------------
+  /*
+    Allocate writable storage in this tier.
 
-      Returns a mutable buffer the caller writes into.
-      Only valid for writable tiers (RAM/GPU).
-    */
-    virtual std::shared_ptr<arrow::Buffer>
-    Allocate(const payload::manager::v1::PayloadID& id,
-             uint64_t size_bytes) = 0;
+    Returns a mutable buffer the caller writes into.
+    Only valid for writable tiers (RAM/GPU).
+  */
+  virtual std::shared_ptr<arrow::Buffer> Allocate(const payload::manager::v1::PayloadID& id, uint64_t size_bytes) = 0;
 
-    // ------------------------------------------------------------------
-    // Read
-    // ------------------------------------------------------------------
-    /*
-      Read entire payload into an Arrow buffer.
+  // ------------------------------------------------------------------
+  // Read
+  // ------------------------------------------------------------------
+  /*
+    Read entire payload into an Arrow buffer.
 
-      Implementations may mmap / zero-copy when possible.
-    */
-    virtual std::shared_ptr<arrow::Buffer>
-    Read(const payload::manager::v1::PayloadID& id) = 0;
+    Implementations may mmap / zero-copy when possible.
+  */
+  virtual std::shared_ptr<arrow::Buffer> Read(const payload::manager::v1::PayloadID& id) = 0;
 
-    // ------------------------------------------------------------------
-    // Write
-    // ------------------------------------------------------------------
-    /*
-      Persist a buffer into this tier.
+  // ------------------------------------------------------------------
+  // Write
+  // ------------------------------------------------------------------
+  /*
+    Persist a buffer into this tier.
 
-      Used for:
-        spill RAM → DISK
-        promote DISK → RAM
-        replicate DISK → OBJECT
-    */
-    virtual void Write(const payload::manager::v1::PayloadID& id,
-                       const std::shared_ptr<arrow::Buffer>& buffer,
-                       bool fsync) = 0;
+    Used for:
+      spill RAM → DISK
+      promote DISK → RAM
+      replicate DISK → OBJECT
+  */
+  virtual void Write(const payload::manager::v1::PayloadID& id, const std::shared_ptr<arrow::Buffer>& buffer, bool fsync) = 0;
 
-    // ------------------------------------------------------------------
-    // Delete
-    // ------------------------------------------------------------------
-    /*
-      Remove bytes from this tier.
+  // ------------------------------------------------------------------
+  // Delete
+  // ------------------------------------------------------------------
+  /*
+    Remove bytes from this tier.
 
-      Called after eviction or delete.
-    */
-    virtual void Remove(const payload::manager::v1::PayloadID& id) = 0;
+    Called after eviction or delete.
+  */
+  virtual void Remove(const payload::manager::v1::PayloadID& id) = 0;
 
-    // ------------------------------------------------------------------
-    // Tier type
-    // ------------------------------------------------------------------
-    virtual payload::manager::v1::Tier TierType() const = 0;
+  // ------------------------------------------------------------------
+  // Tier type
+  // ------------------------------------------------------------------
+  virtual payload::manager::v1::Tier TierType() const = 0;
 };
 
 using StorageBackendPtr = std::shared_ptr<StorageBackend>;

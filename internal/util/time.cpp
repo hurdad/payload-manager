@@ -7,7 +7,7 @@ TimePoint Now() {
 }
 
 google::protobuf::Timestamp ToProto(TimePoint tp) {
-  auto sec = std::chrono::time_point_cast<std::chrono::seconds>(tp);
+  auto sec   = std::chrono::time_point_cast<std::chrono::seconds>(tp);
   auto nanos = std::chrono::duration_cast<std::chrono::nanoseconds>(tp - sec);
 
   google::protobuf::Timestamp ts;
@@ -17,14 +17,11 @@ google::protobuf::Timestamp ToProto(TimePoint tp) {
 }
 
 TimePoint FromProto(const google::protobuf::Timestamp& ts) {
-  return TimePoint{} +
-         std::chrono::seconds(ts.seconds()) +
-         std::chrono::nanoseconds(ts.nanos());
+  return TimePoint{} + std::chrono::seconds(ts.seconds()) + std::chrono::nanoseconds(ts.nanos());
 }
 
 uint64_t ToUnixMillis(TimePoint tp) {
-  return std::chrono::duration_cast<std::chrono::milliseconds>(
-      tp.time_since_epoch()).count();
+  return std::chrono::duration_cast<std::chrono::milliseconds>(tp.time_since_epoch()).count();
 }
 
 } // namespace payload::util

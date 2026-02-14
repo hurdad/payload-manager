@@ -1,8 +1,8 @@
 #pragma once
 
-#include <string>
 #include <cstdint>
 #include <optional>
+#include <string>
 
 namespace payload::db::sql {
 
@@ -17,17 +17,17 @@ namespace payload::db::sql {
 */
 
 class Row {
-public:
+ public:
   virtual ~Row() = default;
 
-  virtual std::string GetText(int col) const = 0;
-  virtual int GetInt(int col) const = 0;
-  virtual int64_t GetInt64(int col) const = 0;
-  virtual bool IsNull(int col) const = 0;
+  virtual std::string GetText(int col) const  = 0;
+  virtual int         GetInt(int col) const   = 0;
+  virtual int64_t     GetInt64(int col) const = 0;
+  virtual bool        IsNull(int col) const   = 0;
 
   uint64_t GetU64(int col) const {
     return static_cast<uint64_t>(GetInt64(col));
   }
 };
 
-}
+} // namespace payload::db::sql

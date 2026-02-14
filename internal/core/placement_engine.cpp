@@ -1,4 +1,5 @@
 #include "placement_engine.hpp"
+
 #include "payload/manager/v1.hpp"
 
 namespace payload::core {
@@ -11,11 +12,15 @@ bool PlacementEngine::IsHigherTier(Tier a, Tier b) {
 
 Tier PlacementEngine::NextLowerTier(Tier t) {
   switch (t) {
-    case TIER_GPU: return TIER_RAM;
-    case TIER_RAM: return TIER_DISK;
-    case TIER_DISK: return TIER_OBJECT;
-    default: return TIER_OBJECT;
+    case TIER_GPU:
+      return TIER_RAM;
+    case TIER_RAM:
+      return TIER_DISK;
+    case TIER_DISK:
+      return TIER_OBJECT;
+    default:
+      return TIER_OBJECT;
   }
 }
 
-}
+} // namespace payload::core

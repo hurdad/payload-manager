@@ -22,8 +22,7 @@ static constexpr const char* UPDATE_PAYLOAD =
     "UPDATE payload SET tier=?,state=?,size_bytes=?,version=?,expires_at_ms=?"
     " WHERE id=?;";
 
-static constexpr const char* DELETE_PAYLOAD =
-    "DELETE FROM payload WHERE id=?;";
+static constexpr const char* DELETE_PAYLOAD = "DELETE FROM payload WHERE id=?;";
 
 // metadata
 
@@ -53,4 +52,4 @@ static constexpr const char* SELECT_CHILDREN =
     "SELECT parent_id,child_id,operation,role,parameters,created_at_ms"
     " FROM payload_lineage WHERE parent_id=?;";
 
-}
+} // namespace payload::db::sql

@@ -1,8 +1,8 @@
 #pragma once
 
 #include <array>
-#include <string>
 #include <random>
+#include <string>
 
 #include "payload/manager/core/v1/id.pb.h"
 #include "payload/manager/v1.hpp"
@@ -20,10 +20,10 @@ using UUID = std::array<uint8_t, 16>;
 UUID GenerateUUID();
 
 std::string ToString(const UUID& id);
-UUID FromString(const std::string& str);
+UUID        FromString(const std::string& str);
 
 // protobuf helpers
 payload::manager::v1::PayloadID ToProto(const UUID& id);
-UUID FromProto(const payload::manager::v1::PayloadID& id);
+UUID                            FromProto(const payload::manager::v1::PayloadID& id);
 
 } // namespace payload::util

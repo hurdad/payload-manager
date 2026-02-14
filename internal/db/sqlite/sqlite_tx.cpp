@@ -2,15 +2,16 @@
 
 namespace payload::db::sqlite {
 
-SqliteTransaction::SqliteTransaction(std::shared_ptr<SqliteDB> db)
-    : db_(std::move(db)) {
+SqliteTransaction::SqliteTransaction(std::shared_ptr<SqliteDB> db) : db_(std::move(db)) {
   db_->Exec("BEGIN IMMEDIATE;");
 }
 
 SqliteTransaction::~SqliteTransaction() {
   if (!committed_) {
-    try { db_->Exec("ROLLBACK;"); }
-    catch (...) {}
+    try {
+      db_->Exec("ROLLBACK;");
+    } catch (...) {
+    }
   }
 }
 
@@ -24,4 +25,4 @@ void SqliteTransaction::Rollback() {
   committed_ = true;
 }
 
-}
+} // namespace payload::db::sqlite

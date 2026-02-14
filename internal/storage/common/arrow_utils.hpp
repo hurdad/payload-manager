@@ -1,7 +1,8 @@
 #pragma once
 
-#include <arrow/io/file.h>
 #include <arrow/buffer.h>
+#include <arrow/io/file.h>
+
 #include <stdexcept>
 
 namespace payload::storage::common {
@@ -11,24 +12,20 @@ namespace payload::storage::common {
 */
 template <typename T>
 T Unwrap(const arrow::Result<T>& result) {
-  if (!result.ok())
-    throw std::runtime_error(result.status().ToString());
+  if (!result.ok()) throw std::runtime_error(result.status().ToString());
   return *result;
 }
 
 inline void Unwrap(const arrow::Status& status) {
-  if (!status.ok())
-    throw std::runtime_error(status.ToString());
+  if (!status.ok()) throw std::runtime_error(status.ToString());
 }
 
 /*
   Read entire file into buffer
 */
-inline std::shared_ptr<arrow::Buffer>
-ReadAll(std::shared_ptr<arrow::io::RandomAccessFile> file) {
-
+inline std::shared_ptr<arrow::Buffer> ReadAll(std::shared_ptr<arrow::io::RandomAccessFile> file) {
   auto size = Unwrap(file->GetSize());
   return Unwrap(file->Read(size));
 }
 
-}
+} // namespace payload::storage::common

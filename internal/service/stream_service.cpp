@@ -1,12 +1,12 @@
 #include "stream_service.hpp"
 
+#include <google/protobuf/struct.pb.h>
+#include <google/protobuf/util/json_util.h>
+
 #include <chrono>
 #include <limits>
 #include <optional>
 #include <stdexcept>
-
-#include <google/protobuf/struct.pb.h>
-#include <google/protobuf/util/json_util.h>
 
 #include "internal/db/api/repository.hpp"
 #include "internal/db/model/stream_consumer_offset_record.hpp"
@@ -75,12 +75,11 @@ payload::db::model::StreamEntryRecord ToRecord(const AppendItem& item) {
     record.event_time_ms = ToMillis(item.event_time());
   }
   record.duration_ns = item.duration_ns();
-  record.tags = SerializeTags(item.tags());
+  record.tags        = SerializeTags(item.tags());
   return record;
 }
 
-StreamEntry ToProtoEntry(const StreamID& stream,
-                         const payload::db::model::StreamEntryRecord& record) {
+StreamEntry ToProtoEntry(const StreamID& stream, const payload::db::model::StreamEntryRecord& record) {
   StreamEntry entry;
   *entry.mutable_stream() = stream;
   entry.set_offset(record.offset);
@@ -94,9 +93,7 @@ StreamEntry ToProtoEntry(const StreamID& stream,
   return entry;
 }
 
-payload::db::model::StreamRecord GetStreamOrThrow(payload::db::Repository& repo,
-                                                  payload::db::Transaction& tx,
-                                                  const StreamID& stream,
+payload::db::model::StreamRecord GetStreamOrThrow(payload::db::Repository& repo, payload::db::Transaction& tx, const StreamID& stream,
                                                   const std::string& op) {
   auto stream_record = repo.GetStreamByName(tx, stream.namespace_(), stream.name());
   if (!stream_record.has_value()) {
@@ -107,8 +104,8 @@ payload::db::model::StreamRecord GetStreamOrThrow(payload::db::Repository& repo,
 
 } // namespace
 
-StreamService::StreamService(ServiceContext ctx)
-    : ctx_(std::move(ctx)) {}
+StreamService::StreamService(ServiceContext ctx) : ctx_(std::move(ctx)) {
+}
 
 std::string StreamService::Key(const StreamID& stream) {
   return stream.namespace_() + "/" + stream.name();
@@ -120,15 +117,15 @@ void StreamService::CreateStream(const CreateStreamRequest& req) {
   }
 
   std::lock_guard<std::mutex> lock(mutex_);
-  auto tx = ctx_.repository->Begin();
+  auto                        tx = ctx_.repository->Begin();
 
   if (ctx_.repository->GetStreamByName(*tx, req.stream().namespace_(), req.stream().name()).has_value()) {
     throw std::runtime_error("create stream: stream already exists");
   }
 
   payload::db::model::StreamRecord stream;
-  stream.stream_namespace = req.stream().namespace_();
-  stream.name = req.stream().name();
+  stream.stream_namespace      = req.stream().namespace_();
+  stream.name                  = req.stream().name();
   stream.retention_max_entries = req.retention_max_entries();
   stream.retention_max_age_sec = req.retention_max_age_sec();
 
@@ -138,16 +135,15 @@ void StreamService::CreateStream(const CreateStreamRequest& req) {
 
 void StreamService::DeleteStream(const DeleteStreamRequest& req) {
   std::lock_guard<std::mutex> lock(mutex_);
-  auto tx = ctx_.repository->Begin();
+  auto                        tx = ctx_.repository->Begin();
 
-  ThrowIfError(ctx_.repository->DeleteStreamByName(*tx, req.stream().namespace_(), req.stream().name()),
-               "delete stream");
+  ThrowIfError(ctx_.repository->DeleteStreamByName(*tx, req.stream().namespace_(), req.stream().name()), "delete stream");
   tx->Commit();
 }
 
 AppendResponse StreamService::Append(const AppendRequest& req) {
   std::lock_guard<std::mutex> lock(mutex_);
-  auto tx = ctx_.repository->Begin();
+  auto                        tx = ctx_.repository->Begin();
 
   const auto stream = GetStreamOrThrow(*ctx_.repository, *tx, req.stream(), "append");
 
@@ -165,17 +161,14 @@ AppendResponse StreamService::Append(const AppendRequest& req) {
   ThrowIfError(ctx_.repository->AppendStreamEntries(*tx, stream.stream_id, records), "append");
 
   if (stream.retention_max_entries > 0) {
-    ThrowIfError(ctx_.repository->TrimStreamEntriesToMaxCount(*tx, stream.stream_id,
-                                                              stream.retention_max_entries),
-                 "append retention max entries");
+    ThrowIfError(ctx_.repository->TrimStreamEntriesToMaxCount(*tx, stream.stream_id, stream.retention_max_entries), "append retention max entries");
   }
 
   if (stream.retention_max_age_sec > 0) {
-    const auto now_ms = payload::util::ToUnixMillis(payload::util::Now());
+    const auto now_ms       = payload::util::ToUnixMillis(payload::util::Now());
     const auto retention_ms = stream.retention_max_age_sec * 1000;
-    const auto cutoff_ms = now_ms > retention_ms ? now_ms - retention_ms : 0;
-    ThrowIfError(ctx_.repository->DeleteStreamEntriesOlderThan(*tx, stream.stream_id, cutoff_ms),
-                 "append retention max age");
+    const auto cutoff_ms    = now_ms > retention_ms ? now_ms - retention_ms : 0;
+    ThrowIfError(ctx_.repository->DeleteStreamEntriesOlderThan(*tx, stream.stream_id, cutoff_ms), "append retention max age");
   }
 
   tx->Commit();
@@ -187,20 +180,15 @@ AppendResponse StreamService::Append(const AppendRequest& req) {
 
 ReadResponse StreamService::Read(const ReadRequest& req) {
   std::lock_guard<std::mutex> lock(mutex_);
-  auto tx = ctx_.repository->Begin();
+  auto                        tx = ctx_.repository->Begin();
 
-  const auto stream = GetStreamOrThrow(*ctx_.repository, *tx, req.stream(), "read");
-  const auto max_entries = req.max_entries() == 0
-                               ? std::optional<uint64_t>{}
-                               : std::make_optional<uint64_t>(req.max_entries());
+  const auto stream      = GetStreamOrThrow(*ctx_.repository, *tx, req.stream(), "read");
+  const auto max_entries = req.max_entries() == 0 ? std::optional<uint64_t>{} : std::make_optional<uint64_t>(req.max_entries());
 
-  const auto min_append_time = IsTimestampSet(req.not_before())
-                                   ? std::make_optional<uint64_t>(ToMillis(req.not_before()))
-                                   : std::optional<uint64_t>{};
+  const auto min_append_time =
+      IsTimestampSet(req.not_before()) ? std::make_optional<uint64_t>(ToMillis(req.not_before())) : std::optional<uint64_t>{};
 
-  const auto entries = ctx_.repository->ReadStreamEntries(*tx, stream.stream_id,
-                                                          req.start_offset(), max_entries,
-                                                          min_append_time);
+  const auto entries = ctx_.repository->ReadStreamEntries(*tx, stream.stream_id, req.start_offset(), max_entries, min_append_time);
 
   ReadResponse resp;
   for (const auto& entry : entries) {
@@ -209,10 +197,9 @@ ReadResponse StreamService::Read(const ReadRequest& req) {
   return resp;
 }
 
-std::vector<SubscribeResponse>
-StreamService::Subscribe(const SubscribeRequest& req) {
+std::vector<SubscribeResponse> StreamService::Subscribe(const SubscribeRequest& req) {
   std::lock_guard<std::mutex> lock(mutex_);
-  auto tx = ctx_.repository->Begin();
+  auto                        tx = ctx_.repository->Begin();
 
   const auto stream = GetStreamOrThrow(*ctx_.repository, *tx, req.stream(), "subscribe");
 
@@ -220,18 +207,13 @@ StreamService::Subscribe(const SubscribeRequest& req) {
   if (req.has_offset()) {
     start_offset = req.offset();
   } else if (req.has_from_latest() && req.from_latest()) {
-    const auto last = ctx_.repository->ReadStreamEntries(*tx, stream.stream_id, 0,
-                                                         std::optional<uint64_t>{},
-                                                         std::nullopt);
+    const auto last = ctx_.repository->ReadStreamEntries(*tx, stream.stream_id, 0, std::optional<uint64_t>{}, std::nullopt);
     if (!last.empty()) {
       start_offset = last.back().offset + 1;
     }
   }
 
-  const auto entries = ctx_.repository->ReadStreamEntries(*tx, stream.stream_id,
-                                                          start_offset,
-                                                          std::optional<uint64_t>{},
-                                                          std::nullopt);
+  const auto entries = ctx_.repository->ReadStreamEntries(*tx, stream.stream_id, start_offset, std::optional<uint64_t>{}, std::nullopt);
 
   std::vector<SubscribeResponse> responses;
   responses.reserve(entries.size());
@@ -246,27 +228,26 @@ StreamService::Subscribe(const SubscribeRequest& req) {
 
 void StreamService::Commit(const CommitRequest& req) {
   std::lock_guard<std::mutex> lock(mutex_);
-  auto tx = ctx_.repository->Begin();
+  auto                        tx = ctx_.repository->Begin();
 
   const auto stream = GetStreamOrThrow(*ctx_.repository, *tx, req.stream(), "commit");
 
   payload::db::model::StreamConsumerOffsetRecord offset;
-  offset.stream_id = stream.stream_id;
+  offset.stream_id      = stream.stream_id;
   offset.consumer_group = req.consumer_group();
-  offset.offset = req.offset();
+  offset.offset         = req.offset();
   ThrowIfError(ctx_.repository->CommitConsumerOffset(*tx, offset), "commit");
   tx->Commit();
 }
 
 GetCommittedResponse StreamService::GetCommitted(const GetCommittedRequest& req) {
   std::lock_guard<std::mutex> lock(mutex_);
-  auto tx = ctx_.repository->Begin();
+  auto                        tx = ctx_.repository->Begin();
 
   const auto stream = GetStreamOrThrow(*ctx_.repository, *tx, req.stream(), "get committed");
 
   GetCommittedResponse resp;
-  const auto committed = ctx_.repository->GetConsumerOffset(*tx, stream.stream_id,
-                                                            req.consumer_group());
+  const auto           committed = ctx_.repository->GetConsumerOffset(*tx, stream.stream_id, req.consumer_group());
   if (committed.has_value()) {
     resp.set_offset(committed->offset);
   }
@@ -275,13 +256,11 @@ GetCommittedResponse StreamService::GetCommitted(const GetCommittedRequest& req)
 
 GetRangeResponse StreamService::GetRange(const GetRangeRequest& req) {
   std::lock_guard<std::mutex> lock(mutex_);
-  auto tx = ctx_.repository->Begin();
+  auto                        tx = ctx_.repository->Begin();
 
   const auto stream = GetStreamOrThrow(*ctx_.repository, *tx, req.stream(), "get range");
 
-  const auto entries = ctx_.repository->ReadStreamEntriesRange(*tx, stream.stream_id,
-                                                               req.start_offset(),
-                                                               req.end_offset());
+  const auto entries = ctx_.repository->ReadStreamEntriesRange(*tx, stream.stream_id, req.start_offset(), req.end_offset());
 
   GetRangeResponse resp;
   for (const auto& entry : entries) {

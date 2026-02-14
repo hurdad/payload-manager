@@ -1,4 +1,5 @@
 #include "metadata_cache.hpp"
+
 #include "payload/manager/v1.hpp"
 
 namespace payload::metadata {
@@ -6,56 +7,51 @@ namespace payload::metadata {
 using namespace payload::manager::v1;
 
 std::string MetadataCache::Key(const PayloadID& id) {
-    return id.value();
+  return id.value();
 }
 
 // ------------------------------------------------------------
 // Put
 // ------------------------------------------------------------
 
-void MetadataCache::Put(const PayloadID& id,
-                        const PayloadMetadata& metadata) {
-    std::unique_lock lock(mutex_);
-    cache_[Key(id)] = metadata;
+void MetadataCache::Put(const PayloadID& id, const PayloadMetadata& metadata) {
+  std::unique_lock lock(mutex_);
+  cache_[Key(id)] = metadata;
 }
 
 // ------------------------------------------------------------
 // Merge
 // ------------------------------------------------------------
 
-void MetadataCache::Merge(const PayloadID& id,
-                          const PayloadMetadata& update) {
+void MetadataCache::Merge(const PayloadID& id, const PayloadMetadata& update) {
+  std::unique_lock lock(mutex_);
 
-    std::unique_lock lock(mutex_);
+  auto& dst = cache_[Key(id)];
 
-    auto& dst = cache_[Key(id)];
+  if (dst.id().value().empty()) {
+    *dst.mutable_id() = id;
+  }
 
-    if (dst.id().value().empty()) {
-        *dst.mutable_id() = id;
-    }
+  if (!update.data().empty()) {
+    dst.set_data(update.data());
+  }
 
-    if (!update.data().empty()) {
-        dst.set_data(update.data());
-    }
-
-    if (!update.schema().empty()) {
-        dst.set_schema(update.schema());
-    }
+  if (!update.schema().empty()) {
+    dst.set_schema(update.schema());
+  }
 }
 
 // ------------------------------------------------------------
 // Get
 // ------------------------------------------------------------
 
-std::optional<PayloadMetadata>
-MetadataCache::Get(const PayloadID& id) const {
-    std::shared_lock lock(mutex_);
+std::optional<PayloadMetadata> MetadataCache::Get(const PayloadID& id) const {
+  std::shared_lock lock(mutex_);
 
-    auto it = cache_.find(Key(id));
-    if (it == cache_.end())
-        return std::nullopt;
+  auto it = cache_.find(Key(id));
+  if (it == cache_.end()) return std::nullopt;
 
-    return it->second;
+  return it->second;
 }
 
 // ------------------------------------------------------------
@@ -63,8 +59,8 @@ MetadataCache::Get(const PayloadID& id) const {
 // ------------------------------------------------------------
 
 void MetadataCache::Remove(const PayloadID& id) {
-    std::unique_lock lock(mutex_);
-    cache_.erase(Key(id));
+  std::unique_lock lock(mutex_);
+  cache_.erase(Key(id));
 }
 
 } // namespace payload::metadata

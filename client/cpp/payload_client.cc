@@ -1,19 +1,20 @@
 #include "client/cpp/payload_client.h"
 
+#include <arrow/status.h>
+#include <fcntl.h>
+#include <grpcpp/client_context.h>
+#include <sys/mman.h>
+#include <sys/stat.h>
+#include <unistd.h>
+
 #include <cerrno>
 #include <cstdint>
 #include <cstring>
-#include <fcntl.h>
 #include <memory>
 #include <string>
 #include <string_view>
 #include <system_error>
 
-#include <arrow/status.h>
-#include <grpcpp/client_context.h>
-#include <sys/mman.h>
-#include <sys/stat.h>
-#include <unistd.h>
 #include "payload/manager/v1.hpp"
 
 namespace payload::manager::client {
@@ -28,8 +29,7 @@ arrow::Status GrpcToArrow(const grpc::Status& status, std::string_view action) {
 }
 
 arrow::Status ErrnoToArrow(std::string_view action, std::string_view target) {
-  return arrow::Status::IOError(std::string(action), " on ", std::string(target), " failed: ",
-                                std::strerror(errno));
+  return arrow::Status::IOError(std::string(action), " on ", std::string(target), " failed: ", std::strerror(errno));
 }
 
 int HexNibble(char c) {
@@ -68,7 +68,7 @@ arrow::Result<std::string> ParseUuidBytes(std::string_view uuid) {
   for (size_t i = 0; i < 16; ++i) {
     const int hi = HexNibble(hex[2 * i]);
     const int lo = HexNibble(hex[2 * i + 1]);
-    bytes[i] = static_cast<char>((hi << 4) | lo);
+    bytes[i]     = static_cast<char>((hi << 4) | lo);
   }
   return bytes;
 }
@@ -82,7 +82,8 @@ arrow::Status SetPayloadIdFromUuid(std::string_view uuid, payload::manager::v1::
 class ReadOnlyMMapBuffer final : public arrow::Buffer {
  public:
   ReadOnlyMMapBuffer(const uint8_t* data, int64_t size, void* base_addr, size_t mapped_size, int fd)
-      : arrow::Buffer(data, size), base_addr_(base_addr), mapped_size_(mapped_size), fd_(fd) {}
+      : arrow::Buffer(data, size), base_addr_(base_addr), mapped_size_(mapped_size), fd_(fd) {
+  }
 
   ~ReadOnlyMMapBuffer() override {
     if (base_addr_ != nullptr && mapped_size_ > 0) {
@@ -94,15 +95,16 @@ class ReadOnlyMMapBuffer final : public arrow::Buffer {
   }
 
  private:
-  void* base_addr_;
+  void*  base_addr_;
   size_t mapped_size_;
-  int fd_;
+  int    fd_;
 };
 
 class MutableMMapBuffer final : public arrow::MutableBuffer {
  public:
   MutableMMapBuffer(uint8_t* data, int64_t size, void* base_addr, size_t mapped_size, int fd)
-      : arrow::MutableBuffer(data, size), base_addr_(base_addr), mapped_size_(mapped_size), fd_(fd) {}
+      : arrow::MutableBuffer(data, size), base_addr_(base_addr), mapped_size_(mapped_size), fd_(fd) {
+  }
 
   ~MutableMMapBuffer() override {
     if (base_addr_ != nullptr && mapped_size_ > 0) {
@@ -114,9 +116,9 @@ class MutableMMapBuffer final : public arrow::MutableBuffer {
   }
 
  private:
-  void* base_addr_;
+  void*  base_addr_;
   size_t mapped_size_;
-  int fd_;
+  int    fd_;
 };
 
 arrow::Result<std::shared_ptr<arrow::Buffer>> MMapReadOnly(int fd, uint64_t offset, uint64_t length) {
@@ -124,11 +126,11 @@ arrow::Result<std::shared_ptr<arrow::Buffer>> MMapReadOnly(int fd, uint64_t offs
     return std::make_shared<arrow::Buffer>(nullptr, 0);
   }
 
-  const long page_size = sysconf(_SC_PAGESIZE);
-  const uint64_t page = page_size <= 0 ? 4096 : static_cast<uint64_t>(page_size);
+  const long     page_size      = sysconf(_SC_PAGESIZE);
+  const uint64_t page           = page_size <= 0 ? 4096 : static_cast<uint64_t>(page_size);
   const uint64_t aligned_offset = (offset / page) * page;
-  const uint64_t delta = offset - aligned_offset;
-  const size_t map_size = static_cast<size_t>(delta + length);
+  const uint64_t delta          = offset - aligned_offset;
+  const size_t   map_size       = static_cast<size_t>(delta + length);
 
   void* base = mmap(nullptr, map_size, PROT_READ, MAP_SHARED, fd, static_cast<off_t>(aligned_offset));
   if (base == MAP_FAILED) {
@@ -139,20 +141,18 @@ arrow::Result<std::shared_ptr<arrow::Buffer>> MMapReadOnly(int fd, uint64_t offs
   return std::make_shared<ReadOnlyMMapBuffer>(data, static_cast<int64_t>(length), base, map_size, fd);
 }
 
-arrow::Result<std::shared_ptr<arrow::MutableBuffer>> MMapMutable(int fd, uint64_t offset,
-                                                                  uint64_t length) {
+arrow::Result<std::shared_ptr<arrow::MutableBuffer>> MMapMutable(int fd, uint64_t offset, uint64_t length) {
   if (length == 0) {
     return std::make_shared<arrow::MutableBuffer>(nullptr, 0);
   }
 
-  const long page_size = sysconf(_SC_PAGESIZE);
-  const uint64_t page = page_size <= 0 ? 4096 : static_cast<uint64_t>(page_size);
+  const long     page_size      = sysconf(_SC_PAGESIZE);
+  const uint64_t page           = page_size <= 0 ? 4096 : static_cast<uint64_t>(page_size);
   const uint64_t aligned_offset = (offset / page) * page;
-  const uint64_t delta = offset - aligned_offset;
-  const size_t map_size = static_cast<size_t>(delta + length);
+  const uint64_t delta          = offset - aligned_offset;
+  const size_t   map_size       = static_cast<size_t>(delta + length);
 
-  void* base = mmap(nullptr, map_size, PROT_READ | PROT_WRITE, MAP_SHARED, fd,
-                    static_cast<off_t>(aligned_offset));
+  void* base = mmap(nullptr, map_size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, static_cast<off_t>(aligned_offset));
   if (base == MAP_FAILED) {
     return ErrnoToArrow("mmap", "writable region");
   }
@@ -163,24 +163,24 @@ arrow::Result<std::shared_ptr<arrow::MutableBuffer>> MMapMutable(int fd, uint64_
 
 arrow::Result<int> OpenShm(std::string_view shm_name, bool writable) {
   const int flags = writable ? O_RDWR : O_RDONLY;
-  int fd = shm_open(std::string(shm_name).c_str(), flags, S_IRUSR | S_IWUSR);
+  int       fd    = shm_open(std::string(shm_name).c_str(), flags, S_IRUSR | S_IWUSR);
   if (fd < 0) {
     return ErrnoToArrow("shm_open", shm_name);
   }
   return fd;
 }
 
-}  // namespace
+} // namespace
 
 PayloadClient::PayloadClient(std::shared_ptr<grpc::Channel> channel)
     : catalog_stub_(payload::manager::v1::PayloadCatalogService::NewStub(channel)),
       data_stub_(payload::manager::v1::PayloadDataService::NewStub(channel)),
       admin_stub_(payload::manager::v1::PayloadAdminService::NewStub(channel)),
-      stream_stub_(payload::manager::v1::PayloadStreamService::NewStub(std::move(channel))) {}
+      stream_stub_(payload::manager::v1::PayloadStreamService::NewStub(std::move(channel))) {
+}
 
-arrow::Result<PayloadClient::WritablePayload> PayloadClient::AllocateWritableBuffer(
-    uint64_t size_bytes, payload::manager::v1::Tier preferred_tier, uint64_t ttl_ms,
-    bool persist) const {
+arrow::Result<PayloadClient::WritablePayload> PayloadClient::AllocateWritableBuffer(uint64_t size_bytes, payload::manager::v1::Tier preferred_tier,
+                                                                                    uint64_t ttl_ms, bool persist) const {
   payload::manager::v1::AllocatePayloadRequest req;
   req.set_size_bytes(size_bytes);
   req.set_preferred_tier(preferred_tier);
@@ -188,7 +188,7 @@ arrow::Result<PayloadClient::WritablePayload> PayloadClient::AllocateWritableBuf
   req.set_persist(persist);
 
   payload::manager::v1::AllocatePayloadResponse resp;
-  grpc::ClientContext ctx;
+  grpc::ClientContext                           ctx;
 
   ARROW_RETURN_NOT_OK(GrpcToArrow(catalog_stub_->AllocatePayload(&ctx, req, &resp), "AllocatePayload"));
   ARROW_RETURN_NOT_OK(ValidateHasLocation(resp.payload_descriptor()));
@@ -202,26 +202,25 @@ arrow::Status PayloadClient::CommitPayload(const std::string& uuid) const {
   ARROW_RETURN_NOT_OK(SetPayloadIdFromUuid(uuid, req.mutable_id()));
 
   payload::manager::v1::CommitPayloadResponse resp;
-  grpc::ClientContext ctx;
+  grpc::ClientContext                         ctx;
 
   return GrpcToArrow(catalog_stub_->CommitPayload(&ctx, req, &resp), "CommitPayload");
 }
 
-arrow::Result<payload::manager::v1::ResolveSnapshotResponse> PayloadClient::Resolve(
-    const std::string& uuid) const {
+arrow::Result<payload::manager::v1::ResolveSnapshotResponse> PayloadClient::Resolve(const std::string& uuid) const {
   payload::manager::v1::ResolveSnapshotRequest request;
   ARROW_RETURN_NOT_OK(SetPayloadIdFromUuid(uuid, request.mutable_id()));
 
   payload::manager::v1::ResolveSnapshotResponse response;
-  grpc::ClientContext ctx;
+  grpc::ClientContext                           ctx;
 
   ARROW_RETURN_NOT_OK(GrpcToArrow(data_stub_->ResolveSnapshot(&ctx, request, &response), "ResolveSnapshot"));
   return response;
 }
 
-arrow::Result<PayloadClient::ReadablePayload> PayloadClient::AcquireReadableBuffer(
-    const std::string& uuid, payload::manager::v1::Tier min_tier,
-    payload::manager::v1::PromotionPolicy promotion_policy, uint64_t min_lease_duration_ms) const {
+arrow::Result<PayloadClient::ReadablePayload> PayloadClient::AcquireReadableBuffer(const std::string& uuid, payload::manager::v1::Tier min_tier,
+                                                                                   payload::manager::v1::PromotionPolicy promotion_policy,
+                                                                                   uint64_t min_lease_duration_ms) const {
   payload::manager::v1::AcquireReadLeaseRequest req;
   ARROW_RETURN_NOT_OK(SetPayloadIdFromUuid(uuid, req.mutable_id()));
   req.set_min_tier(min_tier);
@@ -230,7 +229,7 @@ arrow::Result<PayloadClient::ReadablePayload> PayloadClient::AcquireReadableBuff
   req.set_mode(payload::manager::v1::LEASE_MODE_READ);
 
   payload::manager::v1::AcquireReadLeaseResponse resp;
-  grpc::ClientContext ctx;
+  grpc::ClientContext                            ctx;
 
   ARROW_RETURN_NOT_OK(GrpcToArrow(data_stub_->AcquireReadLease(&ctx, req, &resp), "AcquireReadLease"));
   ARROW_RETURN_NOT_OK(ValidateHasLocation(resp.payload_descriptor()));
@@ -244,24 +243,22 @@ arrow::Status PayloadClient::Release(const std::string& lease_id) const {
   req.set_lease_id(lease_id);
 
   google::protobuf::Empty resp;
-  grpc::ClientContext ctx;
+  grpc::ClientContext     ctx;
 
   return GrpcToArrow(data_stub_->ReleaseLease(&ctx, req, &resp), "ReleaseLease");
 }
 
-arrow::Result<payload::manager::v1::PromoteResponse> PayloadClient::Promote(
-    const payload::manager::v1::PromoteRequest& request) const {
+arrow::Result<payload::manager::v1::PromoteResponse> PayloadClient::Promote(const payload::manager::v1::PromoteRequest& request) const {
   payload::manager::v1::PromoteResponse response;
-  grpc::ClientContext ctx;
+  grpc::ClientContext                   ctx;
 
   ARROW_RETURN_NOT_OK(GrpcToArrow(catalog_stub_->Promote(&ctx, request, &response), "Promote"));
   return response;
 }
 
-arrow::Result<payload::manager::v1::SpillResponse> PayloadClient::Spill(
-    const payload::manager::v1::SpillRequest& request) const {
+arrow::Result<payload::manager::v1::SpillResponse> PayloadClient::Spill(const payload::manager::v1::SpillRequest& request) const {
   payload::manager::v1::SpillResponse response;
-  grpc::ClientContext ctx;
+  grpc::ClientContext                 ctx;
 
   ARROW_RETURN_NOT_OK(GrpcToArrow(catalog_stub_->Spill(&ctx, request, &response), "Spill"));
   return response;
@@ -269,22 +266,21 @@ arrow::Result<payload::manager::v1::SpillResponse> PayloadClient::Spill(
 
 arrow::Status PayloadClient::Delete(const payload::manager::v1::DeleteRequest& request) const {
   google::protobuf::Empty response;
-  grpc::ClientContext ctx;
+  grpc::ClientContext     ctx;
 
   return GrpcToArrow(catalog_stub_->Delete(&ctx, request, &response), "Delete");
 }
 
 arrow::Status PayloadClient::AddLineage(const payload::manager::v1::AddLineageRequest& request) const {
   google::protobuf::Empty response;
-  grpc::ClientContext ctx;
+  grpc::ClientContext     ctx;
 
   return GrpcToArrow(catalog_stub_->AddLineage(&ctx, request, &response), "AddLineage");
 }
 
-arrow::Result<payload::manager::v1::GetLineageResponse> PayloadClient::GetLineage(
-    const payload::manager::v1::GetLineageRequest& request) const {
+arrow::Result<payload::manager::v1::GetLineageResponse> PayloadClient::GetLineage(const payload::manager::v1::GetLineageRequest& request) const {
   payload::manager::v1::GetLineageResponse response;
-  grpc::ClientContext ctx;
+  grpc::ClientContext                      ctx;
 
   ARROW_RETURN_NOT_OK(GrpcToArrow(catalog_stub_->GetLineage(&ctx, request, &response), "GetLineage"));
   return response;
@@ -293,76 +289,67 @@ arrow::Result<payload::manager::v1::GetLineageResponse> PayloadClient::GetLineag
 arrow::Result<payload::manager::v1::UpdatePayloadMetadataResponse> PayloadClient::UpdatePayloadMetadata(
     const payload::manager::v1::UpdatePayloadMetadataRequest& request) const {
   payload::manager::v1::UpdatePayloadMetadataResponse response;
-  grpc::ClientContext ctx;
+  grpc::ClientContext                                 ctx;
 
-  ARROW_RETURN_NOT_OK(
-      GrpcToArrow(catalog_stub_->UpdatePayloadMetadata(&ctx, request, &response), "UpdatePayloadMetadata"));
+  ARROW_RETURN_NOT_OK(GrpcToArrow(catalog_stub_->UpdatePayloadMetadata(&ctx, request, &response), "UpdatePayloadMetadata"));
   return response;
 }
 
-arrow::Result<payload::manager::v1::AppendPayloadMetadataEventResponse>
-PayloadClient::AppendPayloadMetadataEvent(
+arrow::Result<payload::manager::v1::AppendPayloadMetadataEventResponse> PayloadClient::AppendPayloadMetadataEvent(
     const payload::manager::v1::AppendPayloadMetadataEventRequest& request) const {
   payload::manager::v1::AppendPayloadMetadataEventResponse response;
-  grpc::ClientContext ctx;
+  grpc::ClientContext                                      ctx;
 
-  ARROW_RETURN_NOT_OK(GrpcToArrow(catalog_stub_->AppendPayloadMetadataEvent(&ctx, request, &response),
-                                  "AppendPayloadMetadataEvent"));
+  ARROW_RETURN_NOT_OK(GrpcToArrow(catalog_stub_->AppendPayloadMetadataEvent(&ctx, request, &response), "AppendPayloadMetadataEvent"));
   return response;
 }
 
-arrow::Result<payload::manager::v1::StatsResponse> PayloadClient::Stats(
-    const payload::manager::v1::StatsRequest& request) const {
+arrow::Result<payload::manager::v1::StatsResponse> PayloadClient::Stats(const payload::manager::v1::StatsRequest& request) const {
   payload::manager::v1::StatsResponse response;
-  grpc::ClientContext ctx;
+  grpc::ClientContext                 ctx;
 
   ARROW_RETURN_NOT_OK(GrpcToArrow(admin_stub_->Stats(&ctx, request, &response), "Stats"));
   return response;
 }
 
-arrow::Status PayloadClient::CreateStream(
-    const payload::manager::v1::CreateStreamRequest& request) const {
+arrow::Status PayloadClient::CreateStream(const payload::manager::v1::CreateStreamRequest& request) const {
   google::protobuf::Empty response;
-  grpc::ClientContext ctx;
+  grpc::ClientContext     ctx;
 
   return GrpcToArrow(stream_stub_->CreateStream(&ctx, request, &response), "CreateStream");
 }
 
-arrow::Status PayloadClient::DeleteStream(
-    const payload::manager::v1::DeleteStreamRequest& request) const {
+arrow::Status PayloadClient::DeleteStream(const payload::manager::v1::DeleteStreamRequest& request) const {
   google::protobuf::Empty response;
-  grpc::ClientContext ctx;
+  grpc::ClientContext     ctx;
 
   return GrpcToArrow(stream_stub_->DeleteStream(&ctx, request, &response), "DeleteStream");
 }
 
-arrow::Result<payload::manager::v1::AppendResponse> PayloadClient::Append(
-    const payload::manager::v1::AppendRequest& request) const {
+arrow::Result<payload::manager::v1::AppendResponse> PayloadClient::Append(const payload::manager::v1::AppendRequest& request) const {
   payload::manager::v1::AppendResponse response;
-  grpc::ClientContext ctx;
+  grpc::ClientContext                  ctx;
 
   ARROW_RETURN_NOT_OK(GrpcToArrow(stream_stub_->Append(&ctx, request, &response), "Append"));
   return response;
 }
 
-arrow::Result<payload::manager::v1::ReadResponse> PayloadClient::Read(
-    const payload::manager::v1::ReadRequest& request) const {
+arrow::Result<payload::manager::v1::ReadResponse> PayloadClient::Read(const payload::manager::v1::ReadRequest& request) const {
   payload::manager::v1::ReadResponse response;
-  grpc::ClientContext ctx;
+  grpc::ClientContext                ctx;
 
   ARROW_RETURN_NOT_OK(GrpcToArrow(stream_stub_->Read(&ctx, request, &response), "Read"));
   return response;
 }
 
-std::unique_ptr<grpc::ClientReader<payload::manager::v1::SubscribeResponse>>
-PayloadClient::Subscribe(const payload::manager::v1::SubscribeRequest& request,
-                         grpc::ClientContext* context) const {
+std::unique_ptr<grpc::ClientReader<payload::manager::v1::SubscribeResponse>> PayloadClient::Subscribe(
+    const payload::manager::v1::SubscribeRequest& request, grpc::ClientContext* context) const {
   return stream_stub_->Subscribe(context, request);
 }
 
 arrow::Status PayloadClient::Commit(const payload::manager::v1::CommitRequest& request) const {
   google::protobuf::Empty response;
-  grpc::ClientContext ctx;
+  grpc::ClientContext     ctx;
 
   return GrpcToArrow(stream_stub_->Commit(&ctx, request, &response), "Commit");
 }
@@ -370,17 +357,15 @@ arrow::Status PayloadClient::Commit(const payload::manager::v1::CommitRequest& r
 arrow::Result<payload::manager::v1::GetCommittedResponse> PayloadClient::GetCommitted(
     const payload::manager::v1::GetCommittedRequest& request) const {
   payload::manager::v1::GetCommittedResponse response;
-  grpc::ClientContext ctx;
+  grpc::ClientContext                        ctx;
 
-  ARROW_RETURN_NOT_OK(
-      GrpcToArrow(stream_stub_->GetCommitted(&ctx, request, &response), "GetCommitted"));
+  ARROW_RETURN_NOT_OK(GrpcToArrow(stream_stub_->GetCommitted(&ctx, request, &response), "GetCommitted"));
   return response;
 }
 
-arrow::Result<payload::manager::v1::GetRangeResponse> PayloadClient::GetRange(
-    const payload::manager::v1::GetRangeRequest& request) const {
+arrow::Result<payload::manager::v1::GetRangeResponse> PayloadClient::GetRange(const payload::manager::v1::GetRangeRequest& request) const {
   payload::manager::v1::GetRangeResponse response;
-  grpc::ClientContext ctx;
+  grpc::ClientContext                    ctx;
 
   ARROW_RETURN_NOT_OK(GrpcToArrow(stream_stub_->GetRange(&ctx, request, &response), "GetRange"));
   return response;
@@ -414,13 +399,11 @@ arrow::Result<std::shared_ptr<arrow::MutableBuffer>> PayloadClient::OpenMutableB
     return MMapMutable(fd, descriptor.disk().offset_bytes(), length);
   }
 
-  return arrow::Status::NotImplemented("Writable Arrow buffer for tier ",
-                                       payload::manager::v1::Tier_Name(descriptor.tier()),
+  return arrow::Status::NotImplemented("Writable Arrow buffer for tier ", payload::manager::v1::Tier_Name(descriptor.tier()),
                                        " is not supported in C++ client");
 }
 
-arrow::Result<std::shared_ptr<arrow::Buffer>> PayloadClient::OpenReadableBuffer(
-    const payload::manager::v1::PayloadDescriptor& descriptor) const {
+arrow::Result<std::shared_ptr<arrow::Buffer>> PayloadClient::OpenReadableBuffer(const payload::manager::v1::PayloadDescriptor& descriptor) const {
   const uint64_t length = DescriptorLengthBytes(descriptor);
 
   if (descriptor.has_ram()) {
@@ -436,22 +419,18 @@ arrow::Result<std::shared_ptr<arrow::Buffer>> PayloadClient::OpenReadableBuffer(
     return MMapReadOnly(fd, descriptor.disk().offset_bytes(), length);
   }
 
-  return arrow::Status::NotImplemented("Readable Arrow buffer for tier ",
-                                       payload::manager::v1::Tier_Name(descriptor.tier()),
+  return arrow::Status::NotImplemented("Readable Arrow buffer for tier ", payload::manager::v1::Tier_Name(descriptor.tier()),
                                        " is not supported in C++ client");
 }
 
-arrow::Status PayloadClient::ValidateHasLocation(
-    const payload::manager::v1::PayloadDescriptor& descriptor) {
+arrow::Status PayloadClient::ValidateHasLocation(const payload::manager::v1::PayloadDescriptor& descriptor) {
   if (descriptor.has_gpu() || descriptor.has_ram() || descriptor.has_disk()) {
     return arrow::Status::OK();
   }
-  return arrow::Status::Invalid("payload descriptor is missing location for tier ",
-                                payload::manager::v1::Tier_Name(descriptor.tier()));
+  return arrow::Status::Invalid("payload descriptor is missing location for tier ", payload::manager::v1::Tier_Name(descriptor.tier()));
 }
 
-uint64_t PayloadClient::DescriptorLengthBytes(
-    const payload::manager::v1::PayloadDescriptor& descriptor) {
+uint64_t PayloadClient::DescriptorLengthBytes(const payload::manager::v1::PayloadDescriptor& descriptor) {
   if (descriptor.has_gpu()) {
     return descriptor.gpu().length_bytes();
   }
@@ -464,4 +443,4 @@ uint64_t PayloadClient::DescriptorLengthBytes(
   return 0;
 }
 
-}  // namespace payload::manager::client
+} // namespace payload::manager::client

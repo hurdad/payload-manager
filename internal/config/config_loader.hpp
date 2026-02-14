@@ -1,6 +1,7 @@
 #pragma once
 
 #include <string>
+
 #include "config/config.pb.h"
 
 namespace payload::config {
@@ -11,7 +12,7 @@ namespace payload::config {
   YAML is converted to JSON then parsed into protobuf.
 */
 class ConfigLoader {
-public:
+ public:
   static payload::runtime::config::RuntimeConfig LoadFromYaml(const std::string& path);
 };
 

@@ -10,15 +10,8 @@ static void ThrowIf(int rc, sqlite3* db, const char* what) {
   }
 }
 
-SqliteDB::SqliteDB(std::string path)
-    : path_(std::move(path)) {
-
-  int rc = sqlite3_open_v2(
-      path_.c_str(),
-      &db_,
-      SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE | SQLITE_OPEN_FULLMUTEX,
-      nullptr
-  );
+SqliteDB::SqliteDB(std::string path) : path_(std::move(path)) {
+  int rc = sqlite3_open_v2(path_.c_str(), &db_, SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE | SQLITE_OPEN_FULLMUTEX, nullptr);
 
   if (rc != SQLITE_OK) {
     std::string msg = db_ ? sqlite3_errmsg(db_) : "sqlite open failed";
@@ -36,7 +29,7 @@ SqliteDB::~SqliteDB() {
 
 void SqliteDB::Exec(const std::string& sql) {
   char* err = nullptr;
-  int rc = sqlite3_exec(db_, sql.c_str(), nullptr, nullptr, &err);
+  int   rc  = sqlite3_exec(db_, sql.c_str(), nullptr, nullptr, &err);
   if (rc != SQLITE_OK) {
     std::string msg = err ? err : "sqlite exec failed";
     sqlite3_free(err);
@@ -46,7 +39,7 @@ void SqliteDB::Exec(const std::string& sql) {
 
 sqlite3_stmt* SqliteDB::Prepare(const std::string& sql) {
   sqlite3_stmt* stmt = nullptr;
-  int rc = sqlite3_prepare_v2(db_, sql.c_str(), -1, &stmt, nullptr);
+  int           rc   = sqlite3_prepare_v2(db_, sql.c_str(), -1, &stmt, nullptr);
   ThrowIf(rc, db_, "sqlite prepare");
   return stmt;
 }
@@ -69,4 +62,4 @@ void SqliteDB::Configure() {
   Exec("PRAGMA cache_size=-20000;"); // ~20MB (negative means KB)
 }
 
-}
+} // namespace payload::db::sqlite

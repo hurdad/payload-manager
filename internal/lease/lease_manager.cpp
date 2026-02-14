@@ -1,5 +1,7 @@
 #include "lease_manager.hpp"
+
 #include <random>
+
 #include "payload/manager/v1.hpp"
 
 namespace payload::lease {
@@ -15,16 +17,13 @@ std::string LeaseManager::GenerateLeaseID() {
   return RandomID();
 }
 
-Lease LeaseManager::Acquire(const payload::manager::v1::PayloadID& id,
-                            const payload::manager::v1::PayloadDescriptor& payload_descriptor,
+Lease LeaseManager::Acquire(const payload::manager::v1::PayloadID& id, const payload::manager::v1::PayloadDescriptor& payload_descriptor,
                             uint64_t min_duration_ms) {
-
   Lease lease;
-  lease.lease_id = GenerateLeaseID();
-  lease.payload_id = id;
+  lease.lease_id           = GenerateLeaseID();
+  lease.payload_id         = id;
   lease.payload_descriptor = payload_descriptor;
-  lease.expires_at = std::chrono::system_clock::now()
-      + std::chrono::milliseconds(min_duration_ms);
+  lease.expires_at         = std::chrono::system_clock::now() + std::chrono::milliseconds(min_duration_ms);
 
   return table_.Insert(lease);
 }
@@ -41,4 +40,4 @@ void LeaseManager::InvalidateAll(const payload::manager::v1::PayloadID& id) {
   table_.RemoveAll(id);
 }
 
-}
+} // namespace payload::lease

@@ -15,8 +15,7 @@ std::optional<SpillTask> SpillScheduler::Dequeue() {
 
   cv_.wait(lock, [&] { return shutdown_ || !queue_.empty(); });
 
-  if (shutdown_ && queue_.empty())
-    return std::nullopt;
+  if (shutdown_ && queue_.empty()) return std::nullopt;
 
   SpillTask task = queue_.front();
   queue_.pop();
@@ -31,4 +30,4 @@ void SpillScheduler::Shutdown() {
   cv_.notify_all();
 }
 
-}
+} // namespace payload::spill

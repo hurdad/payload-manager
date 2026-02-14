@@ -1,9 +1,9 @@
 #pragma once
 
-#include <queue>
-#include <mutex>
 #include <condition_variable>
+#include <mutex>
 #include <optional>
+#include <queue>
 
 #include "spill_task.hpp"
 
@@ -13,7 +13,7 @@ namespace payload::spill {
   Thread-safe blocking queue for spill workers.
 */
 class SpillScheduler {
-public:
+ public:
   void Enqueue(const SpillTask& task);
 
   // blocking wait
@@ -21,11 +21,11 @@ public:
 
   void Shutdown();
 
-private:
-  std::mutex mutex_;
+ private:
+  std::mutex              mutex_;
   std::condition_variable cv_;
-  std::queue<SpillTask> queue_;
-  bool shutdown_ = false;
+  std::queue<SpillTask>   queue_;
+  bool                    shutdown_ = false;
 };
 
-}
+} // namespace payload::spill

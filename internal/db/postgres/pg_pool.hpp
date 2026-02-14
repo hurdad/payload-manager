@@ -1,8 +1,8 @@
 #pragma once
 
 #include <memory>
-#include <string>
 #include <pqxx/pqxx>
+#include <string>
 
 namespace payload::db::postgres {
 
@@ -26,14 +26,14 @@ namespace payload::db::postgres {
 */
 
 class PgPool {
-public:
+ public:
   explicit PgPool(std::string conninfo);
 
   // Acquire a new ready-to-use connection
   std::shared_ptr<pqxx::connection> Acquire();
 
-private:
+ private:
   std::string conninfo_;
 };
 
-}
+} // namespace payload::db::postgres

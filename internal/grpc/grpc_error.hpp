@@ -1,7 +1,8 @@
 #pragma once
 
-#include <exception>
 #include <grpcpp/grpcpp.h>
+
+#include <exception>
 
 namespace payload::grpc {
 

@@ -1,14 +1,14 @@
-#include <iostream>
-#include <csignal>
-#include <thread>
 #include <chrono>
+#include <csignal>
+#include <iostream>
+#include <thread>
 
-#include "internal/runtime/server.hpp"
 #include "internal/config/config_loader.hpp"
 #include "internal/factory.hpp"
+#include "internal/runtime/server.hpp"
 
-using payload::runtime::Server;
 using payload::factory::Build;
+using payload::runtime::Server;
 
 static bool g_running = true;
 
@@ -17,14 +17,12 @@ void HandleSignal(int) {
 }
 
 int main(int argc, char** argv) {
-
   if (argc < 2) {
     std::cerr << "Usage: payload-manager <config.yaml>\n";
     return 1;
   }
 
   try {
-
     // ------------------------------------------------------------
     // Load configuration
     // ------------------------------------------------------------
@@ -50,14 +48,12 @@ int main(int argc, char** argv) {
     std::signal(SIGINT, HandleSignal);
     std::signal(SIGTERM, HandleSignal);
 
-    while (g_running)
-      std::this_thread::sleep_for(std::chrono::seconds(1));
+    while (g_running) std::this_thread::sleep_for(std::chrono::seconds(1));
 
     std::cout << "Shutting down...\n";
 
     server.Stop();
-  }
-  catch (const std::exception& e) {
+  } catch (const std::exception& e) {
     std::cerr << "Fatal error: " << e.what() << "\n";
     return 2;
   }

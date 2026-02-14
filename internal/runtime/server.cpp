@@ -5,9 +5,12 @@
 namespace payload::runtime {
 
 Server::Server(std::string bind_address, std::vector<std::unique_ptr<grpc::Service>> services)
-    : bind_address_(std::move(bind_address)), services_(std::move(services)) {}
+    : bind_address_(std::move(bind_address)), services_(std::move(services)) {
+}
 
-Server::~Server() { Stop(); }
+Server::~Server() {
+  Stop();
+}
 
 void Server::Start() {
   grpc::ServerBuilder builder;

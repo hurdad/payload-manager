@@ -1,3 +1,6 @@
+#include <grpcpp/create_channel.h>
+#include <grpcpp/security/credentials.h>
+
 #include <algorithm>
 #include <cstdint>
 #include <cstring>
@@ -6,9 +9,6 @@
 #include <memory>
 #include <sstream>
 #include <string>
-
-#include <grpcpp/create_channel.h>
-#include <grpcpp/security/credentials.h>
 
 #include "client/cpp/payload_client.h"
 #include "payload/manager/v1.hpp"
@@ -21,22 +21,20 @@ std::string UuidToHex(const std::string& uuid_bytes) {
     if (i == 4 || i == 6 || i == 8 || i == 10) {
       os << '-';
     }
-    os << std::hex << std::setw(2) << std::setfill('0')
-       << static_cast<int>(static_cast<unsigned char>(uuid_bytes[i]));
+    os << std::hex << std::setw(2) << std::setfill('0') << static_cast<int>(static_cast<unsigned char>(uuid_bytes[i]));
   }
   return os.str();
 }
 
-}  // namespace
+} // namespace
 
 int main(int argc, char** argv) {
   const std::string target = argc > 1 ? argv[1] : "localhost:50051";
 
-  payload::manager::client::PayloadClient client(
-      grpc::CreateChannel(target, grpc::InsecureChannelCredentials()));
+  payload::manager::client::PayloadClient client(grpc::CreateChannel(target, grpc::InsecureChannelCredentials()));
 
   constexpr uint64_t kPayloadSize = 64;
-  auto writable = client.AllocateWritableBuffer(kPayloadSize, payload::manager::v1::TIER_RAM);
+  auto               writable     = client.AllocateWritableBuffer(kPayloadSize, payload::manager::v1::TIER_RAM);
   if (!writable.ok()) {
     std::cerr << "AllocateWritableBuffer failed: " << writable.status().ToString() << '\n';
     return 1;
@@ -47,8 +45,8 @@ int main(int argc, char** argv) {
     writable_payload.buffer->mutable_data()[i] = static_cast<uint8_t>(i & 0xFFu);
   }
 
-  const std::string uuid = writable_payload.descriptor.id().value();
-  auto commit_status = client.CommitPayload(UuidToHex(uuid));
+  const std::string uuid          = writable_payload.descriptor.id().value();
+  auto              commit_status = client.CommitPayload(UuidToHex(uuid));
   if (!commit_status.ok()) {
     std::cerr << "CommitPayload failed: " << commit_status.ToString() << '\n';
     return 1;
@@ -61,8 +59,7 @@ int main(int argc, char** argv) {
   }
 
   auto readable_payload = readable.ValueOrDie();
-  std::cout << "Committed and acquired payload UUID=" << UuidToHex(uuid)
-            << ", size=" << readable_payload.buffer->size() << " bytes\n";
+  std::cout << "Committed and acquired payload UUID=" << UuidToHex(uuid) << ", size=" << readable_payload.buffer->size() << " bytes\n";
 
   const int preview_len = static_cast<int>(std::min<int64_t>(8, readable_payload.buffer->size()));
   std::cout << "First " << preview_len << " bytes:";

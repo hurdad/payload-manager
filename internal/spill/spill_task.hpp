@@ -16,8 +16,8 @@ struct SpillTask {
 
   payload::manager::v1::Tier target_tier;
 
-  bool fsync = false;
+  bool fsync           = false;
   bool wait_for_leases = false;
 };
 
-}
+} // namespace payload::spill

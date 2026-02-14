@@ -1,7 +1,8 @@
 #pragma once
 
-#include <memory>
 #include <arrow/cuda/api.h>
+
+#include <memory>
 
 namespace payload::storage {
 
@@ -13,11 +14,11 @@ namespace payload::storage {
 */
 
 class CudaContextManager {
-public:
+ public:
   static std::shared_ptr<arrow::cuda::CudaContext> Get(int device_id = 0);
 
-private:
+ private:
   static std::shared_ptr<arrow::cuda::CudaContext> ctx_;
 };
 
-}
+} // namespace payload::storage

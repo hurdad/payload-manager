@@ -14,7 +14,7 @@ namespace payload::db::model {
 */
 
 struct MetadataRecord {
-  std::string id;      // payload UUID
+  std::string id; // payload UUID
 
   // opaque metadata blob
   std::string json;
@@ -26,4 +26,4 @@ struct MetadataRecord {
   uint64_t updated_at_ms = 0;
 };
 
-}
+} // namespace payload::db::model

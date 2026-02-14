@@ -12,7 +12,7 @@ namespace payload::db::sql {
 */
 
 class MigrationExecutor {
-public:
+ public:
   virtual ~MigrationExecutor() = default;
 
   virtual void ExecuteSQL(const std::string& sql) = 0;
@@ -23,9 +23,6 @@ public:
   Files are provided by backend-specific loader.
 */
 
-void RunMigrations(
-    MigrationExecutor& executor,
-    const std::vector<std::string>& ordered_sql
-);
+void RunMigrations(MigrationExecutor& executor, const std::vector<std::string>& ordered_sql);
 
-}
+} // namespace payload::db::sql

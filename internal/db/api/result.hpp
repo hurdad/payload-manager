@@ -30,10 +30,12 @@ enum class ErrorCode {
 };
 
 struct Result {
-  ErrorCode code = ErrorCode::OK;
+  ErrorCode   code = ErrorCode::OK;
   std::string message;
 
-  static Result Ok() { return {}; }
+  static Result Ok() {
+    return {};
+  }
 
   static Result Err(ErrorCode c, std::string msg = {}) {
     return {c, std::move(msg)};
@@ -44,4 +46,4 @@ struct Result {
   }
 };
 
-}
+} // namespace payload::db
