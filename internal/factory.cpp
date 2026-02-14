@@ -16,10 +16,12 @@
 #include "internal/service/data_service.hpp"
 #include "internal/service/catalog_service.hpp"
 #include "internal/service/admin_service.hpp"
+#include "internal/service/stream_service.hpp"
 
 #include "internal/grpc/data_server.hpp"
 #include "internal/grpc/catalog_server.hpp"
 #include "internal/grpc/admin_server.hpp"
+#include "internal/grpc/stream_server.hpp"
 
 namespace payload::factory {
 
@@ -74,6 +76,7 @@ Application Build(const payload::runtime::config::RuntimeConfig& config) {
     auto data_service = std::make_shared<service::DataService>(ctx);
     auto catalog_service = std::make_shared<service::CatalogService>(ctx);
     auto admin_service = std::make_shared<service::AdminService>(ctx);
+    auto stream_service = std::make_shared<service::StreamService>(ctx);
 
     // ------------------------------------------------------------------
     // gRPC servers
@@ -81,6 +84,7 @@ Application Build(const payload::runtime::config::RuntimeConfig& config) {
     app.grpc_services.push_back(std::make_unique<grpc::DataServer>(data_service));
     app.grpc_services.push_back(std::make_unique<grpc::CatalogServer>(catalog_service));
     app.grpc_services.push_back(std::make_unique<grpc::AdminServer>(admin_service));
+    app.grpc_services.push_back(std::make_unique<grpc::StreamServer>(stream_service));
 
     // Keep ownership of workers so they live for process lifetime
     app.background_workers.push_back(spill_worker);
