@@ -1,6 +1,6 @@
 #include "catalog_server.hpp"
 #include "grpc_error.hpp"
-#include "payload/manager/v1_compat.hpp"
+#include "payload/manager/v1.hpp"
 
 namespace payload::grpc {
 

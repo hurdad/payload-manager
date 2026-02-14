@@ -3,7 +3,7 @@
 #include <optional>
 #include "payload/manager/core/v1/id.pb.h"
 #include "pressure_state.hpp"
-#include "payload/manager/v1_compat.hpp"
+#include "payload/manager/v1.hpp"
 
 namespace payload::metadata { class MetadataCache; }
 

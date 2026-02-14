@@ -2,7 +2,7 @@
 
 #include "payload/manager/services/v1/payload_data_service.pb.h"
 #include "service_context.hpp"
-#include "payload/manager/v1_compat.hpp"
+#include "payload/manager/v1.hpp"
 
 namespace payload::service {
 

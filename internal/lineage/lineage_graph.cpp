@@ -2,7 +2,7 @@
 
 #include <queue>
 #include <unordered_set>
-#include "payload/manager/v1_compat.hpp"
+#include "payload/manager/v1.hpp"
 
 namespace payload::lineage {
 

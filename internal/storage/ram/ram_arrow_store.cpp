@@ -3,7 +3,7 @@
 #include <arrow/buffer.h>
 #include <arrow/memory_pool.h>
 #include <stdexcept>
-#include "payload/manager/v1_compat.hpp"
+#include "payload/manager/v1.hpp"
 
 namespace payload::storage {
 

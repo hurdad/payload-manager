@@ -5,7 +5,7 @@
 #include <vector>
 
 #include "payload/manager/catalog/v1/lineage.pb.h"
-#include "payload/manager/v1_compat.hpp"
+#include "payload/manager/v1.hpp"
 
 namespace payload::lineage {
 

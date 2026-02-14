@@ -1,6 +1,6 @@
 #include "data_service.hpp"
 #include "internal/core/payload_manager.hpp"
-#include "payload/manager/v1_compat.hpp"
+#include "payload/manager/v1.hpp"
 
 namespace payload::service {
 

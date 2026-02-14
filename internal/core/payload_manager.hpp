@@ -10,7 +10,7 @@
 #include "payload/manager/core/v1/placement.pb.h"
 #include "payload/manager/core/v1/types.pb.h"
 #include "internal/storage/storage_factory.hpp"
-#include "payload/manager/v1_compat.hpp"
+#include "payload/manager/v1.hpp"
 
 namespace payload::lease { class LeaseManager; }
 namespace payload::metadata { class MetadataCache; }

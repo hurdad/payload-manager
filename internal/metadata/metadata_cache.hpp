@@ -6,7 +6,7 @@
 #include <unordered_map>
 
 #include "payload/manager/catalog/v1/catalog.pb.h"
-#include "payload/manager/v1_compat.hpp"
+#include "payload/manager/v1.hpp"
 
 namespace payload::metadata {
 

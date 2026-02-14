@@ -5,7 +5,7 @@
 #include <vector>
 
 #include "lease.hpp"
-#include "payload/manager/v1_compat.hpp"
+#include "payload/manager/v1.hpp"
 
 namespace payload::lease {
 
