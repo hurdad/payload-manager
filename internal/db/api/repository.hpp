@@ -106,6 +106,12 @@ public:
     ReadStreamEntriesRange(Transaction&, uint64_t stream_id, uint64_t start_offset,
                            uint64_t end_offset) = 0;
 
+    virtual Result TrimStreamEntriesToMaxCount(Transaction&, uint64_t stream_id,
+                                               uint64_t max_entries) = 0;
+
+    virtual Result DeleteStreamEntriesOlderThan(Transaction&, uint64_t stream_id,
+                                                uint64_t min_append_time_ms) = 0;
+
     virtual Result CommitConsumerOffset(
         Transaction&, const model::StreamConsumerOffsetRecord& record) = 0;
 
