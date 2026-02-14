@@ -18,11 +18,22 @@ public:
 
   void Delete(const payload::manager::v1::DeleteRequest& req);
 
-  payload::manager::v1::UpdatePayloadMetadataResponse
-  UpdateMetadata(const payload::manager::v1::UpdatePayloadMetadataRequest& req);
+  payload::manager::v1::PromoteResponse
+  Promote(const payload::manager::v1::PromoteRequest& req);
+
+  payload::manager::v1::SpillResponse
+  Spill(const payload::manager::v1::SpillRequest& req);
+
+  void AddLineage(const payload::manager::v1::AddLineageRequest& req);
 
   payload::manager::v1::GetLineageResponse
   GetLineage(const payload::manager::v1::GetLineageRequest& req);
+
+  payload::manager::v1::UpdatePayloadMetadataResponse
+  UpdateMetadata(const payload::manager::v1::UpdatePayloadMetadataRequest& req);
+
+  payload::manager::v1::AppendPayloadMetadataEventResponse
+  AppendMetadataEvent(const payload::manager::v1::AppendPayloadMetadataEventRequest& req);
 
 private:
   ServiceContext ctx_;

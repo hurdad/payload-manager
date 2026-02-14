@@ -25,6 +25,30 @@ public:
                       const payload::manager::v1::DeleteRequest*,
                       google::protobuf::Empty*) override;
 
+  ::grpc::Status Promote(::grpc::ServerContext*,
+                       const payload::manager::v1::PromoteRequest*,
+                       payload::manager::v1::PromoteResponse*) override;
+
+  ::grpc::Status Spill(::grpc::ServerContext*,
+                     const payload::manager::v1::SpillRequest*,
+                     payload::manager::v1::SpillResponse*) override;
+
+  ::grpc::Status AddLineage(::grpc::ServerContext*,
+                          const payload::manager::v1::AddLineageRequest*,
+                          google::protobuf::Empty*) override;
+
+  ::grpc::Status GetLineage(::grpc::ServerContext*,
+                          const payload::manager::v1::GetLineageRequest*,
+                          payload::manager::v1::GetLineageResponse*) override;
+
+  ::grpc::Status UpdatePayloadMetadata(::grpc::ServerContext*,
+                                     const payload::manager::v1::UpdatePayloadMetadataRequest*,
+                                     payload::manager::v1::UpdatePayloadMetadataResponse*) override;
+
+  ::grpc::Status AppendPayloadMetadataEvent(::grpc::ServerContext*,
+                                          const payload::manager::v1::AppendPayloadMetadataEventRequest*,
+                                          payload::manager::v1::AppendPayloadMetadataEventResponse*) override;
+
 private:
   std::shared_ptr<payload::service::CatalogService> service_;
 };
