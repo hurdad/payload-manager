@@ -4,7 +4,7 @@ package payload.manager.services.v1;
 import "google/protobuf/empty.proto";
 import "payload/manager/runtime/v1/stream.proto";
 
-service StreamService {
+service PayloadStreamService {
 
   // management
   rpc CreateStream(payload.manager.runtime.v1.CreateStreamRequest) returns (google.protobuf.Empty);
