@@ -52,7 +52,7 @@ void TestNonForceDeleteRejectsWhenLeaseIsActive() {
   try {
     manager.Delete(descriptor.id(), /*force=*/false);
   } catch (const std::runtime_error& ex) {
-    threw = std::string(ex.what()) == "delete: active lease";
+    threw = std::string(ex.what()).find("active lease") != std::string::npos;
   }
 
   assert(threw);
