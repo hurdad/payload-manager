@@ -16,3 +16,4 @@ payload_manager_add_unit_test(payload_manager_unit_config_loader config_loader_t
 payload_manager_add_unit_test(payload_manager_unit_grpc_status grpc_status_test.cpp "grpc")
 payload_manager_add_unit_test(payload_manager_unit_payload_delete payload_manager_delete_test.cpp "payload")
 payload_manager_add_unit_test(payload_manager_unit_lineage_graph internal/lineage/lineage_graph_test.cpp "lineage")
+payload_manager_add_unit_test(payload_manager_unit_catalog_service catalog_service_test.cpp "catalog")
