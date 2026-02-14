@@ -95,6 +95,13 @@ set(INTERNAL_SRC
         ${CONFIG_PROTO_SRC}
 )
 
+if(PAYLOAD_MANAGER_ENABLE_OTEL)
+    list(APPEND INTERNAL_SRC
+            observability/metrics.cpp
+            observability/tracing.cpp
+    )
+endif()
+
 # ================================================================
 # Library
 # ================================================================
@@ -109,6 +116,15 @@ target_include_directories(payload_manager_internal
         ${CMAKE_CURRENT_SOURCE_DIR}/..
         ${INTERNAL_GEN_DIR}
 )
+
+if(PAYLOAD_MANAGER_ENABLE_OTEL)
+    target_include_directories(payload_manager_internal
+            PRIVATE
+            ${CMAKE_SOURCE_DIR}/third_party/opentelemetry-cpp/api/include
+            ${CMAKE_SOURCE_DIR}/third_party/opentelemetry-cpp/sdk/include
+            ${CMAKE_SOURCE_DIR}/third_party/opentelemetry-cpp/exporters/otlp/include
+    )
+endif()
 
 # ================================================================
 # Dependencies
@@ -128,6 +144,44 @@ target_link_libraries(payload_manager_internal
         payload_manager::db
         yaml-cpp::yaml-cpp
 )
+
+if(PAYLOAD_MANAGER_ENABLE_OTEL)
+    foreach(_otel_target IN ITEMS
+            opentelemetry_metrics
+            opentelemetry_trace
+            opentelemetry_logs
+            opentelemetry_resources
+
+            opentelemetry_exporter_otlp_grpc
+            opentelemetry_exporter_otlp_grpc_metrics
+            opentelemetry_exporter_otlp_grpc_log
+
+            opentelemetry_ext
+            opentelemetry_exporter_otlp_http
+            opentelemetry_exporter_otlp_http_metric
+            opentelemetry_exporter_otlp_http_log)
+        if(NOT TARGET ${_otel_target})
+            message(FATAL_ERROR "PAYLOAD_MANAGER_ENABLE_OTEL=ON but required OpenTelemetry target '${_otel_target}' is unavailable")
+        endif()
+    endforeach()
+
+    target_link_libraries(payload_manager_internal
+            PUBLIC
+            opentelemetry_metrics
+            opentelemetry_trace
+            opentelemetry_logs
+            opentelemetry_resources
+
+            opentelemetry_exporter_otlp_grpc
+            opentelemetry_exporter_otlp_grpc_metrics
+            opentelemetry_exporter_otlp_grpc_log
+
+            opentelemetry_ext
+            opentelemetry_exporter_otlp_http
+            opentelemetry_exporter_otlp_http_metric
+            opentelemetry_exporter_otlp_http_log
+    )
+endif()
 
 # Arrow CUDA optional
 # ================================================================
