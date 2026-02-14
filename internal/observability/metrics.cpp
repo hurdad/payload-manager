@@ -11,9 +11,21 @@
 #include <opentelemetry/exporters/otlp/otlp_grpc_metric_exporter_options.h>
 #include <opentelemetry/exporters/otlp/otlp_http_metric_exporter_factory.h>
 #include <opentelemetry/exporters/otlp/otlp_http_metric_exporter_options.h>
+#include <opentelemetry/common/attribute_value.h>
+#include <opentelemetry/context/context.h>
 #include <opentelemetry/metrics/provider.h>
 #include <opentelemetry/sdk/metrics/meter_provider.h>
+#if __has_include(<opentelemetry/sdk/metrics/periodic_exporting_metric_reader_factory.h>)
+#define PAYLOAD_OTEL_METRIC_READER_FACTORY 1
 #include <opentelemetry/sdk/metrics/periodic_exporting_metric_reader_factory.h>
+#elif __has_include(<opentelemetry/sdk/metrics/export/periodic_exporting_metric_reader_factory.h>)
+#define PAYLOAD_OTEL_METRIC_READER_FACTORY 1
+#include <opentelemetry/sdk/metrics/export/periodic_exporting_metric_reader_factory.h>
+#elif __has_include(<opentelemetry/sdk/metrics/periodic_exporting_metric_reader.h>)
+#include <opentelemetry/sdk/metrics/periodic_exporting_metric_reader.h>
+#else
+#include <opentelemetry/sdk/metrics/export/periodic_exporting_metric_reader.h>
+#endif
 #include <opentelemetry/sdk/resource/resource.h>
 
 namespace payload::observability {
@@ -23,6 +35,7 @@ namespace sdkmetrics  = opentelemetry::sdk::metrics;
 namespace resource    = opentelemetry::sdk::resource;
 
 namespace {
+using AttributePair = std::pair<opentelemetry::nostd::string_view, opentelemetry::common::AttributeValue>;
 std::shared_ptr<sdkmetrics::MeterProvider> g_provider;
 
 std::string ResolveEndpoint(const OtlpConfig& config) {
@@ -43,6 +56,45 @@ std::string ResolveEndpoint(const OtlpConfig& config) {
 resource::Resource BuildResource(const OtlpConfig& config) {
   resource::ResourceAttributes attrs = {{"service.name", config.service_name}};
   return resource::Resource::Create(attrs);
+}
+
+
+template <typename Provider>
+void ConfigureResource(Provider& provider, const resource::Resource& res) {
+  if constexpr (requires { provider.SetResource(res); }) {
+    provider.SetResource(res);
+  }
+}
+
+template <typename Provider>
+void AddMetricReaderCompat(const std::shared_ptr<Provider>& provider, std::unique_ptr<sdkmetrics::MetricReader> reader) {
+  if constexpr (requires { provider->AddMetricReader(std::move(reader)); }) {
+    provider->AddMetricReader(std::move(reader));
+  } else {
+    provider->AddMetricReader(std::shared_ptr<sdkmetrics::MetricReader>(std::move(reader)));
+  }
+}
+
+template <typename Instrument, typename Value, typename Attributes>
+void AddWithAttributes(const opentelemetry::nostd::shared_ptr<Instrument>& instrument,
+                       Value value,
+                       Attributes&& attributes) {
+  if constexpr (requires { instrument->Add(value, std::forward<Attributes>(attributes), opentelemetry::context::Context{}); }) {
+    instrument->Add(value, std::forward<Attributes>(attributes), opentelemetry::context::Context{});
+  } else {
+    instrument->Add(value, std::forward<Attributes>(attributes));
+  }
+}
+
+template <typename Instrument, typename Value, typename Attributes>
+void RecordWithAttributes(const opentelemetry::nostd::shared_ptr<Instrument>& instrument,
+                          Value value,
+                          Attributes&& attributes) {
+  if constexpr (requires { instrument->Record(value, std::forward<Attributes>(attributes), opentelemetry::context::Context{}); }) {
+    instrument->Record(value, std::forward<Attributes>(attributes), opentelemetry::context::Context{});
+  } else {
+    instrument->Record(value, std::forward<Attributes>(attributes));
+  }
 }
 
 } // namespace
@@ -73,13 +125,19 @@ bool InitializeMetrics(const OtlpConfig& config) {
 
   sdkmetrics::PeriodicExportingMetricReaderOptions reader_options;
   reader_options.export_interval_millis = std::chrono::milliseconds(1000);
+#ifdef PAYLOAD_OTEL_METRIC_READER_FACTORY
   auto reader = sdkmetrics::PeriodicExportingMetricReaderFactory::Create(std::move(exporter), reader_options);
+#else
+  auto reader = std::make_unique<sdkmetrics::PeriodicExportingMetricReader>(std::move(exporter), reader_options);
+#endif
 
-  g_provider = std::make_shared<sdkmetrics::MeterProvider>();
-  g_provider->SetResource(BuildResource(config));
-  g_provider->AddMetricReader(std::move(reader));
+  auto resource = BuildResource(config);
+  g_provider = std::make_shared<sdkmetrics::MeterProvider>(
+      std::unique_ptr<sdkmetrics::ViewRegistry>(new sdkmetrics::ViewRegistry()), resource);
+  ConfigureResource(*g_provider, resource);
+  AddMetricReaderCompat(g_provider, std::move(reader));
 
-  metrics_api::Provider::SetMeterProvider(g_provider);
+  metrics_api::Provider::SetMeterProvider(opentelemetry::nostd::shared_ptr<metrics_api::MeterProvider>(g_provider));
   return true;
 }
 
@@ -114,7 +172,8 @@ void Metrics::RecordRequest(std::string_view route, bool success) {
     return;
   }
 
-  impl_->request_count->Add(1, {{"route", std::string(route)}, {"success", success}});
+  const std::initializer_list<AttributePair> attributes = {{"route", std::string(route)}, {"success", success}};
+  AddWithAttributes(impl_->request_count, static_cast<std::uint64_t>(1), attributes);
 }
 
 void Metrics::ObserveRequestLatencyMs(std::string_view route, double latency_ms) {
@@ -122,7 +181,8 @@ void Metrics::ObserveRequestLatencyMs(std::string_view route, double latency_ms)
     return;
   }
 
-  impl_->request_latency_ms->Record(latency_ms, {{"route", std::string(route)}});
+  const std::initializer_list<AttributePair> attributes = {{"route", std::string(route)}};
+  RecordWithAttributes(impl_->request_latency_ms, latency_ms, attributes);
 }
 
 void Metrics::ObserveSpillDurationMs(std::string_view op, double duration_ms) {
@@ -130,7 +190,8 @@ void Metrics::ObserveSpillDurationMs(std::string_view op, double duration_ms) {
     return;
   }
 
-  impl_->spill_duration_ms->Record(duration_ms, {{"op", std::string(op)}});
+  const std::initializer_list<AttributePair> attributes = {{"op", std::string(op)}};
+  RecordWithAttributes(impl_->spill_duration_ms, duration_ms, attributes);
 }
 
 void Metrics::SetTierOccupancyBytes(std::string_view tier, std::uint64_t bytes) {
@@ -138,7 +199,8 @@ void Metrics::SetTierOccupancyBytes(std::string_view tier, std::uint64_t bytes) 
     return;
   }
 
-  impl_->tier_occupancy_bytes->Add(static_cast<std::int64_t>(bytes), {{"tier", std::string(tier)}});
+  const std::initializer_list<AttributePair> attributes = {{"tier", std::string(tier)}};
+  AddWithAttributes(impl_->tier_occupancy_bytes, static_cast<std::int64_t>(bytes), attributes);
 }
 
 } // namespace payload::observability

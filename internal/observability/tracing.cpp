@@ -11,6 +11,7 @@
 #include <opentelemetry/exporters/otlp/otlp_http_exporter_options.h>
 #include <opentelemetry/sdk/resource/resource.h>
 #include <opentelemetry/sdk/trace/batch_span_processor_factory.h>
+#include <opentelemetry/sdk/trace/batch_span_processor_options.h>
 #include <opentelemetry/sdk/trace/tracer_provider_factory.h>
 #include <opentelemetry/trace/provider.h>
 
@@ -21,7 +22,8 @@ namespace sdktrace  = opentelemetry::sdk::trace;
 namespace resource  = opentelemetry::sdk::resource;
 
 namespace {
-std::shared_ptr<trace_api::Tracer> g_tracer;
+std::shared_ptr<sdktrace::TracerProvider> g_sdk_provider;
+opentelemetry::nostd::shared_ptr<trace_api::Tracer> g_tracer;
 
 std::string ResolveEndpoint(const OtlpConfig& config) {
   if (!config.endpoint.empty()) {
@@ -60,22 +62,23 @@ bool InitializeTracing(const OtlpConfig& config) {
     exporter         = otlp::OtlpGrpcExporterFactory::Create(options);
   }
 
-  auto span_processor = sdktrace::BatchSpanProcessorFactory::Create(std::move(exporter));
-  auto provider       = sdktrace::TracerProviderFactory::Create(std::move(span_processor), BuildResource(config));
+  auto span_processor =
+      sdktrace::BatchSpanProcessorFactory::Create(std::move(exporter), sdktrace::BatchSpanProcessorOptions{});
+  auto provider = sdktrace::TracerProviderFactory::Create(std::move(span_processor), BuildResource(config));
 
-  trace_api::Provider::SetTracerProvider(provider);
-  g_tracer = provider->GetTracer("payload-manager", "0.1.0");
+  g_sdk_provider = std::shared_ptr<sdktrace::TracerProvider>(std::move(provider));
+  trace_api::Provider::SetTracerProvider(opentelemetry::nostd::shared_ptr<trace_api::TracerProvider>(g_sdk_provider));
+  g_tracer = g_sdk_provider->GetTracer("payload-manager", "0.1.0");
   return static_cast<bool>(g_tracer);
 }
 
 void ShutdownTracing() {
-  auto provider = trace_api::Provider::GetTracerProvider();
-  if (provider) {
-    auto sdk_provider = std::static_pointer_cast<sdktrace::TracerProvider>(provider);
-    sdk_provider->ForceFlush();
-    sdk_provider->Shutdown();
+  if (g_sdk_provider) {
+    g_sdk_provider->ForceFlush();
+    g_sdk_provider->Shutdown();
   }
-  g_tracer.reset();
+  g_sdk_provider.reset();
+  g_tracer = nullptr;
 }
 
 struct SpanScope::Impl {
