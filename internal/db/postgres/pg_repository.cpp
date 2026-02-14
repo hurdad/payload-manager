@@ -76,24 +76,78 @@ Result PgRepository::DeletePayload(Transaction& t, const std::string& id) {
   }
 }
 
-Result PgRepository::UpsertMetadata(Transaction&, const model::MetadataRecord&) {
-  return Result::Err(ErrorCode::Unsupported);
+Result PgRepository::UpsertMetadata(Transaction& t, const model::MetadataRecord& r) {
+  try {
+    TX(t).Work().exec_params(
+        "INSERT INTO payload_metadata(id,json,schema,updated_at_ms) VALUES($1,$2::jsonb,$3,$4) "
+        "ON CONFLICT(id) DO UPDATE SET json=EXCLUDED.json,schema=EXCLUDED.schema,updated_at_ms=EXCLUDED.updated_at_ms;",
+        r.id, r.json, r.schema, r.updated_at_ms);
+    return Result::Ok();
+  } catch (const std::exception& e) {
+    return Translate(e);
+  }
 }
 
-std::optional<model::MetadataRecord> PgRepository::GetMetadata(Transaction&, const std::string&) {
-  return std::nullopt;
+std::optional<model::MetadataRecord> PgRepository::GetMetadata(Transaction& t, const std::string& id) {
+  auto res = TX(t).Work().exec_params("SELECT id,json::text,schema,updated_at_ms FROM payload_metadata WHERE id=$1;", id);
+  if (res.empty()) {
+    return std::nullopt;
+  }
+
+  model::MetadataRecord r;
+  r.id            = res[0][0].c_str();
+  r.json          = res[0][1].c_str();
+  r.schema        = res[0][2].is_null() ? "" : res[0][2].c_str();
+  r.updated_at_ms = res[0][3].as<uint64_t>();
+  return r;
 }
 
-Result PgRepository::InsertLineage(Transaction&, const model::LineageRecord&) {
-  return Result::Err(ErrorCode::Unsupported);
+Result PgRepository::InsertLineage(Transaction& t, const model::LineageRecord& r) {
+  try {
+    TX(t).Work().exec_params("INSERT INTO payload_lineage(parent_id,child_id,operation,role,parameters,created_at_ms) VALUES($1,$2,$3,$4,$5,$6);",
+                             r.parent_id, r.child_id, r.operation, r.role, r.parameters, r.created_at_ms);
+    return Result::Ok();
+  } catch (const std::exception& e) {
+    return Translate(e);
+  }
 }
 
-std::vector<model::LineageRecord> PgRepository::GetParents(Transaction&, const std::string&) {
-  return {};
+std::vector<model::LineageRecord> PgRepository::GetParents(Transaction& t, const std::string& id) {
+  auto res = TX(t).Work().exec_params(
+      "SELECT parent_id,child_id,operation,role,parameters,created_at_ms FROM payload_lineage WHERE child_id=$1 ORDER BY created_at_ms ASC;", id);
+
+  std::vector<model::LineageRecord> out;
+  out.reserve(res.size());
+  for (const auto& row : res) {
+    model::LineageRecord r;
+    r.parent_id     = row[0].c_str();
+    r.child_id      = row[1].c_str();
+    r.operation     = row[2].is_null() ? "" : row[2].c_str();
+    r.role          = row[3].is_null() ? "" : row[3].c_str();
+    r.parameters    = row[4].is_null() ? "" : row[4].c_str();
+    r.created_at_ms = row[5].as<uint64_t>();
+    out.push_back(std::move(r));
+  }
+  return out;
 }
 
-std::vector<model::LineageRecord> PgRepository::GetChildren(Transaction&, const std::string&) {
-  return {};
+std::vector<model::LineageRecord> PgRepository::GetChildren(Transaction& t, const std::string& id) {
+  auto res = TX(t).Work().exec_params(
+      "SELECT parent_id,child_id,operation,role,parameters,created_at_ms FROM payload_lineage WHERE parent_id=$1 ORDER BY created_at_ms ASC;", id);
+
+  std::vector<model::LineageRecord> out;
+  out.reserve(res.size());
+  for (const auto& row : res) {
+    model::LineageRecord r;
+    r.parent_id     = row[0].c_str();
+    r.child_id      = row[1].c_str();
+    r.operation     = row[2].is_null() ? "" : row[2].c_str();
+    r.role          = row[3].is_null() ? "" : row[3].c_str();
+    r.parameters    = row[4].is_null() ? "" : row[4].c_str();
+    r.created_at_ms = row[5].as<uint64_t>();
+    out.push_back(std::move(r));
+  }
+  return out;
 }
 
 Result PgRepository::CreateStream(Transaction& t, model::StreamRecord& r) {

@@ -231,8 +231,8 @@ Result SqliteRepository::InsertLineage(Transaction& t, const model::LineageRecor
   auto* db = TX(t).Handle();
 
   const char* sql =
-      "INSERT INTO payload_lineage(parent_id,child_id,operation,role,parameters) "
-      "VALUES(?,?,?,?,?);";
+      "INSERT INTO payload_lineage(parent_id,child_id,operation,role,parameters,created_at_ms) "
+      "VALUES(?,?,?,?,?,?);";
 
   sqlite3_stmt* st = nullptr;
   if (sqlite3_prepare_v2(db, sql, -1, &st, nullptr) != SQLITE_OK) return Result::Err(ErrorCode::InternalError, sqlite3_errmsg(db));
@@ -242,6 +242,7 @@ Result SqliteRepository::InsertLineage(Transaction& t, const model::LineageRecor
   BindText(st, 3, r.operation);
   BindText(st, 4, r.role);
   BindText(st, 5, r.parameters);
+  BindU64(st, 6, r.created_at_ms);
 
   int rc = sqlite3_step(st);
   sqlite3_finalize(st);
@@ -253,7 +254,7 @@ std::vector<model::LineageRecord> SqliteRepository::GetParents(Transaction& t, c
   auto* db = TX(t).Handle();
 
   const char* sql =
-      "SELECT parent_id,child_id,operation,role,parameters "
+      "SELECT parent_id,child_id,operation,role,parameters,created_at_ms "
       "FROM payload_lineage WHERE child_id=?;";
 
   sqlite3_stmt* st = nullptr;
@@ -268,7 +269,8 @@ std::vector<model::LineageRecord> SqliteRepository::GetParents(Transaction& t, c
     r.child_id   = ColText(st, 1);
     r.operation  = ColText(st, 2);
     r.role       = ColText(st, 3);
-    r.parameters = ColText(st, 4);
+    r.parameters    = ColText(st, 4);
+    r.created_at_ms = ColU64(st, 5);
     out.push_back(std::move(r));
   }
 
@@ -280,7 +282,7 @@ std::vector<model::LineageRecord> SqliteRepository::GetChildren(Transaction& t, 
   auto* db = TX(t).Handle();
 
   const char* sql =
-      "SELECT parent_id,child_id,operation,role,parameters "
+      "SELECT parent_id,child_id,operation,role,parameters,created_at_ms "
       "FROM payload_lineage WHERE parent_id=?;";
 
   sqlite3_stmt* st = nullptr;
@@ -295,7 +297,8 @@ std::vector<model::LineageRecord> SqliteRepository::GetChildren(Transaction& t, 
     r.child_id   = ColText(st, 1);
     r.operation  = ColText(st, 2);
     r.role       = ColText(st, 3);
-    r.parameters = ColText(st, 4);
+    r.parameters    = ColText(st, 4);
+    r.created_at_ms = ColU64(st, 5);
     out.push_back(std::move(r));
   }
 
