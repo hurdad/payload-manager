@@ -4,6 +4,13 @@ package payload.manager.services.v1;
 import "google/protobuf/empty.proto";
 import "payload/manager/runtime/v1/stream.proto";
 
+// Service-level contract:
+// - CreateStream/DeleteStream manage stream lifecycle and retention state.
+// - Append writes ordered records; Read and Subscribe consume records by offset.
+// - Commit/GetCommitted persist and resolve consumer checkpoint positions.
+// - GetRange materializes a stable range view for recording/snapshot use cases.
+// For message-level semantics, ordering, and field guarantees, see
+// payload/manager/runtime/v1/stream.proto.
 service PayloadStreamService {
 
   // management

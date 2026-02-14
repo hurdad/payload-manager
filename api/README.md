@@ -135,31 +135,34 @@ Clients must treat previously acquired descriptors as unusable.
 ## File Layout
 
 ```
-proto/payload/manager/v1/
+api/payload/manager/
 
-Core Types
+core/v1/
   id.proto
-  types.proto
-  policy.proto
   placement.proto
+  policy.proto
+  types.proto
 
-Runtime Protocol
+runtime/v1/
+  stream.proto
   lease.proto
   lifecycle.proto
   tiering.proto
 
-Catalog
-  metadata.proto
+catalog/v1/
+  archive_metadata.proto
   catalog.proto
   lineage.proto
+  metadata.proto
 
-Admin
+admin/v1/
   stats.proto
 
-Services
-  payload_data_service.proto
-  payload_catalog_service.proto
+services/v1/
   payload_admin_service.proto
+  payload_catalog_service.proto
+  payload_data_service.proto
+  payload_stream_service.proto
 ```
 
 ---
@@ -215,4 +218,3 @@ Without breaking clients.
 ---
 
 End of document.
-
