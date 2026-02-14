@@ -91,6 +91,9 @@ set(INTERNAL_SRC
         util/time.cpp
         util/uuid.cpp
 
+        # observability
+        observability/logging.cpp
+
         # generated config proto
         ${CONFIG_PROTO_SRC}
 )
@@ -143,6 +146,7 @@ target_link_libraries(payload_manager_internal
         Threads::Threads
         payload_manager::db
         yaml-cpp::yaml-cpp
+        spdlog::spdlog
 )
 
 if(PAYLOAD_MANAGER_ENABLE_OTEL)

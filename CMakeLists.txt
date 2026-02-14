@@ -1,6 +1,8 @@
 cmake_minimum_required(VERSION 3.20)
 project(payload_manager LANGUAGES CXX)
 
+find_package(spdlog REQUIRED)
+
 include(CTest)
 
 set(CMAKE_CXX_STANDARD 20)

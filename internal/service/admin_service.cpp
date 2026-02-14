@@ -3,6 +3,7 @@
 #include <chrono>
 
 #include "internal/db/api/repository.hpp"
+#include "internal/observability/logging.hpp"
 #include "internal/observability/spans.hpp"
 #include "payload/manager/v1.hpp"
 
@@ -47,6 +48,8 @@ StatsResponse AdminService::Stats(const StatsRequest&) {
     return resp;
   } catch (const std::exception& ex) {
     span.RecordException(ex.what());
+    PAYLOAD_LOG_ERROR("RPC failed", {payload::observability::StringField("route", "AdminService.Stats"),
+                                      payload::observability::StringField("error", ex.what())});
     payload::observability::Metrics::Instance().RecordRequest("AdminService.Stats", false);
     payload::observability::Metrics::Instance().ObserveRequestLatencyMs(
         "AdminService.Stats", std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - started_at).count());
