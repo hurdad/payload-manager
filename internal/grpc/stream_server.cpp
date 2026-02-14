@@ -54,11 +54,18 @@ StreamServer::StreamServer(std::shared_ptr<payload::service::StreamService> svc)
 
 ::grpc::Status StreamServer::Subscribe(
     ::grpc::ServerContext*,
-    const payload::manager::v1::SubscribeRequest*,
-    ::grpc::ServerWriter<payload::manager::v1::SubscribeResponse>*) {
-  return ::grpc::Status(
-      ::grpc::StatusCode::UNIMPLEMENTED,
-      "PayloadStreamService::Subscribe is not implemented yet");
+    const payload::manager::v1::SubscribeRequest* req,
+    ::grpc::ServerWriter<payload::manager::v1::SubscribeResponse>* writer) {
+  try {
+    for (const auto& response : service_->Subscribe(*req)) {
+      if (!writer->Write(response)) {
+        break;
+      }
+    }
+    return ::grpc::Status::OK;
+  } catch (const std::exception& e) {
+    return ToStatus(e);
+  }
 }
 
 ::grpc::Status StreamServer::Commit(::grpc::ServerContext*,
