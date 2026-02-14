@@ -1,0 +1,242 @@
+syntax = "proto3";
+package payload.manager.v1;
+
+import "google/protobuf/timestamp.proto";
+
+
+// ============================================================================
+// OVERVIEW
+// ----------------------------------------------------------------------------
+// A Stream is a durable ordered commit log of payload UUID references.
+//
+// IMPORTANT:
+//   The stream NEVER contains the data itself.
+//   The stream sequences immutable payloads stored in PayloadManager.
+//
+// Think:
+//   PayloadManager = object store
+//   StreamService  = ordering + replay log
+//
+// A stream provides:
+//   * deterministic ordering
+//   * replay capability
+//   * consumer checkpoints
+//   * live subscription
+//
+// A stream does NOT provide:
+//   * storage tier information
+//   * memory pointers
+//   * raw bytes
+//
+// Consumers must resolve payload_uuid via PayloadManager.
+// ============================================================================
+
+
+
+// ============================================================================
+// STREAM IDENTITY
+// ----------------------------------------------------------------------------
+// A logical name that remains stable across restarts.
+// Namespace allows multi-tenant or multi-system isolation.
+// Together they uniquely identify a stream.
+// ============================================================================
+message StreamID {
+  string name = 1;        // ex: "rf.iq.radio0", "decoder.frames"
+  string namespace = 2;   // optional tenant / environment
+}
+
+
+
+// ============================================================================
+// STREAM ENTRY
+// ----------------------------------------------------------------------------
+// The fundamental record stored in the commit log.
+//
+// Ordering rule:
+//   Offsets are strictly monotonically increasing per stream.
+//   Offset is the ONLY source of truth for ordering.
+//   Timestamps must never be used for ordering.
+//
+// Replay rule:
+//   Replaying the same offset range must produce identical sequence.
+//
+// Durability rule:
+//   Entry is visible only AFTER payload is committed to PayloadManager.
+// ============================================================================
+message StreamEntry {
+
+  // stream identity
+  StreamID stream = 1;
+
+  // assigned by server at append time
+  // never reused, never decreases
+  uint64 offset = 2;
+
+  // UUID returned by PayloadManager::Commit
+  bytes payload_uuid = 3; // exactly 16 bytes
+
+  // producer event timestamp (capture time)
+  google.protobuf.Timestamp event_time = 4;
+
+  // when the stream committed the entry
+  google.protobuf.Timestamp append_time = 5;
+
+  // logical playback duration of payload
+  // used for paced replay
+  uint64 duration_ns = 6;
+
+  // lightweight routing/filter metadata
+  map<string,string> tags = 7;
+}
+
+
+
+// ============================================================================
+// STREAM LIFECYCLE
+// ============================================================================
+
+message CreateStreamRequest {
+  StreamID stream = 1;
+
+  // retention expressed as logical history
+  // if zero -> infinite retention
+  uint64 retention_max_entries = 2;
+  uint64 retention_max_age_sec = 3;
+}
+
+message DeleteStreamRequest {
+  StreamID stream = 1;
+}
+
+message Empty {}
+
+
+
+// ============================================================================
+// APPEND
+// ----------------------------------------------------------------------------
+// Appends payload UUIDs in order received.
+//
+// Guarantees:
+//   - items in request remain ordered
+//   - requests serialized by server
+//   - offsets assigned atomically
+//
+// IMPORTANT:
+//   Producer must only append AFTER payload commit succeeds.
+// ============================================================================
+message AppendRequest {
+  StreamID stream = 1;
+  repeated AppendItem items = 2;
+}
+
+message AppendItem {
+  bytes payload_uuid = 1; // must exist in payload manager
+  google.protobuf.Timestamp event_time = 2;
+  uint64 duration_ns = 3;
+  map<string,string> tags = 4;
+}
+
+message AppendResponse {
+  uint64 first_offset = 1;
+  uint64 last_offset  = 2;
+}
+
+
+
+// ============================================================================
+// READ (FINITE RANGE)
+// ----------------------------------------------------------------------------
+// Pull API used for batch processing / scanners.
+// Returns entries starting at offset.
+// ============================================================================
+message ReadRequest {
+  StreamID stream = 1;
+  uint64 start_offset = 2;
+  uint64 max_entries  = 3;
+
+  // optional time filter (post-order filtering)
+  google.protobuf.Timestamp not_before = 4;
+}
+
+message ReadResponse {
+  repeated StreamEntry entries = 1;
+}
+
+
+
+// ============================================================================
+// SUBSCRIBE (LIVE FEED)
+// ----------------------------------------------------------------------------
+// Server-streaming RPC.
+//
+// The stream blocks waiting for new entries once caught up.
+// This is the primary realtime processing interface.
+//
+// Backpressure:
+//   max_inflight controls outstanding unacked messages.
+//   Flow is naturally limited by gRPC TCP window.
+// ============================================================================
+message SubscribeRequest {
+  StreamID stream = 1;
+
+  // starting position
+  oneof start {
+    uint64 offset = 2;       // resume
+    bool from_beginning = 3; // full replay then live
+    bool from_latest = 4;    // live only
+  }
+
+  // advisory backpressure window
+  uint32 max_inflight = 5;
+}
+
+message SubscribeResponse {
+  StreamEntry entry = 1;
+}
+
+
+
+// ============================================================================
+// CONSUMER GROUP CHECKPOINTS
+// ----------------------------------------------------------------------------
+// Enables exactly-once style processing.
+//
+// Consumer commits last fully processed offset.
+// Server stores position durably.
+// ============================================================================
+message CommitRequest {
+  StreamID stream = 1;
+  string consumer_group = 2;
+  uint64 offset = 3;
+}
+
+message GetCommittedRequest {
+  StreamID stream = 1;
+  string consumer_group = 2;
+}
+
+message GetCommittedResponse {
+  uint64 offset = 1;
+}
+
+
+
+// ============================================================================
+// RECORDING SNAPSHOT SUPPORT
+// ----------------------------------------------------------------------------
+// Used by recording service to snapshot deterministic replay ranges.
+//
+// Important invariant:
+//   Recording must store (stream, start_offset, end_offset)
+//   NOT timestamps
+// ============================================================================
+message GetRangeRequest {
+  StreamID stream = 1;
+  uint64 start_offset = 2;
+  uint64 end_offset = 3; // inclusive
+}
+
+message GetRangeResponse {
+  repeated StreamEntry entries = 1;
+}

@@ -1,0 +1,126 @@
+syntax = "proto3";
+
+package payload.manager.v1;
+
+import "google/protobuf/timestamp.proto";
+import "payload/manager/v1/id.proto";
+import "payload/manager/v1/lineage.proto";
+import "payload/manager/v1/placement.proto";
+
+// ============================================================================
+// TOP LEVEL RECORD
+// One metadata file exists for each stored payload object.
+// This is a durability contract, not a runtime API message.
+// ============================================================================
+message PayloadArchiveMetadata {
+
+  // 16-byte globally unique identifier of payload
+  PayloadID uuid = 1;
+
+  // version of this metadata schema (for long-term evolution)
+  uint32 metadata_version = 2;
+
+  // creation time inside payload manager
+  google.protobuf.Timestamp created_at = 3;
+
+  // time successfully archived to object store
+  google.protobuf.Timestamp archived_at = 4;
+
+  // logical grouping (recording / dataset / job)
+  string dataset = 5;
+
+  // producer identity (radio id, pipeline, node name, etc.)
+  string producer = 6;
+
+  // immutable description of the data
+  PayloadDescriptor descriptor = 10;
+
+  // provenance / derivation graph
+  repeated LineageEdge lineage = 20;
+
+  // checksum validation
+  Integrity integrity = 30;
+
+  // compression used for stored object
+  Compression compression = 40;
+
+  // optional quick stats for search / filtering
+  PayloadStatistics statistics = 50;
+
+  // freeform searchable tags
+  map<string,string> tags = 60;
+
+  // reserved for future expansion
+  bytes reserved_extension = 100;
+}
+
+
+
+message TimeRange {
+  google.protobuf.Timestamp start = 1;
+  google.protobuf.Timestamp end   = 2;
+}
+
+
+enum LineageType {
+  LINEAGE_UNKNOWN      = 0;
+  LINEAGE_DERIVED      = 1;
+  LINEAGE_SPLIT        = 2;
+  LINEAGE_MERGED       = 3;
+  LINEAGE_TRANSFORMED  = 4;
+  LINEAGE_IMPORTED     = 5;
+}
+
+
+// ============================================================================
+// INTEGRITY VALIDATION
+// ============================================================================
+message Integrity {
+  HashAlgorithm algorithm = 1;
+  bytes checksum = 2;
+
+  // optional chunk hashes for large objects
+  repeated ChunkHash chunk_hashes = 3;
+}
+
+message ChunkHash {
+  uint64 offset = 1;
+  uint64 length = 2;
+  bytes checksum = 3;
+}
+
+enum HashAlgorithm {
+  HASH_UNKNOWN = 0;
+  HASH_XXH3_64 = 1;
+  HASH_XXH3_128 = 2;
+  HASH_SHA256 = 3;
+}
+
+
+// ============================================================================
+// STORAGE REPRESENTATION
+// ============================================================================
+message Compression {
+  CompressionType type = 1;
+  uint32 level = 2;
+  uint64 block_size = 3;
+}
+
+enum CompressionType {
+  COMPRESSION_NONE = 0;
+  COMPRESSION_ZSTD = 1;
+  COMPRESSION_LZ4  = 2;
+  COMPRESSION_GZIP = 3;
+}
+
+
+// ============================================================================
+// OPTIONAL STATISTICS (for indexing / preview)
+// ============================================================================
+message PayloadStatistics {
+  double min_value = 1;
+  double max_value = 2;
+  double mean_value = 3;
+  double stddev = 4;
+  uint64 sample_count = 5;
+}

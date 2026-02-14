@@ -1,0 +1,28 @@
+syntax = "proto3";
+package payload.manager.v1;
+
+import "google/protobuf/empty.proto";
+import "payload/manager/v1/stream.proto";
+
+service StreamService {
+
+  // management
+  rpc CreateStream(CreateStreamRequest) returns (Empty);
+  rpc DeleteStream(DeleteStreamRequest) returns (Empty);
+
+  // producer
+  rpc Append(AppendRequest) returns (AppendResponse);
+
+  // batch read
+  rpc Read(ReadRequest) returns (ReadResponse);
+
+  // live processing
+  rpc Subscribe(SubscribeRequest) returns (stream SubscribeResponse);
+
+  // consumer checkpointing
+  rpc Commit(CommitRequest) returns (Empty);
+  rpc GetCommitted(GetCommittedRequest) returns (GetCommittedResponse);
+
+  // recording snapshot
+  rpc GetRange(GetRangeRequest) returns (GetRangeResponse);
+}

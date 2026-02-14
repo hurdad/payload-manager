@@ -38,6 +38,8 @@ set(ALL_PROTO_FILES
         payload/manager/v1/catalog.proto
         payload/manager/v1/lineage.proto
         payload/manager/v1/stats.proto
+        payload/manager/v1/stream.proto
+        payload/manager/v1/archive_metadata.proto
 )
 
 # ------------------------------------------------------------------------------
@@ -47,6 +49,7 @@ set(ALL_PROTO_FILES
 set(SERVICE_PROTO_FILES
         payload/manager/v1/payload_data_service.proto
         payload/manager/v1/payload_catalog_service.proto
+        payload/manager/v1/payload_stream_service.proto
         payload/manager/v1/payload_admin_service.proto
 )
 
