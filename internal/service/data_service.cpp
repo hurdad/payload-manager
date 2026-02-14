@@ -1,4 +1,7 @@
 #include "data_service.hpp"
+
+#include <stdexcept>
+
 #include "internal/core/payload_manager.hpp"
 #include "payload/manager/v1.hpp"
 
@@ -19,6 +22,18 @@ DataService::ResolveSnapshot(const ResolveSnapshotRequest& req) {
 
 AcquireReadLeaseResponse
 DataService::AcquireReadLease(const AcquireReadLeaseRequest& req) {
+
+  if (req.mode() != LEASE_MODE_UNSPECIFIED && req.mode() != LEASE_MODE_READ) {
+    throw std::runtime_error("acquire lease: unsupported lease mode");
+  }
+
+  if (req.promotion_policy() == PROMOTION_POLICY_BEST_EFFORT) {
+    const auto snapshot = ctx_.manager->ResolveSnapshot(req.id());
+    if (snapshot.tier() < req.min_tier()) {
+      throw std::runtime_error(
+          "acquire lease: best-effort promotion cannot satisfy min_tier lease guarantee");
+    }
+  }
 
   return ctx_.manager->AcquireReadLease(
       req.id(),
