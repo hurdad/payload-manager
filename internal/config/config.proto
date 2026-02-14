@@ -91,6 +91,12 @@ message LeaseConfig {
   google.protobuf.Duration max_lease = 2;
 }
 
+message LoggingConfig {
+  string level = 1;
+  string pattern = 2;
+  bool include_trace_context = 3;
+}
+
 // ------------------------------------------------------------------
 // Top-level
 // ------------------------------------------------------------------
@@ -101,4 +107,5 @@ message RuntimeConfig {
   StorageConfig storage = 3;
   SpillWorkerConfig spill_workers = 4;
   LeaseConfig leases = 5;
+  LoggingConfig logging = 6;
 }

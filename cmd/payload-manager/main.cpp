@@ -1,10 +1,10 @@
 #include <chrono>
 #include <csignal>
-#include <iostream>
 #include <thread>
 
 #include "internal/config/config_loader.hpp"
 #include "internal/factory.hpp"
+#include "internal/observability/logging.hpp"
 #include "internal/observability/spans.hpp"
 #include "internal/runtime/server.hpp"
 
@@ -19,7 +19,7 @@ void HandleSignal(int) {
 
 int main(int argc, char** argv) {
   if (argc < 2) {
-    std::cerr << "Usage: payload-manager <config.yaml>\n";
+    PAYLOAD_LOG_ERROR("Usage: payload-manager <config.yaml>");
     return 1;
   }
 
@@ -31,6 +31,7 @@ int main(int argc, char** argv) {
     // Load configuration
     // ------------------------------------------------------------
     auto config = payload::config::ConfigLoader::LoadFromYaml(argv[1]);
+    payload::observability::InitializeLogging(config);
 
     // ------------------------------------------------------------
     // Build application (dependency graph)
@@ -43,8 +44,7 @@ int main(int argc, char** argv) {
     Server server(config.server().bind_address(), std::move(app.grpc_services));
 
     server.Start();
-
-    std::cout << "Payload Manager started\n";
+    PAYLOAD_LOG_INFO("Payload Manager started", {payload::observability::StringField("bind_address", config.server().bind_address())});
 
     // ------------------------------------------------------------
     // Wait for shutdown signal
@@ -54,15 +54,17 @@ int main(int argc, char** argv) {
 
     while (g_running) std::this_thread::sleep_for(std::chrono::seconds(1));
 
-    std::cout << "Shutting down...\n";
+    PAYLOAD_LOG_INFO("Shutting down payload manager");
 
     server.Stop();
+    payload::observability::ShutdownLogging();
     payload::observability::ShutdownMetrics();
     payload::observability::ShutdownTracing();
   } catch (const std::exception& e) {
+    PAYLOAD_LOG_ERROR("Fatal error", {payload::observability::StringField("error", e.what())});
+    payload::observability::ShutdownLogging();
     payload::observability::ShutdownMetrics();
     payload::observability::ShutdownTracing();
-    std::cerr << "Fatal error: " << e.what() << "\n";
     return 2;
   }
 
