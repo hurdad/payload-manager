@@ -20,12 +20,15 @@ class LeaseTable {
   void RemoveAll(const payload::manager::v1::PayloadID& id);
 
  private:
+  using Clock = std::chrono::system_clock;
+
   std::mutex mutex_;
 
   std::unordered_map<std::string, Lease>            leases_;
   std::unordered_multimap<std::string, std::string> by_payload_;
 
   static std::string Key(const payload::manager::v1::PayloadID& id);
+  static bool        IsExpired(const Lease& lease, Clock::time_point now);
 };
 
 } // namespace payload::lease
