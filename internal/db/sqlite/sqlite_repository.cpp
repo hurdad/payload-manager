@@ -115,6 +115,29 @@ std::optional<model::PayloadRecord> SqliteRepository::GetPayload(Transaction& t,
   return r;
 }
 
+std::vector<model::PayloadRecord> SqliteRepository::ListPayloads(Transaction& t) {
+  auto* db = TX(t).Handle();
+
+  const char* sql = "SELECT id,tier,state,size_bytes,version FROM payload;";
+
+  sqlite3_stmt* st = nullptr;
+  if (sqlite3_prepare_v2(db, sql, -1, &st, nullptr) != SQLITE_OK) return {};
+
+  std::vector<model::PayloadRecord> records;
+  while (sqlite3_step(st) == SQLITE_ROW) {
+    model::PayloadRecord r;
+    r.id         = ColText(st, 0);
+    r.tier       = static_cast<payload::manager::v1::Tier>(ColI32(st, 1));
+    r.state      = static_cast<payload::manager::v1::PayloadState>(ColI32(st, 2));
+    r.size_bytes = ColU64(st, 3);
+    r.version    = ColU64(st, 4);
+    records.push_back(std::move(r));
+  }
+
+  sqlite3_finalize(st);
+  return records;
+}
+
 Result SqliteRepository::UpdatePayload(Transaction& t, const model::PayloadRecord& r) {
   auto* db = TX(t).Handle();
 
@@ -157,8 +180,8 @@ Result SqliteRepository::UpsertMetadata(Transaction& t, const model::MetadataRec
   auto* db = TX(t).Handle();
 
   const char* sql =
-      "INSERT INTO payload_metadata(id,json,schema) VALUES(?,?,?) "
-      "ON CONFLICT(id) DO UPDATE SET json=excluded.json, schema=excluded.schema;";
+      "INSERT INTO payload_metadata(id,json,schema,updated_at_ms) VALUES(?,?,?,?) "
+      "ON CONFLICT(id) DO UPDATE SET json=excluded.json, schema=excluded.schema, updated_at_ms=excluded.updated_at_ms;";
 
   sqlite3_stmt* st = nullptr;
   if (sqlite3_prepare_v2(db, sql, -1, &st, nullptr) != SQLITE_OK) return Result::Err(ErrorCode::InternalError, sqlite3_errmsg(db));
@@ -166,6 +189,7 @@ Result SqliteRepository::UpsertMetadata(Transaction& t, const model::MetadataRec
   BindText(st, 1, r.id);
   BindText(st, 2, r.json);
   BindText(st, 3, r.schema);
+  BindU64(st, 4, r.updated_at_ms);
 
   int rc = sqlite3_step(st);
   sqlite3_finalize(st);
@@ -176,7 +200,7 @@ Result SqliteRepository::UpsertMetadata(Transaction& t, const model::MetadataRec
 std::optional<model::MetadataRecord> SqliteRepository::GetMetadata(Transaction& t, const std::string& id) {
   auto* db = TX(t).Handle();
 
-  const char* sql = "SELECT id,json,schema FROM payload_metadata WHERE id=?;";
+  const char* sql = "SELECT id,json,schema,updated_at_ms FROM payload_metadata WHERE id=?;";
 
   sqlite3_stmt* st = nullptr;
   if (sqlite3_prepare_v2(db, sql, -1, &st, nullptr) != SQLITE_OK) return std::nullopt;
@@ -192,7 +216,8 @@ std::optional<model::MetadataRecord> SqliteRepository::GetMetadata(Transaction& 
   model::MetadataRecord r;
   r.id     = ColText(st, 0);
   r.json   = ColText(st, 1);
-  r.schema = ColText(st, 2);
+  r.schema        = ColText(st, 2);
+  r.updated_at_ms = ColU64(st, 3);
 
   sqlite3_finalize(st);
   return r;

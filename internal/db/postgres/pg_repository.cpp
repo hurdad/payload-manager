@@ -41,6 +41,23 @@ std::optional<model::PayloadRecord> PgRepository::GetPayload(Transaction& t, con
   return r;
 }
 
+
+std::vector<model::PayloadRecord> PgRepository::ListPayloads(Transaction& t) {
+  auto res = TX(t).Work().exec("SELECT id,tier,state,size_bytes,version FROM payload;");
+
+  std::vector<model::PayloadRecord> records;
+  records.reserve(res.size());
+  for (const auto& row : res) {
+    model::PayloadRecord r;
+    r.id         = row[0].c_str();
+    r.tier       = (payload::manager::v1::Tier)row[1].as<int>();
+    r.state      = (payload::manager::v1::PayloadState)row[2].as<int>();
+    r.size_bytes = row[3].as<uint64_t>();
+    r.version    = row[4].as<uint64_t>();
+    records.push_back(std::move(r));
+  }
+  return records;
+}
 Result PgRepository::UpdatePayload(Transaction& t, const model::PayloadRecord& r) {
   try {
     TX(t).Work().exec_prepared("update_payload", r.id, (int)r.tier, (int)r.state, r.size_bytes, r.version);
