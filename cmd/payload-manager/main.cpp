@@ -5,6 +5,7 @@
 
 #include "internal/config/config_loader.hpp"
 #include "internal/factory.hpp"
+#include "internal/observability/spans.hpp"
 #include "internal/runtime/server.hpp"
 
 using payload::factory::Build;
@@ -23,6 +24,9 @@ int main(int argc, char** argv) {
   }
 
   try {
+    payload::observability::InitializeTracing();
+    payload::observability::InitializeMetrics();
+
     // ------------------------------------------------------------
     // Load configuration
     // ------------------------------------------------------------
@@ -53,7 +57,11 @@ int main(int argc, char** argv) {
     std::cout << "Shutting down...\n";
 
     server.Stop();
+    payload::observability::ShutdownMetrics();
+    payload::observability::ShutdownTracing();
   } catch (const std::exception& e) {
+    payload::observability::ShutdownMetrics();
+    payload::observability::ShutdownTracing();
     std::cerr << "Fatal error: " << e.what() << "\n";
     return 2;
   }
