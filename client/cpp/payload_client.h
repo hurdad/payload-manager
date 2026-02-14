@@ -7,10 +7,12 @@
 #include <arrow/buffer.h>
 #include <arrow/result.h>
 #include <grpcpp/channel.h>
+#include <grpcpp/support/sync_stream.h>
 
 #include "payload/manager/services/v1/payload_admin_service.grpc.pb.h"
 #include "payload/manager/services/v1/payload_catalog_service.grpc.pb.h"
 #include "payload/manager/services/v1/payload_data_service.grpc.pb.h"
+#include "payload/manager/services/v1/payload_stream_service.grpc.pb.h"
 #include "payload/manager/v1.hpp"
 
 namespace payload::manager::client {
@@ -72,6 +74,27 @@ class PayloadClient {
   arrow::Result<payload::manager::v1::StatsResponse> Stats(
       const payload::manager::v1::StatsRequest& request) const;
 
+  arrow::Status CreateStream(const payload::manager::v1::CreateStreamRequest& request) const;
+
+  arrow::Status DeleteStream(const payload::manager::v1::DeleteStreamRequest& request) const;
+
+  arrow::Result<payload::manager::v1::AppendResponse> Append(
+      const payload::manager::v1::AppendRequest& request) const;
+
+  arrow::Result<payload::manager::v1::ReadResponse> Read(
+      const payload::manager::v1::ReadRequest& request) const;
+
+  std::unique_ptr<grpc::ClientReader<payload::manager::v1::SubscribeResponse>> Subscribe(
+      const payload::manager::v1::SubscribeRequest& request, grpc::ClientContext* context) const;
+
+  arrow::Status Commit(const payload::manager::v1::CommitRequest& request) const;
+
+  arrow::Result<payload::manager::v1::GetCommittedResponse> GetCommitted(
+      const payload::manager::v1::GetCommittedRequest& request) const;
+
+  arrow::Result<payload::manager::v1::GetRangeResponse> GetRange(
+      const payload::manager::v1::GetRangeRequest& request) const;
+
  private:
   arrow::Result<std::shared_ptr<arrow::MutableBuffer>> OpenMutableBuffer(
       const payload::manager::v1::PayloadDescriptor& descriptor) const;
@@ -84,6 +107,7 @@ class PayloadClient {
   std::unique_ptr<payload::manager::v1::PayloadCatalogService::Stub> catalog_stub_;
   std::unique_ptr<payload::manager::v1::PayloadDataService::Stub> data_stub_;
   std::unique_ptr<payload::manager::v1::PayloadAdminService::Stub> admin_stub_;
+  std::unique_ptr<payload::manager::v1::PayloadStreamService::Stub> stream_stub_;
 };
 
 }  // namespace payload::manager::client

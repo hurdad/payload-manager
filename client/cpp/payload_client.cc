@@ -175,7 +175,8 @@ arrow::Result<int> OpenShm(std::string_view shm_name, bool writable) {
 PayloadClient::PayloadClient(std::shared_ptr<grpc::Channel> channel)
     : catalog_stub_(payload::manager::v1::PayloadCatalogService::NewStub(channel)),
       data_stub_(payload::manager::v1::PayloadDataService::NewStub(channel)),
-      admin_stub_(payload::manager::v1::PayloadAdminService::NewStub(std::move(channel))) {}
+      admin_stub_(payload::manager::v1::PayloadAdminService::NewStub(channel)),
+      stream_stub_(payload::manager::v1::PayloadStreamService::NewStub(std::move(channel))) {}
 
 arrow::Result<PayloadClient::WritablePayload> PayloadClient::AllocateWritableBuffer(
     uint64_t size_bytes, payload::manager::v1::Tier preferred_tier, uint64_t ttl_ms,
@@ -316,6 +317,72 @@ arrow::Result<payload::manager::v1::StatsResponse> PayloadClient::Stats(
   grpc::ClientContext ctx;
 
   ARROW_RETURN_NOT_OK(GrpcToArrow(admin_stub_->Stats(&ctx, request, &response), "Stats"));
+  return response;
+}
+
+arrow::Status PayloadClient::CreateStream(
+    const payload::manager::v1::CreateStreamRequest& request) const {
+  google::protobuf::Empty response;
+  grpc::ClientContext ctx;
+
+  return GrpcToArrow(stream_stub_->CreateStream(&ctx, request, &response), "CreateStream");
+}
+
+arrow::Status PayloadClient::DeleteStream(
+    const payload::manager::v1::DeleteStreamRequest& request) const {
+  google::protobuf::Empty response;
+  grpc::ClientContext ctx;
+
+  return GrpcToArrow(stream_stub_->DeleteStream(&ctx, request, &response), "DeleteStream");
+}
+
+arrow::Result<payload::manager::v1::AppendResponse> PayloadClient::Append(
+    const payload::manager::v1::AppendRequest& request) const {
+  payload::manager::v1::AppendResponse response;
+  grpc::ClientContext ctx;
+
+  ARROW_RETURN_NOT_OK(GrpcToArrow(stream_stub_->Append(&ctx, request, &response), "Append"));
+  return response;
+}
+
+arrow::Result<payload::manager::v1::ReadResponse> PayloadClient::Read(
+    const payload::manager::v1::ReadRequest& request) const {
+  payload::manager::v1::ReadResponse response;
+  grpc::ClientContext ctx;
+
+  ARROW_RETURN_NOT_OK(GrpcToArrow(stream_stub_->Read(&ctx, request, &response), "Read"));
+  return response;
+}
+
+std::unique_ptr<grpc::ClientReader<payload::manager::v1::SubscribeResponse>>
+PayloadClient::Subscribe(const payload::manager::v1::SubscribeRequest& request,
+                         grpc::ClientContext* context) const {
+  return stream_stub_->Subscribe(context, request);
+}
+
+arrow::Status PayloadClient::Commit(const payload::manager::v1::CommitRequest& request) const {
+  google::protobuf::Empty response;
+  grpc::ClientContext ctx;
+
+  return GrpcToArrow(stream_stub_->Commit(&ctx, request, &response), "Commit");
+}
+
+arrow::Result<payload::manager::v1::GetCommittedResponse> PayloadClient::GetCommitted(
+    const payload::manager::v1::GetCommittedRequest& request) const {
+  payload::manager::v1::GetCommittedResponse response;
+  grpc::ClientContext ctx;
+
+  ARROW_RETURN_NOT_OK(
+      GrpcToArrow(stream_stub_->GetCommitted(&ctx, request, &response), "GetCommitted"));
+  return response;
+}
+
+arrow::Result<payload::manager::v1::GetRangeResponse> PayloadClient::GetRange(
+    const payload::manager::v1::GetRangeRequest& request) const {
+  payload::manager::v1::GetRangeResponse response;
+  grpc::ClientContext ctx;
+
+  ARROW_RETURN_NOT_OK(GrpcToArrow(stream_stub_->GetRange(&ctx, request, &response), "GetRange"));
   return response;
 }
 
