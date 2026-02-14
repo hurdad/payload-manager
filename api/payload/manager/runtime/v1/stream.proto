@@ -109,8 +109,6 @@ message DeleteStreamRequest {
   StreamID stream = 1;
 }
 
-message Empty {}
-
 
 
 // ============================================================================
