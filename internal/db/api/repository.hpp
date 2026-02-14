@@ -49,6 +49,8 @@ class Repository {
 
   virtual std::optional<model::PayloadRecord> GetPayload(Transaction&, const std::string& id) = 0;
 
+  virtual std::vector<model::PayloadRecord> ListPayloads(Transaction&) = 0;
+
   virtual Result UpdatePayload(Transaction&, const model::PayloadRecord&) = 0;
 
   virtual Result DeletePayload(Transaction&, const std::string& id) = 0;

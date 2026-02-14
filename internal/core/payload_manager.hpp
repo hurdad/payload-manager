@@ -1,7 +1,9 @@
 #pragma once
 
 #include <memory>
+#include <shared_mutex>
 #include <string>
+#include <unordered_map>
 
 #include "internal/db/api/repository.hpp"
 #include "internal/storage/storage_factory.hpp"
@@ -37,6 +39,8 @@ class PayloadManager {
   payload::manager::v1::AcquireReadLeaseResponse AcquireReadLease(const payload::manager::v1::PayloadID& id, payload::manager::v1::Tier min_tier,
                                                                   uint64_t min_duration_ms);
 
+  void HydrateCaches();
+
   void                                    ReleaseLease(const std::string& lease_id);
   payload::manager::v1::PayloadDescriptor Promote(const payload::manager::v1::PayloadID& id, payload::manager::v1::Tier target);
   void                                    ExecuteSpill(const payload::manager::v1::PayloadID& id, payload::manager::v1::Tier target, bool /*fsync*/);
@@ -44,9 +48,14 @@ class PayloadManager {
  private:
   static std::string Key(const payload::manager::v1::PayloadID& id);
 
+  void CacheSnapshot(const payload::manager::v1::PayloadDescriptor& descriptor);
+
   payload::storage::StorageFactory::TierMap     storage_;
   std::shared_ptr<payload::lease::LeaseManager> lease_mgr_;
-  std::shared_ptr<payload::db::Repository> repository_;
+  std::shared_ptr<payload::db::Repository>       repository_;
+
+  mutable std::shared_mutex                                                     snapshot_cache_mutex_;
+  std::unordered_map<std::string, payload::manager::v1::PayloadDescriptor> snapshot_cache_;
 };
 
 } // namespace payload::core

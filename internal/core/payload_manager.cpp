@@ -1,5 +1,6 @@
 #include "payload_manager.hpp"
 
+#include <mutex>
 #include <stdexcept>
 
 #include "internal/db/model/payload_record.hpp"
@@ -76,6 +77,11 @@ std::string PayloadManager::Key(const PayloadID& id) {
   return id.value();
 }
 
+void PayloadManager::CacheSnapshot(const PayloadDescriptor& descriptor) {
+  std::unique_lock lock(snapshot_cache_mutex_);
+  snapshot_cache_[descriptor.id().value()] = descriptor;
+}
+
 PayloadDescriptor PayloadManager::Allocate(uint64_t size_bytes, Tier preferred) {
   PayloadDescriptor desc;
   *desc.mutable_id() = payload::util::ToProto(payload::util::GenerateUUID());
@@ -94,6 +100,7 @@ PayloadDescriptor PayloadManager::Allocate(uint64_t size_bytes, Tier preferred) 
   auto tx = repository_->Begin();
   ThrowIfDbError(repository_->InsertPayload(*tx, ToPayloadRecord(desc)), "allocate payload");
   tx->Commit();
+  CacheSnapshot(desc);
   return desc;
 }
 
@@ -108,7 +115,9 @@ PayloadDescriptor PayloadManager::Commit(const PayloadID& id) {
   record->version++;
   ThrowIfDbError(repository_->UpdatePayload(*tx, *record), "commit payload");
   tx->Commit();
-  return ToPayloadDescriptor(*record);
+  const auto descriptor = ToPayloadDescriptor(*record);
+  CacheSnapshot(descriptor);
+  return descriptor;
 }
 
 void PayloadManager::Delete(const PayloadID& id, bool force) {
@@ -122,6 +131,9 @@ void PayloadManager::Delete(const PayloadID& id, bool force) {
   auto tx = repository_->Begin();
   ThrowIfDbError(repository_->DeletePayload(*tx, Key(id)), "delete payload");
   tx->Commit();
+
+  std::unique_lock lock(snapshot_cache_mutex_);
+  snapshot_cache_.erase(Key(id));
 }
 
 PayloadDescriptor PayloadManager::ResolveSnapshot(const PayloadID& id) {
@@ -129,7 +141,10 @@ PayloadDescriptor PayloadManager::ResolveSnapshot(const PayloadID& id) {
   auto record = repository_->GetPayload(*tx, Key(id));
   if (!record.has_value()) throw payload::util::NotFound("resolve snapshot: payload not found; verify payload id");
   tx->Commit();
-  return ToPayloadDescriptor(*record);
+
+  auto descriptor = ToPayloadDescriptor(*record);
+  CacheSnapshot(descriptor);
+  return descriptor;
 }
 
 AcquireReadLeaseResponse PayloadManager::AcquireReadLease(const PayloadID& id, Tier min_tier, uint64_t min_duration_ms) {
@@ -164,7 +179,22 @@ PayloadDescriptor PayloadManager::Promote(const PayloadID& id, Tier target) {
   record->version++;
   ThrowIfDbError(repository_->UpdatePayload(*tx, *record), "promote payload");
   tx->Commit();
-  return ToPayloadDescriptor(*record);
+  const auto descriptor = ToPayloadDescriptor(*record);
+  CacheSnapshot(descriptor);
+  return descriptor;
+}
+
+void PayloadManager::HydrateCaches() {
+  auto tx = repository_->Begin();
+  const auto records = repository_->ListPayloads(*tx);
+  tx->Commit();
+
+  std::unique_lock lock(snapshot_cache_mutex_);
+  snapshot_cache_.clear();
+  for (const auto& record : records) {
+    const auto descriptor = ToPayloadDescriptor(record);
+    snapshot_cache_[descriptor.id().value()] = descriptor;
+  }
 }
 
 void PayloadManager::ExecuteSpill(const PayloadID& id, Tier target, bool) {

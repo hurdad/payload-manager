@@ -47,6 +47,16 @@ std::optional<model::PayloadRecord> MemoryRepository::GetPayload(Transaction& t,
   return it->second;
 }
 
+std::vector<model::PayloadRecord> MemoryRepository::ListPayloads(Transaction& t) {
+  const auto& s = TX(t).View();
+  std::vector<model::PayloadRecord> records;
+  records.reserve(s.payloads.size());
+  for (const auto& [_, record] : s.payloads) {
+    records.push_back(record);
+  }
+  return records;
+}
+
 Result MemoryRepository::UpdatePayload(Transaction& t, const model::PayloadRecord& r) {
   auto& s = TX(t).Mutable();
   if (!s.payloads.contains(r.id)) return Result::Err(ErrorCode::NotFound);

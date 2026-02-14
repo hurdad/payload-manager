@@ -14,6 +14,7 @@ class PgRepository final : public db::Repository {
 
   Result                              InsertPayload(Transaction&, const model::PayloadRecord&) override;
   std::optional<model::PayloadRecord> GetPayload(Transaction&, const std::string&) override;
+  std::vector<model::PayloadRecord>   ListPayloads(Transaction&) override;
   Result                              UpdatePayload(Transaction&, const model::PayloadRecord&) override;
   Result                              DeletePayload(Transaction&, const std::string&) override;
 
