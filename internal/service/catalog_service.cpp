@@ -1,8 +1,13 @@
 #include "catalog_service.hpp"
 
+#include <queue>
 #include <stdexcept>
+#include <unordered_set>
 
 #include "internal/core/payload_manager.hpp"
+#include "internal/db/api/repository.hpp"
+#include "internal/db/model/lineage_record.hpp"
+#include "internal/db/model/metadata_record.hpp"
 #include "internal/util/errors.hpp"
 #include "internal/lineage/lineage_graph.hpp"
 #include "internal/metadata/metadata_cache.hpp"
@@ -12,6 +17,26 @@
 namespace payload::service {
 
 using namespace payload::manager::v1;
+
+namespace {
+
+void ThrowIfDbError(const payload::db::Result& result, const std::string& prefix) {
+  if (result) {
+    return;
+  }
+  throw std::runtime_error(prefix + ": " + result.message);
+}
+
+LineageEdge ToLineageEdge(const payload::db::model::LineageRecord& record) {
+  LineageEdge edge;
+  edge.mutable_parent()->set_value(record.parent_id);
+  edge.set_operation(record.operation);
+  edge.set_role(record.role);
+  edge.set_parameters(record.parameters);
+  return edge;
+}
+
+} // namespace
 
 CatalogService::CatalogService(ServiceContext ctx) : ctx_(std::move(ctx)) {
 }
@@ -64,33 +89,101 @@ SpillResponse CatalogService::Spill(const SpillRequest& req) {
 }
 
 void CatalogService::AddLineage(const AddLineageRequest& req) {
-  ctx_.lineage->Add(req);
+  auto tx = ctx_.repository->Begin();
+  for (const auto& edge : req.parents()) {
+    payload::db::model::LineageRecord record;
+    record.parent_id     = edge.parent().value();
+    record.child_id      = req.child().value();
+    record.operation     = edge.operation();
+    record.role          = edge.role();
+    record.parameters    = edge.parameters();
+    record.created_at_ms = payload::util::ToUnixMillis(payload::util::Now());
+    ThrowIfDbError(ctx_.repository->InsertLineage(*tx, record), "insert lineage");
+  }
+  tx->Commit();
+
+  if (ctx_.lineage) {
+    ctx_.lineage->Add(req);
+  }
 }
 
 GetLineageResponse CatalogService::GetLineage(const GetLineageRequest& req) {
   GetLineageResponse resp;
 
-  auto edges = ctx_.lineage->Query(req);
-  for (auto& e : edges) *resp.add_edges() = e;
+  auto tx = ctx_.repository->Begin();
+
+  const auto     upstream  = req.upstream();
+  const uint32_t max_depth = req.max_depth();
+  std::queue<std::pair<std::string, uint32_t>> q;
+  std::unordered_set<std::string>              visited;
+
+  q.emplace(req.id().value(), 0);
+  visited.insert(req.id().value());
+
+  while (!q.empty()) {
+    const auto [node, depth] = q.front();
+    q.pop();
+
+    if (max_depth && depth >= max_depth) {
+      continue;
+    }
+
+    const auto records = upstream ? ctx_.repository->GetParents(*tx, node) : ctx_.repository->GetChildren(*tx, node);
+
+    for (const auto& record : records) {
+      *resp.add_edges() = ToLineageEdge(record);
+
+      const auto& next_id = upstream ? record.parent_id : record.child_id;
+      if (visited.insert(next_id).second) {
+        q.emplace(next_id, depth + 1);
+      }
+    }
+  }
+
+  tx->Commit();
 
   return resp;
 }
 
 void CatalogService::Delete(const DeleteRequest& req) {
   ctx_.manager->Delete(req.id(), req.force());
-  ctx_.metadata->Remove(req.id());
+  if (ctx_.metadata) {
+    ctx_.metadata->Remove(req.id());
+  }
 }
 
 UpdatePayloadMetadataResponse CatalogService::UpdateMetadata(const UpdatePayloadMetadataRequest& req) {
   UpdatePayloadMetadataResponse resp;
 
-  if (req.mode() == METADATA_UPDATE_MODE_REPLACE)
-    ctx_.metadata->Put(req.id(), req.metadata());
-  else
-    ctx_.metadata->Merge(req.id(), req.metadata());
+  auto tx             = ctx_.repository->Begin();
+  auto current_record = ctx_.repository->GetMetadata(*tx, req.id().value());
+
+  payload::db::model::MetadataRecord record;
+  record.id = req.id().value();
+
+  if (req.mode() == METADATA_UPDATE_MODE_REPLACE || !current_record.has_value()) {
+    record.json   = req.metadata().data();
+    record.schema = req.metadata().schema();
+  } else {
+    record.json   = req.metadata().data().empty() ? current_record->json : req.metadata().data();
+    record.schema = req.metadata().schema().empty() ? current_record->schema : req.metadata().schema();
+  }
+  record.updated_at_ms = payload::util::ToUnixMillis(payload::util::Now());
+
+  ThrowIfDbError(ctx_.repository->UpsertMetadata(*tx, record), "upsert metadata");
+  tx->Commit();
+
+  PayloadMetadata stored;
+  *stored.mutable_id() = req.id();
+  stored.set_data(record.json);
+  stored.set_schema(record.schema);
+
+  if (ctx_.metadata) {
+    ctx_.metadata->Put(req.id(), stored);
+  }
 
   *resp.mutable_id()         = req.id();
-  *resp.mutable_metadata()   = req.metadata();
+  *resp.mutable_metadata()   = stored;
   *resp.mutable_updated_at() = payload::util::ToProto(payload::util::Now());
   return resp;
 }
