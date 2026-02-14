@@ -24,6 +24,25 @@ public:
   std::vector<model::LineageRecord> GetParents(Transaction&, const std::string&) override;
   std::vector<model::LineageRecord> GetChildren(Transaction&, const std::string&) override;
 
+  Result CreateStream(Transaction&, model::StreamRecord&) override;
+  std::optional<model::StreamRecord> GetStreamByName(
+      Transaction&, const std::string& stream_namespace, const std::string& name) override;
+  std::optional<model::StreamRecord> GetStreamById(Transaction&, uint64_t stream_id) override;
+  Result DeleteStreamByName(Transaction&, const std::string& stream_namespace,
+                            const std::string& name) override;
+  Result DeleteStreamById(Transaction&, uint64_t stream_id) override;
+  Result AppendStreamEntries(Transaction&, uint64_t stream_id,
+                             std::vector<model::StreamEntryRecord>& entries) override;
+  std::vector<model::StreamEntryRecord> ReadStreamEntries(
+      Transaction&, uint64_t stream_id, uint64_t start_offset,
+      std::optional<uint64_t> max_entries,
+      std::optional<uint64_t> min_append_time_ms) override;
+  std::vector<model::StreamEntryRecord> ReadStreamEntriesRange(
+      Transaction&, uint64_t stream_id, uint64_t start_offset, uint64_t end_offset) override;
+  Result CommitConsumerOffset(Transaction&, const model::StreamConsumerOffsetRecord&) override;
+  std::optional<model::StreamConsumerOffsetRecord> GetConsumerOffset(
+      Transaction&, uint64_t stream_id, const std::string& consumer_group) override;
+
 private:
   std::shared_ptr<PgPool> pool_;
 

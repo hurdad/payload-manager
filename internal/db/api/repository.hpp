@@ -9,6 +9,9 @@
 #include "internal/db/model/payload_record.hpp"
 #include "internal/db/model/metadata_record.hpp"
 #include "internal/db/model/lineage_record.hpp"
+#include "internal/db/model/stream_record.hpp"
+#include "internal/db/model/stream_entry_record.hpp"
+#include "internal/db/model/stream_consumer_offset_record.hpp"
 
 namespace payload::db {
 
@@ -71,6 +74,44 @@ public:
 
     virtual std::vector<model::LineageRecord>
     GetChildren(Transaction&, const std::string& id) = 0;
+
+    // ---------------------------------------------------------------------
+    // Streams
+    // ---------------------------------------------------------------------
+
+    virtual Result CreateStream(Transaction&, model::StreamRecord&) = 0;
+
+    virtual std::optional<model::StreamRecord>
+    GetStreamByName(Transaction&, const std::string& stream_namespace,
+                    const std::string& name) = 0;
+
+    virtual std::optional<model::StreamRecord>
+    GetStreamById(Transaction&, uint64_t stream_id) = 0;
+
+    virtual Result DeleteStreamByName(Transaction&, const std::string& stream_namespace,
+                                      const std::string& name) = 0;
+
+    virtual Result DeleteStreamById(Transaction&, uint64_t stream_id) = 0;
+
+    // Appends entries while assigning contiguous offsets for the stream.
+    virtual Result AppendStreamEntries(Transaction&, uint64_t stream_id,
+                                       std::vector<model::StreamEntryRecord>& entries) = 0;
+
+    virtual std::vector<model::StreamEntryRecord>
+    ReadStreamEntries(Transaction&, uint64_t stream_id, uint64_t start_offset,
+                      std::optional<uint64_t> max_entries,
+                      std::optional<uint64_t> min_append_time_ms) = 0;
+
+    virtual std::vector<model::StreamEntryRecord>
+    ReadStreamEntriesRange(Transaction&, uint64_t stream_id, uint64_t start_offset,
+                           uint64_t end_offset) = 0;
+
+    virtual Result CommitConsumerOffset(
+        Transaction&, const model::StreamConsumerOffsetRecord& record) = 0;
+
+    virtual std::optional<model::StreamConsumerOffsetRecord>
+    GetConsumerOffset(Transaction&, uint64_t stream_id,
+                      const std::string& consumer_group) = 0;
 };
 
 }

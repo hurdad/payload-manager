@@ -1,4 +1,5 @@
 #include "pg_repository.hpp"
+
 #include "payload/manager/v1.hpp"
 
 namespace payload::db::postgres {
@@ -80,5 +81,216 @@ PgRepository::GetParents(Transaction&, const std::string&) { return {}; }
 
 std::vector<model::LineageRecord>
 PgRepository::GetChildren(Transaction&, const std::string&) { return {}; }
+
+Result PgRepository::CreateStream(Transaction& t, model::StreamRecord& r) {
+    try {
+        auto res = TX(t).Work().exec_params(
+            "INSERT INTO streams(namespace,name,retention_max_entries,retention_max_age_sec,created_at) "
+            "VALUES($1,$2,NULLIF($3,0),NULLIF($4,0),CASE WHEN $5=0 THEN now() ELSE to_timestamp($5 / 1000.0) END) "
+            "RETURNING stream_id, EXTRACT(EPOCH FROM created_at)::bigint * 1000;",
+            r.stream_namespace, r.name, r.retention_max_entries, r.retention_max_age_sec,
+            r.created_at_ms);
+        r.stream_id = res[0][0].as<uint64_t>();
+        r.created_at_ms = res[0][1].as<uint64_t>();
+        return Result::Ok();
+    } catch (const std::exception& e) {
+        return Translate(e);
+    }
+}
+
+std::optional<model::StreamRecord> PgRepository::GetStreamByName(
+    Transaction& t, const std::string& stream_namespace, const std::string& name) {
+    auto res = TX(t).Work().exec_params(
+        "SELECT stream_id, namespace, name, COALESCE(retention_max_entries,0), "
+        "COALESCE(retention_max_age_sec,0), EXTRACT(EPOCH FROM created_at)::bigint * 1000 "
+        "FROM streams WHERE namespace=$1 AND name=$2;",
+        stream_namespace, name);
+    if (res.empty()) {
+        return std::nullopt;
+    }
+
+    model::StreamRecord r;
+    r.stream_id = res[0][0].as<uint64_t>();
+    r.stream_namespace = res[0][1].c_str();
+    r.name = res[0][2].c_str();
+    r.retention_max_entries = res[0][3].as<uint64_t>();
+    r.retention_max_age_sec = res[0][4].as<uint64_t>();
+    r.created_at_ms = res[0][5].as<uint64_t>();
+    return r;
+}
+
+std::optional<model::StreamRecord>
+PgRepository::GetStreamById(Transaction& t, uint64_t stream_id) {
+    auto res = TX(t).Work().exec_params(
+        "SELECT stream_id, namespace, name, COALESCE(retention_max_entries,0), "
+        "COALESCE(retention_max_age_sec,0), EXTRACT(EPOCH FROM created_at)::bigint * 1000 "
+        "FROM streams WHERE stream_id=$1;",
+        stream_id);
+    if (res.empty()) {
+        return std::nullopt;
+    }
+
+    model::StreamRecord r;
+    r.stream_id = res[0][0].as<uint64_t>();
+    r.stream_namespace = res[0][1].c_str();
+    r.name = res[0][2].c_str();
+    r.retention_max_entries = res[0][3].as<uint64_t>();
+    r.retention_max_age_sec = res[0][4].as<uint64_t>();
+    r.created_at_ms = res[0][5].as<uint64_t>();
+    return r;
+}
+
+Result PgRepository::DeleteStreamByName(Transaction& t, const std::string& stream_namespace,
+                                        const std::string& name) {
+    try {
+        TX(t).Work().exec_params("DELETE FROM streams WHERE namespace=$1 AND name=$2;",
+                                 stream_namespace, name);
+        return Result::Ok();
+    } catch (const std::exception& e) {
+        return Translate(e);
+    }
+}
+
+Result PgRepository::DeleteStreamById(Transaction& t, uint64_t stream_id) {
+    try {
+        TX(t).Work().exec_params("DELETE FROM streams WHERE stream_id=$1;", stream_id);
+        return Result::Ok();
+    } catch (const std::exception& e) {
+        return Translate(e);
+    }
+}
+
+Result PgRepository::AppendStreamEntries(
+    Transaction& t, uint64_t stream_id, std::vector<model::StreamEntryRecord>& entries) {
+    try {
+        auto max_res = TX(t).Work().exec_params(
+            "SELECT COALESCE(MAX(offset), -1) FROM stream_entries WHERE stream_id=$1;",
+            stream_id);
+        uint64_t next_offset = max_res[0][0].as<int64_t>() + 1;
+
+        for (auto& e : entries) {
+            e.stream_id = stream_id;
+            e.offset = next_offset++;
+
+            auto insert_res = TX(t).Work().exec_params(
+                "INSERT INTO stream_entries(stream_id,offset,payload_uuid,event_time,append_time,duration_ns,tags) "
+                "VALUES($1,$2,$3::uuid,"
+                "CASE WHEN $4=0 THEN NULL ELSE to_timestamp($4 / 1000.0) END,"
+                "CASE WHEN $5=0 THEN now() ELSE to_timestamp($5 / 1000.0) END,"
+                "NULLIF($6,0),NULLIF($7,'')) "
+                "RETURNING EXTRACT(EPOCH FROM append_time)::bigint * 1000;",
+                e.stream_id, e.offset, e.payload_uuid, e.event_time_ms, e.append_time_ms,
+                e.duration_ns, e.tags);
+            e.append_time_ms = insert_res[0][0].as<uint64_t>();
+        }
+        return Result::Ok();
+    } catch (const std::exception& e) {
+        return Translate(e);
+    }
+}
+
+std::vector<model::StreamEntryRecord> PgRepository::ReadStreamEntries(
+    Transaction& t, uint64_t stream_id, uint64_t start_offset,
+    std::optional<uint64_t> max_entries,
+    std::optional<uint64_t> min_append_time_ms) {
+    std::vector<model::StreamEntryRecord> out;
+
+    std::string sql =
+        "SELECT stream_id,offset,payload_uuid::text,"
+        "COALESCE(EXTRACT(EPOCH FROM event_time)::bigint * 1000,0),"
+        "EXTRACT(EPOCH FROM append_time)::bigint * 1000,"
+        "COALESCE(duration_ns,0),COALESCE(tags::text,'') "
+        "FROM stream_entries WHERE stream_id=$1 AND offset>=$2";
+    if (min_append_time_ms.has_value()) {
+        sql += " AND append_time>=to_timestamp($3 / 1000.0)";
+    }
+    sql += " ORDER BY offset ASC";
+    if (max_entries.has_value()) {
+        sql += " LIMIT " + std::to_string(*max_entries);
+    }
+    sql += ";";
+
+    pqxx::result res;
+    if (min_append_time_ms.has_value()) {
+        res = TX(t).Work().exec_params(sql, stream_id, start_offset, *min_append_time_ms);
+    } else {
+        res = TX(t).Work().exec_params(sql, stream_id, start_offset);
+    }
+
+    for (const auto& row : res) {
+        model::StreamEntryRecord e;
+        e.stream_id = row[0].as<uint64_t>();
+        e.offset = row[1].as<uint64_t>();
+        e.payload_uuid = row[2].c_str();
+        e.event_time_ms = row[3].as<uint64_t>();
+        e.append_time_ms = row[4].as<uint64_t>();
+        e.duration_ns = row[5].as<uint64_t>();
+        e.tags = row[6].c_str();
+        out.push_back(std::move(e));
+    }
+
+    return out;
+}
+
+std::vector<model::StreamEntryRecord> PgRepository::ReadStreamEntriesRange(
+    Transaction& t, uint64_t stream_id, uint64_t start_offset, uint64_t end_offset) {
+    std::vector<model::StreamEntryRecord> out;
+
+    auto res = TX(t).Work().exec_params(
+        "SELECT stream_id,offset,payload_uuid::text,"
+        "COALESCE(EXTRACT(EPOCH FROM event_time)::bigint * 1000,0),"
+        "EXTRACT(EPOCH FROM append_time)::bigint * 1000,"
+        "COALESCE(duration_ns,0),COALESCE(tags::text,'') "
+        "FROM stream_entries WHERE stream_id=$1 AND offset>=$2 AND offset<=$3 "
+        "ORDER BY offset ASC;",
+        stream_id, start_offset, end_offset);
+
+    for (const auto& row : res) {
+        model::StreamEntryRecord e;
+        e.stream_id = row[0].as<uint64_t>();
+        e.offset = row[1].as<uint64_t>();
+        e.payload_uuid = row[2].c_str();
+        e.event_time_ms = row[3].as<uint64_t>();
+        e.append_time_ms = row[4].as<uint64_t>();
+        e.duration_ns = row[5].as<uint64_t>();
+        e.tags = row[6].c_str();
+        out.push_back(std::move(e));
+    }
+
+    return out;
+}
+
+Result PgRepository::CommitConsumerOffset(
+    Transaction& t, const model::StreamConsumerOffsetRecord& record) {
+    try {
+        TX(t).Work().exec_params(
+            "INSERT INTO stream_consumer_offsets(stream_id,consumer_group,offset,updated_at) "
+            "VALUES($1,$2,$3,CASE WHEN $4=0 THEN now() ELSE to_timestamp($4 / 1000.0) END) "
+            "ON CONFLICT(stream_id,consumer_group) DO UPDATE SET "
+            "offset=excluded.offset, updated_at=excluded.updated_at;",
+            record.stream_id, record.consumer_group, record.offset, record.updated_at_ms);
+        return Result::Ok();
+    } catch (const std::exception& e) {
+        return Translate(e);
+    }
+}
+
+std::optional<model::StreamConsumerOffsetRecord> PgRepository::GetConsumerOffset(
+    Transaction& t, uint64_t stream_id, const std::string& consumer_group) {
+    auto res = TX(t).Work().exec_params(
+        "SELECT stream_id,consumer_group,offset,EXTRACT(EPOCH FROM updated_at)::bigint * 1000 "
+        "FROM stream_consumer_offsets WHERE stream_id=$1 AND consumer_group=$2;",
+        stream_id, consumer_group);
+    if (res.empty()) {
+        return std::nullopt;
+    }
+
+    model::StreamConsumerOffsetRecord r;
+    r.stream_id = res[0][0].as<uint64_t>();
+    r.consumer_group = res[0][1].c_str();
+    r.offset = res[0][2].as<uint64_t>();
+    r.updated_at_ms = res[0][3].as<uint64_t>();
+    return r;
+}
 
 }
