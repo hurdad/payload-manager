@@ -2,6 +2,7 @@
 
 #include <arrow/result.h>
 #include <stdexcept>
+#include "payload/manager/v1_compat.hpp"
 
 namespace payload::storage {
 

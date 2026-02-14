@@ -27,19 +27,19 @@ file(MAKE_DIRECTORY ${GENERATED_DIR})
 # ------------------------------------------------------------------------------
 
 set(ALL_PROTO_FILES
-        payload/manager/v1/id.proto
-        payload/manager/v1/types.proto
-        payload/manager/v1/policy.proto
-        payload/manager/v1/placement.proto
-        payload/manager/v1/lease.proto
-        payload/manager/v1/lifecycle.proto
-        payload/manager/v1/tiering.proto
-        payload/manager/v1/metadata.proto
-        payload/manager/v1/catalog.proto
-        payload/manager/v1/lineage.proto
-        payload/manager/v1/stats.proto
-        payload/manager/v1/stream.proto
-        payload/manager/v1/archive_metadata.proto
+        payload/manager/core/v1/id.proto
+        payload/manager/core/v1/types.proto
+        payload/manager/core/v1/policy.proto
+        payload/manager/core/v1/placement.proto
+        payload/manager/runtime/v1/lease.proto
+        payload/manager/runtime/v1/lifecycle.proto
+        payload/manager/runtime/v1/tiering.proto
+        payload/manager/runtime/v1/stream.proto
+        payload/manager/catalog/v1/metadata.proto
+        payload/manager/catalog/v1/catalog.proto
+        payload/manager/catalog/v1/lineage.proto
+        payload/manager/catalog/v1/archive_metadata.proto
+        payload/manager/admin/v1/stats.proto
 )
 
 # ------------------------------------------------------------------------------
@@ -47,10 +47,10 @@ set(ALL_PROTO_FILES
 # ------------------------------------------------------------------------------
 
 set(SERVICE_PROTO_FILES
-        payload/manager/v1/payload_data_service.proto
-        payload/manager/v1/payload_catalog_service.proto
-        payload/manager/v1/payload_stream_service.proto
-        payload/manager/v1/payload_admin_service.proto
+        payload/manager/services/v1/payload_data_service.proto
+        payload/manager/services/v1/payload_catalog_service.proto
+        payload/manager/services/v1/payload_stream_service.proto
+        payload/manager/services/v1/payload_admin_service.proto
 )
 
 set(ALL_DEP_PROTOS ${ALL_PROTO_FILES} ${SERVICE_PROTO_FILES})

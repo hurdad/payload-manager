@@ -1,8 +1,8 @@
 syntax = "proto3";
 
-package payload.manager.v1;
+package payload.manager.core.v1;
 
-import "payload/manager/v1/types.proto";
+import "payload/manager/core/v1/types.proto";
 
 /*
   Promotion policy controls behavior when a payload must move to a higher tier.

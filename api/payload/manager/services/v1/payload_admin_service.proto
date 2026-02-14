@@ -1,0 +1,11 @@
+syntax = "proto3";
+package payload.manager.services.v1;
+
+import "payload/manager/admin/v1/stats.proto";
+
+/*
+  Operational inspection API.
+*/
+service PayloadAdminService {
+  rpc Stats(payload.manager.admin.v1.StatsRequest) returns (payload.manager.admin.v1.StatsResponse);
+}

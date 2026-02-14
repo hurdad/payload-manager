@@ -1,6 +1,7 @@
 #include "sqlite_repository.hpp"
 
 #include <sqlite3.h>
+#include "payload/manager/v1_compat.hpp"
 
 namespace payload::db::sqlite {
 

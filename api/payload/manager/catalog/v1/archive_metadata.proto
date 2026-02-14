@@ -1,11 +1,11 @@
 syntax = "proto3";
 
-package payload.manager.v1;
+package payload.manager.catalog.v1;
 
 import "google/protobuf/timestamp.proto";
-import "payload/manager/v1/id.proto";
-import "payload/manager/v1/lineage.proto";
-import "payload/manager/v1/placement.proto";
+import "payload/manager/core/v1/id.proto";
+import "payload/manager/catalog/v1/lineage.proto";
+import "payload/manager/core/v1/placement.proto";
 
 // ============================================================================
 // TOP LEVEL RECORD
@@ -15,7 +15,7 @@ import "payload/manager/v1/placement.proto";
 message PayloadArchiveMetadata {
 
   // 16-byte globally unique identifier of payload
-  PayloadID uuid = 1;
+  payload.manager.core.v1.PayloadID uuid = 1;
 
   // version of this metadata schema (for long-term evolution)
   uint32 metadata_version = 2;
@@ -33,10 +33,10 @@ message PayloadArchiveMetadata {
   string producer = 6;
 
   // immutable description of the data
-  PayloadDescriptor descriptor = 10;
+  payload.manager.core.v1.PayloadDescriptor payload_descriptor = 10;
 
   // provenance / derivation graph
-  repeated LineageEdge lineage = 20;
+  repeated payload.manager.catalog.v1.LineageEdge lineage = 20;
 
   // checksum validation
   Integrity integrity = 30;

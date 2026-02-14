@@ -4,7 +4,8 @@
 #include <unordered_map>
 #include <vector>
 
-#include "payload/manager/v1/lineage.pb.h"
+#include "payload/manager/catalog/v1/lineage.pb.h"
+#include "payload/manager/v1_compat.hpp"
 
 namespace payload::lineage {
 

@@ -1,5 +1,6 @@
 #include "admin_server.hpp"
 #include "grpc_error.hpp"
+#include "payload/manager/v1_compat.hpp"
 
 namespace payload::grpc {
 

@@ -1,4 +1,5 @@
 #include "admin_service.hpp"
+#include "payload/manager/v1_compat.hpp"
 
 namespace payload::service {
 

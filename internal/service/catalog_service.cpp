@@ -2,6 +2,7 @@
 #include "internal/core/payload_manager.hpp"
 #include "internal/metadata/metadata_cache.hpp"
 #include "internal/lineage/lineage_graph.hpp"
+#include "payload/manager/v1_compat.hpp"
 
 namespace payload::service {
 

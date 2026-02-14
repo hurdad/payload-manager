@@ -3,8 +3,9 @@
 #include <chrono>
 #include <string>
 
-#include "payload/manager/v1/id.pb.h"
-#include "payload/manager/v1/placement.pb.h"
+#include "payload/manager/core/v1/id.pb.h"
+#include "payload/manager/core/v1/placement.pb.h"
+#include "payload/manager/v1_compat.hpp"
 
 namespace payload::lease {
 

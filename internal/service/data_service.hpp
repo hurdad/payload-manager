@@ -1,7 +1,8 @@
 #pragma once
 
-#include "payload/manager/v1/payload_data_service.pb.h"
+#include "payload/manager/services/v1/payload_data_service.pb.h"
 #include "service_context.hpp"
+#include "payload/manager/v1_compat.hpp"
 
 namespace payload::service {
 

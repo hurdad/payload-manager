@@ -1,11 +1,11 @@
 syntax = "proto3";
 
-package payload.manager.v1;
+package payload.manager.catalog.v1;
 
 import "google/protobuf/timestamp.proto";
-import "payload/manager/v1/id.proto";
-import "payload/manager/v1/metadata.proto";
-import "payload/manager/v1/policy.proto";
+import "payload/manager/core/v1/id.proto";
+import "payload/manager/catalog/v1/metadata.proto";
+import "payload/manager/core/v1/policy.proto";
 
 /*
   Catalog operations manage semantic metadata attached to a payload.
@@ -30,10 +30,10 @@ import "payload/manager/v1/policy.proto";
 message UpdatePayloadMetadataRequest {
 
   // Target payload
-  PayloadID id = 1;
+  payload.manager.core.v1.PayloadID id = 1;
 
   // How to apply update
-  MetadataUpdateMode mode = 2;
+  payload.manager.core.v1.MetadataUpdateMode mode = 2;
 
   // New metadata
   PayloadMetadata metadata = 3;
@@ -44,7 +44,7 @@ message UpdatePayloadMetadataRequest {
 }
 
 message UpdatePayloadMetadataResponse {
-  PayloadID id = 1;
+  payload.manager.core.v1.PayloadID id = 1;
   PayloadMetadata metadata = 2;
   google.protobuf.Timestamp updated_at = 3;
 }
@@ -60,13 +60,13 @@ message UpdatePayloadMetadataResponse {
   Used for provenance tracking, reproducibility, and lineage context.
 */
 message AppendPayloadMetadataEventRequest {
-  PayloadID id = 1;
+  payload.manager.core.v1.PayloadID id = 1;
   PayloadMetadata metadata = 2;
   string source = 3;
   string version = 4;
 }
 
 message AppendPayloadMetadataEventResponse {
-  PayloadID id = 1;
+  payload.manager.core.v1.PayloadID id = 1;
   google.protobuf.Timestamp event_time = 2;
 }

@@ -5,6 +5,7 @@
 
 #include "internal/storage/common/path_utils.hpp"
 #include "internal/storage/common/arrow_utils.hpp"
+#include "payload/manager/v1_compat.hpp"
 
 namespace payload::storage {
 

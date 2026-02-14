@@ -5,6 +5,7 @@
 
 #include "storage_backend.hpp"
 #include "config/config.pb.h"
+#include "payload/manager/v1_compat.hpp"
 
 namespace payload::storage {
 

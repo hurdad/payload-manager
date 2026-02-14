@@ -1,0 +1,54 @@
+syntax = "proto3";
+package payload.manager.runtime.v1;
+
+import "payload/manager/core/v1/placement.proto";
+import "payload/manager/core/v1/policy.proto";
+import "payload/manager/core/v1/types.proto";
+import "payload/manager/core/v1/id.proto";
+
+/*
+  BLOCKING policy waits until requested durability
+  or definitive failure.
+*/
+message PromoteRequest {
+  payload.manager.core.v1.PayloadID id = 1;
+  payload.manager.core.v1.Tier target_tier = 2;
+  payload.manager.core.v1.PromotionPolicy policy = 3;
+}
+
+message PromoteResponse {
+  payload.manager.core.v1.PayloadDescriptor payload_descriptor = 1;
+}
+
+message SpillRequest {
+  repeated payload.manager.core.v1.PayloadID ids = 1;
+  payload.manager.core.v1.SpillPolicy policy = 2;
+  bool wait_for_leases = 3;
+  bool fsync = 4;
+}
+
+message SpillResponse {
+  message Result {
+    payload.manager.core.v1.PayloadID id = 1;
+    bool ok = 2;
+    string error_message = 3;
+    payload.manager.core.v1.PayloadDescriptor payload_descriptor = 4;
+  }
+  repeated Result results = 1;
+}
+
+/*
+  Hint only — no guarantee.
+*/
+message PrefetchRequest {
+  payload.manager.core.v1.PayloadID id = 1;
+  payload.manager.core.v1.Tier target_tier = 2;
+}
+
+/*
+  Stronger than eviction policy but still best-effort.
+*/
+message PinRequest {
+  payload.manager.core.v1.PayloadID id = 1;
+  uint64 duration_ms = 2;
+}
