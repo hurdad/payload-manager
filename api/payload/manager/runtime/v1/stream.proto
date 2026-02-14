@@ -2,6 +2,7 @@ syntax = "proto3";
 package payload.manager.runtime.v1;
 
 import "google/protobuf/timestamp.proto";
+import "payload/manager/core/v1/id.proto";
 
 
 // ============================================================================
@@ -28,7 +29,7 @@ import "google/protobuf/timestamp.proto";
 //   * memory pointers
 //   * raw bytes
 //
-// Consumers must resolve payload_uuid via PayloadManager.
+// Consumers must resolve payload_id via PayloadManager.
 // ============================================================================
 
 
@@ -72,8 +73,8 @@ message StreamEntry {
   // never reused, never decreases
   uint64 offset = 2;
 
-  // UUID returned by PayloadManager::Commit
-  bytes payload_uuid = 3; // exactly 16 bytes
+  // Canonical payload identity returned by PayloadManager::Commit
+  payload.manager.core.v1.PayloadID payload_id = 3;
 
   // producer event timestamp (capture time)
   google.protobuf.Timestamp event_time = 4;
@@ -131,7 +132,7 @@ message AppendRequest {
 }
 
 message AppendItem {
-  bytes payload_uuid = 1; // must exist in payload manager
+  payload.manager.core.v1.PayloadID payload_id = 1; // must exist in payload manager
   google.protobuf.Timestamp event_time = 2;
   uint64 duration_ns = 3;
   map<string,string> tags = 4;
