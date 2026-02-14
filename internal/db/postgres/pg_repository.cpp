@@ -1,4 +1,5 @@
 #include "pg_repository.hpp"
+#include "payload/manager/v1_compat.hpp"
 
 namespace payload::db::postgres {
 

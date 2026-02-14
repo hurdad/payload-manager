@@ -1,5 +1,5 @@
 syntax = "proto3";
-package payload.manager.v1;
+package payload.manager.admin.v1;
 
 /*
   Instantaneous authoritative state snapshot.

@@ -1,26 +1,26 @@
 syntax = "proto3";
-package payload.manager.v1;
+package payload.manager.catalog.v1;
 
-import "payload/manager/v1/id.proto";
+import "payload/manager/core/v1/id.proto";
 
 /*
   Descriptive relationships only.
   Does NOT enforce execution ordering.
 */
 message LineageEdge {
-  PayloadID parent = 1;
+  payload.manager.core.v1.PayloadID parent = 1;
   string operation = 2;
   string role = 3;
   bytes parameters = 4;
 }
 
 message AddLineageRequest {
-  PayloadID child = 1;
+  payload.manager.core.v1.PayloadID child = 1;
   repeated LineageEdge parents = 2;
 }
 
 message GetLineageRequest {
-  PayloadID id = 1;
+  payload.manager.core.v1.PayloadID id = 1;
   bool upstream = 2;
   uint32 max_depth = 3;
 }

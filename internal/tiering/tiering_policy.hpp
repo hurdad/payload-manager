@@ -1,8 +1,9 @@
 #pragma once
 
 #include <optional>
-#include "payload/manager/v1/id.pb.h"
+#include "payload/manager/core/v1/id.pb.h"
 #include "pressure_state.hpp"
+#include "payload/manager/v1_compat.hpp"
 
 namespace payload::metadata { class MetadataCache; }
 

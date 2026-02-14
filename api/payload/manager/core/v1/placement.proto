@@ -1,10 +1,10 @@
 syntax = "proto3";
-package payload.manager.v1;
+package payload.manager.core.v1;
 
 import "google/protobuf/timestamp.proto";
-import "payload/manager/v1/types.proto";
-import "payload/manager/v1/policy.proto";
-import "payload/manager/v1/id.proto";
+import "payload/manager/core/v1/types.proto";
+import "payload/manager/core/v1/policy.proto";
+import "payload/manager/core/v1/id.proto";
 
 /*
   Payload bytes are immutable after CommitPayload().

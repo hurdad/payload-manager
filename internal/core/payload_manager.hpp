@@ -5,11 +5,12 @@
 #include <string>
 #include <unordered_map>
 
-#include "payload/manager/v1/id.pb.h"
-#include "payload/manager/v1/lease.pb.h"
-#include "payload/manager/v1/placement.pb.h"
-#include "payload/manager/v1/types.pb.h"
+#include "payload/manager/core/v1/id.pb.h"
+#include "payload/manager/runtime/v1/lease.pb.h"
+#include "payload/manager/core/v1/placement.pb.h"
+#include "payload/manager/core/v1/types.pb.h"
 #include "internal/storage/storage_factory.hpp"
+#include "payload/manager/v1_compat.hpp"
 
 namespace payload::lease { class LeaseManager; }
 namespace payload::metadata { class MetadataCache; }

@@ -7,6 +7,7 @@
 #include <grpcpp/security/credentials.h>
 
 #include "client/cpp/payload_client.h"
+#include "payload/manager/v1_compat.hpp"
 
 namespace {
 

@@ -1,5 +1,5 @@
 syntax = "proto3";
-package payload.manager.v1;
+package payload.manager.core.v1;
 
 /*
   Ordered from fastest → most durable.

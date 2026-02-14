@@ -1,5 +1,5 @@
 syntax = "proto3";
-package payload.manager.v1;
+package payload.manager.runtime.v1;
 
 import "google/protobuf/timestamp.proto";
 

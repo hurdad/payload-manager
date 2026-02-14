@@ -1,8 +1,8 @@
 syntax = "proto3";
-package payload.manager.v1;
+package payload.manager.catalog.v1;
 
 import "google/protobuf/timestamp.proto";
-import "payload/manager/v1/id.proto";
+import "payload/manager/core/v1/id.proto";
 
 /*
   Opaque application metadata.
@@ -11,7 +11,7 @@ import "payload/manager/v1/id.proto";
   Keep size small (KBs).
 */
 message PayloadMetadata {
-  PayloadID id = 1;
+  payload.manager.core.v1.PayloadID id = 1;
   bytes data = 2;
   string schema = 3;
 }
@@ -20,7 +20,7 @@ message PayloadMetadata {
   Immutable audit history entry.
 */
 message PayloadMetadataEvent {
-  PayloadID id = 1;
+  payload.manager.core.v1.PayloadID id = 1;
   google.protobuf.Timestamp ts = 2;
   bytes data = 3;
   string source = 4;

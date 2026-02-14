@@ -3,8 +3,9 @@
 #include <memory>
 #include <grpcpp/grpcpp.h>
 
-#include "payload/manager/v1/payload_data_service.grpc.pb.h"
+#include "payload/manager/services/v1/payload_data_service.grpc.pb.h"
 #include "internal/service/data_service.hpp"
+#include "payload/manager/v1_compat.hpp"
 
 namespace payload::grpc {
 

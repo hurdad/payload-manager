@@ -1,5 +1,6 @@
 #include "tiering_manager.hpp"
 #include <chrono>
+#include "payload/manager/v1_compat.hpp"
 
 namespace payload::tiering {
 

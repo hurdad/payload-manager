@@ -7,6 +7,7 @@
 
 #include "internal/storage/storage_backend.hpp"
 #include "cuda_context.hpp"
+#include "payload/manager/v1_compat.hpp"
 
 namespace payload::storage {
 

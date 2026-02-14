@@ -4,6 +4,7 @@
 #include <arrow/result.h>
 
 #include "internal/storage/common/arrow_utils.hpp"
+#include "payload/manager/v1_compat.hpp"
 
 namespace payload::storage {
 

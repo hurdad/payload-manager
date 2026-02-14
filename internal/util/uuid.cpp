@@ -3,6 +3,7 @@
 #include <sstream>
 #include <iomanip>
 #include <stdexcept>
+#include "payload/manager/v1_compat.hpp"
 
 namespace payload::util {
 

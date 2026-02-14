@@ -1,4 +1,5 @@
 #include "lease_table.hpp"
+#include "payload/manager/v1_compat.hpp"
 
 namespace payload::lease {
 

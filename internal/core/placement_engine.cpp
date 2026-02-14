@@ -1,4 +1,5 @@
 #include "placement_engine.hpp"
+#include "payload/manager/v1_compat.hpp"
 
 namespace payload::core {
 

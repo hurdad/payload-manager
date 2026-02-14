@@ -1,5 +1,6 @@
 #include "tiering_policy.hpp"
 #include "internal/metadata/metadata_cache.hpp"
+#include "payload/manager/v1_compat.hpp"
 
 namespace payload::tiering {
 

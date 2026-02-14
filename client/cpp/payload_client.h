@@ -8,9 +8,10 @@
 #include <arrow/result.h>
 #include <grpcpp/channel.h>
 
-#include "payload/manager/v1/payload_admin_service.grpc.pb.h"
-#include "payload/manager/v1/payload_catalog_service.grpc.pb.h"
-#include "payload/manager/v1/payload_data_service.grpc.pb.h"
+#include "payload/manager/services/v1/payload_admin_service.grpc.pb.h"
+#include "payload/manager/services/v1/payload_catalog_service.grpc.pb.h"
+#include "payload/manager/services/v1/payload_data_service.grpc.pb.h"
+#include "payload/manager/v1_compat.hpp"
 
 namespace payload::manager::client {
 
