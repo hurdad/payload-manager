@@ -5,30 +5,41 @@ from __future__ import annotations
 from dataclasses import dataclass
 import mmap
 import os
-from typing import Union
+from typing import Iterator, Union
 import uuid as uuidlib
 
+from google.protobuf import empty_pb2
 import grpc
 import pyarrow as pa
 
-from payload.manager.v1 import payload_pb2
-from payload.manager.v1 import service_pb2
-from payload.manager.v1 import service_pb2_grpc
+from payload.manager.admin.v1 import stats_pb2
+from payload.manager.catalog.v1 import lineage_pb2
+from payload.manager.catalog.v1 import metadata_pb2
+from payload.manager.core.v1 import placement_pb2
+from payload.manager.core.v1 import policy_pb2
+from payload.manager.runtime.v1 import lease_pb2
+from payload.manager.runtime.v1 import lifecycle_pb2
+from payload.manager.runtime.v1 import stream_pb2
+from payload.manager.runtime.v1 import tiering_pb2
+from payload.manager.services.v1 import payload_admin_service_pb2_grpc
+from payload.manager.services.v1 import payload_catalog_service_pb2_grpc
+from payload.manager.services.v1 import payload_data_service_pb2_grpc
+from payload.manager.services.v1 import payload_stream_service_pb2_grpc
 
 UuidLike = Union[bytes, bytearray, memoryview, str, uuidlib.UUID]
 
 
 @dataclass(frozen=True)
 class WritablePayload:
-    descriptor: payload_pb2.PayloadDescriptor
+    descriptor: placement_pb2.PayloadDescriptor
     mmap_obj: mmap.mmap
     buffer: pa.Buffer
 
 
 @dataclass(frozen=True)
 class ReadablePayload:
-    descriptor: payload_pb2.PayloadDescriptor
-    lease_id: bytes
+    descriptor: placement_pb2.PayloadDescriptor
+    lease_id: str
     mmap_obj: mmap.mmap
     buffer: pa.Buffer
 
@@ -37,49 +48,138 @@ class PayloadClient:
     """Thin Python mirror of the C++ client behavior."""
 
     def __init__(self, channel: grpc.Channel):
-        self._stub = service_pb2_grpc.PayloadManagerStub(channel)
+        self._catalog_stub = payload_catalog_service_pb2_grpc.PayloadCatalogServiceStub(channel)
+        self._data_stub = payload_data_service_pb2_grpc.PayloadDataServiceStub(channel)
+        self._admin_stub = payload_admin_service_pb2_grpc.PayloadAdminServiceStub(channel)
+        self._stream_stub = payload_stream_service_pb2_grpc.PayloadStreamServiceStub(channel)
 
+    # Catalog service -----------------------------------------------------
+    def allocate_payload(
+        self, request: lifecycle_pb2.AllocatePayloadRequest
+    ) -> lifecycle_pb2.AllocatePayloadResponse:
+        return self._catalog_stub.AllocatePayload(request)
+
+    def commit_payload_rpc(
+        self, request: lifecycle_pb2.CommitPayloadRequest
+    ) -> lifecycle_pb2.CommitPayloadResponse:
+        return self._catalog_stub.CommitPayload(request)
+
+    def delete(self, request: lifecycle_pb2.DeleteRequest) -> empty_pb2.Empty:
+        return self._catalog_stub.Delete(request)
+
+    def promote(self, request: tiering_pb2.PromoteRequest) -> tiering_pb2.PromoteResponse:
+        return self._catalog_stub.Promote(request)
+
+    def spill(self, request: tiering_pb2.SpillRequest) -> tiering_pb2.SpillResponse:
+        return self._catalog_stub.Spill(request)
+
+    def add_lineage(self, request: lineage_pb2.AddLineageRequest) -> empty_pb2.Empty:
+        return self._catalog_stub.AddLineage(request)
+
+    def get_lineage(self, request: lineage_pb2.GetLineageRequest) -> lineage_pb2.GetLineageResponse:
+        return self._catalog_stub.GetLineage(request)
+
+    def update_payload_metadata(
+        self,
+        request: metadata_pb2.UpdatePayloadMetadataRequest,
+    ) -> metadata_pb2.UpdatePayloadMetadataResponse:
+        return self._catalog_stub.UpdatePayloadMetadata(request)
+
+    def append_payload_metadata_event(
+        self,
+        request: metadata_pb2.AppendPayloadMetadataEventRequest,
+    ) -> metadata_pb2.AppendPayloadMetadataEventResponse:
+        return self._catalog_stub.AppendPayloadMetadataEvent(request)
+
+    # Data service --------------------------------------------------------
+    def resolve_snapshot(self, request: lease_pb2.ResolveSnapshotRequest) -> lease_pb2.ResolveSnapshotResponse:
+        return self._data_stub.ResolveSnapshot(request)
+
+    def acquire_read_lease(
+        self, request: lease_pb2.AcquireReadLeaseRequest
+    ) -> lease_pb2.AcquireReadLeaseResponse:
+        return self._data_stub.AcquireReadLease(request)
+
+    def release_lease(self, request: lease_pb2.ReleaseLeaseRequest) -> empty_pb2.Empty:
+        return self._data_stub.ReleaseLease(request)
+
+    # Admin service -------------------------------------------------------
+    def stats(self, request: stats_pb2.StatsRequest) -> stats_pb2.StatsResponse:
+        return self._admin_stub.Stats(request)
+
+    # Stream service ------------------------------------------------------
+    def create_stream(self, request: stream_pb2.CreateStreamRequest) -> empty_pb2.Empty:
+        return self._stream_stub.CreateStream(request)
+
+    def delete_stream(self, request: stream_pb2.DeleteStreamRequest) -> empty_pb2.Empty:
+        return self._stream_stub.DeleteStream(request)
+
+    def append(self, request: stream_pb2.AppendRequest) -> stream_pb2.AppendResponse:
+        return self._stream_stub.Append(request)
+
+    def read(self, request: stream_pb2.ReadRequest) -> stream_pb2.ReadResponse:
+        return self._stream_stub.Read(request)
+
+    def subscribe(self, request: stream_pb2.SubscribeRequest) -> Iterator[stream_pb2.SubscribeResponse]:
+        return self._stream_stub.Subscribe(request)
+
+    def commit(self, request: stream_pb2.CommitRequest) -> empty_pb2.Empty:
+        return self._stream_stub.Commit(request)
+
+    def get_committed(self, request: stream_pb2.GetCommittedRequest) -> stream_pb2.GetCommittedResponse:
+        return self._stream_stub.GetCommitted(request)
+
+    def get_range(self, request: stream_pb2.GetRangeRequest) -> stream_pb2.GetRangeResponse:
+        return self._stream_stub.GetRange(request)
+
+    # Convenience methods -------------------------------------------------
     def allocate_writable_buffer(
         self,
         size_bytes: int,
-        preferred_tier: int = payload_pb2.TIER_RAM,
+        preferred_tier: int = placement_pb2.TIER_RAM,
         ttl_ms: int = 0,
         persist: bool = False,
+        eviction_policy: policy_pb2.EvictionPolicy | None = None,
     ) -> WritablePayload:
-        request = service_pb2.AllocatePayloadRequest(
+        request = lifecycle_pb2.AllocatePayloadRequest(
             size_bytes=size_bytes,
             preferred_tier=preferred_tier,
             ttl_ms=ttl_ms,
             persist=persist,
         )
-        response = self._stub.AllocatePayload(request)
+        if eviction_policy is not None:
+            request.eviction_policy.CopyFrom(eviction_policy)
+
+        response = self.allocate_payload(request)
         self._validate_has_location(response.payload_descriptor)
         mmap_obj, buffer = self._open_mutable_buffer(response.payload_descriptor)
         return WritablePayload(descriptor=response.payload_descriptor, mmap_obj=mmap_obj, buffer=buffer)
 
-    def commit_payload(self, uuid: UuidLike) -> service_pb2.CommitPayloadResponse:
-        return self._stub.CommitPayload(service_pb2.CommitPayloadRequest(uuid=_uuid_bytes(uuid)))
+    def commit_payload(self, payload_id: UuidLike) -> lifecycle_pb2.CommitPayloadResponse:
+        request = lifecycle_pb2.CommitPayloadRequest()
+        request.id.value = _uuid_bytes(payload_id)
+        return self.commit_payload_rpc(request)
 
-    def resolve(self, request: service_pb2.ResolveRequest) -> service_pb2.ResolveResponse:
-        return self._stub.Resolve(request)
-
-    def batch_resolve(self, request: service_pb2.BatchResolveRequest) -> service_pb2.BatchResolveResponse:
-        return self._stub.BatchResolve(request)
+    def resolve(self, payload_id: UuidLike) -> lease_pb2.ResolveSnapshotResponse:
+        request = lease_pb2.ResolveSnapshotRequest()
+        request.id.value = _uuid_bytes(payload_id)
+        return self.resolve_snapshot(request)
 
     def acquire_readable_buffer(
         self,
-        uuid: UuidLike,
-        min_tier: int = payload_pb2.TIER_RAM,
-        promotion_policy: int = service_pb2.PROMOTION_POLICY_BEST_EFFORT,
+        payload_id: UuidLike,
+        min_tier: int = placement_pb2.TIER_RAM,
+        promotion_policy: int = policy_pb2.PROMOTION_POLICY_BEST_EFFORT,
         min_lease_duration_ms: int = 0,
     ) -> ReadablePayload:
-        request = service_pb2.AcquireRequest(
-            uuid=_uuid_bytes(uuid),
+        request = lease_pb2.AcquireReadLeaseRequest(
             min_tier=min_tier,
             promotion_policy=promotion_policy,
             min_lease_duration_ms=min_lease_duration_ms,
+            mode=lease_pb2.LEASE_MODE_READ,
         )
-        response = self._stub.Acquire(request)
+        request.id.value = _uuid_bytes(payload_id)
+        response = self.acquire_read_lease(request)
         self._validate_has_location(response.payload_descriptor)
 
         mmap_obj, buffer = self._open_readable_buffer(response.payload_descriptor)
@@ -90,64 +190,10 @@ class PayloadClient:
             buffer=buffer,
         )
 
-    def release(self, lease_id: UuidLike) -> None:
-        self._stub.Release(service_pb2.ReleaseRequest(lease_id=_uuid_bytes(lease_id)))
+    def release(self, lease_id: str) -> None:
+        self.release_lease(lease_pb2.ReleaseLeaseRequest(lease_id=lease_id))
 
-    def promote(self, request: service_pb2.PromoteRequest) -> service_pb2.PromoteResponse:
-        return self._stub.Promote(request)
-
-    def spill(self, request: service_pb2.SpillRequest) -> service_pb2.SpillResponse:
-        return self._stub.Spill(request)
-
-    def delete(self, request: service_pb2.DeleteRequest) -> None:
-        self._stub.Delete(request)
-
-    def add_lineage(self, request: service_pb2.AddLineageRequest) -> None:
-        self._stub.AddLineage(request)
-
-    def get_lineage(self, request: service_pb2.GetLineageRequest) -> service_pb2.GetLineageResponse:
-        return self._stub.GetLineage(request)
-
-    def update_payload_metadata(
-        self,
-        request: service_pb2.UpdatePayloadMetadataRequest,
-    ) -> service_pb2.UpdatePayloadMetadataResponse:
-        return self._stub.UpdatePayloadMetadata(request)
-
-    def append_payload_metadata_event(
-        self,
-        request: service_pb2.AppendPayloadMetadataEventRequest,
-    ) -> service_pb2.AppendPayloadMetadataEventResponse:
-        return self._stub.AppendPayloadMetadataEvent(request)
-
-    def get_payload_metadata(
-        self,
-        request: service_pb2.GetPayloadMetadataRequest,
-    ) -> service_pb2.GetPayloadMetadataResponse:
-        return self._stub.GetPayloadMetadata(request)
-
-    def list_payload_metadata_events(
-        self,
-        request: service_pb2.ListPayloadMetadataEventsRequest,
-    ) -> service_pb2.ListPayloadMetadataEventsResponse:
-        return self._stub.ListPayloadMetadataEvents(request)
-
-    def update_eviction_policy(
-        self,
-        request: service_pb2.UpdateEvictionPolicyRequest,
-    ) -> service_pb2.UpdateEvictionPolicyResponse:
-        return self._stub.UpdateEvictionPolicy(request)
-
-    def prefetch(self, request: service_pb2.PrefetchRequest) -> None:
-        self._stub.Prefetch(request)
-
-    def pin(self, request: service_pb2.PinRequest) -> None:
-        self._stub.Pin(request)
-
-    def stats(self, request: service_pb2.StatsRequest) -> service_pb2.StatsResponse:
-        return self._stub.Stats(request)
-
-    def _open_mutable_buffer(self, descriptor: payload_pb2.PayloadDescriptor) -> tuple[mmap.mmap, pa.Buffer]:
+    def _open_mutable_buffer(self, descriptor: placement_pb2.PayloadDescriptor) -> tuple[mmap.mmap, pa.Buffer]:
         length = _descriptor_length_bytes(descriptor)
 
         if descriptor.HasField("ram"):
@@ -178,10 +224,10 @@ class PayloadClient:
             return mapped, pa.py_buffer(mapped)
 
         raise NotImplementedError(
-            f"Writable Arrow buffer for tier {payload_pb2.Tier.Name(descriptor.tier)} is not supported"
+            f"Writable Arrow buffer for tier {placement_pb2.Tier.Name(descriptor.tier)} is not supported"
         )
 
-    def _open_readable_buffer(self, descriptor: payload_pb2.PayloadDescriptor) -> tuple[mmap.mmap, pa.Buffer]:
+    def _open_readable_buffer(self, descriptor: placement_pb2.PayloadDescriptor) -> tuple[mmap.mmap, pa.Buffer]:
         length = _descriptor_length_bytes(descriptor)
 
         if descriptor.HasField("ram"):
@@ -206,19 +252,17 @@ class PayloadClient:
             return mapped, pa.py_buffer(mapped)
 
         raise NotImplementedError(
-            f"Readable Arrow buffer for tier {payload_pb2.Tier.Name(descriptor.tier)} is not supported"
+            f"Readable Arrow buffer for tier {placement_pb2.Tier.Name(descriptor.tier)} is not supported"
         )
 
     @staticmethod
-    def _validate_has_location(descriptor: payload_pb2.PayloadDescriptor) -> None:
+    def _validate_has_location(descriptor: placement_pb2.PayloadDescriptor) -> None:
         if descriptor.HasField("gpu") or descriptor.HasField("ram") or descriptor.HasField("disk"):
             return
-        raise ValueError(
-            f"payload descriptor is missing location for tier {payload_pb2.Tier.Name(descriptor.tier)}"
-        )
+        raise ValueError(f"payload descriptor is missing location for tier {placement_pb2.Tier.Name(descriptor.tier)}")
 
 
-def _descriptor_length_bytes(descriptor: payload_pb2.PayloadDescriptor) -> int:
+def _descriptor_length_bytes(descriptor: placement_pb2.PayloadDescriptor) -> int:
     if descriptor.HasField("gpu"):
         return descriptor.gpu.length_bytes
     if descriptor.HasField("ram"):
