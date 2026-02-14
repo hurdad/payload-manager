@@ -15,7 +15,7 @@ import "google/protobuf/timestamp.proto";
 //
 // Think:
 //   PayloadManager = object store
-//   StreamService  = ordering + replay log
+//   PayloadStreamService = ordering + replay log
 //
 // A stream provides:
 //   * deterministic ordering
