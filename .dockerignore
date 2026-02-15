@@ -1,0 +1,23 @@
+.git
+.gitmodules
+.github
+
+# Build directories and artifacts
+build/
+cmake-build-*/
+out/
+
+# IDE/editor settings
+.idea/
+.vscode/
+
+# Local logs and runtime data
+*.log
+*.pid
+
+# Dependency/cache directories
+node_modules/
+__pycache__/
+
+# Large local package artifacts
+*.deb
