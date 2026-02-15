@@ -25,6 +25,8 @@ RUN cmake -S ./src -B /workspace/build -G Ninja \
         -DPAYLOAD_MANAGER_ENABLE_SQLITE=OFF \
         -DPAYLOAD_MANAGER_ENABLE_POSTGRES=OFF \
         -DPAYLOAD_MANAGER_BUILD_SERVICE=OFF \
+        -DPAYLOAD_MANAGER_BUILD_CLIENT=OFF \
+        -DPAYLOAD_MANAGER_BUILD_EXAMPLES=OFF \
         -DPAYLOAD_MANAGER_BUILD_PAYLOADCTL=ON \
     && cmake --build /workspace/build --target payloadctl
 
