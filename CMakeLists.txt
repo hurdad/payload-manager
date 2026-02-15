@@ -60,19 +60,15 @@ if(PAYLOAD_MANAGER_ENABLE_OTEL)
 endif()
 
 find_program(CLANG_FORMAT_EXE NAMES clang-format)
-file(
-  GLOB_RECURSE PAYLOAD_MANAGER_FORMAT_FILES
-  CONFIGURE_DEPENDS
-  "${CMAKE_SOURCE_DIR}/*.cc"
-  "${CMAKE_SOURCE_DIR}/*.cpp"
-  "${CMAKE_SOURCE_DIR}/*.cxx"
-  "${CMAKE_SOURCE_DIR}/*.h"
-  "${CMAKE_SOURCE_DIR}/*.hpp")
-
 if(CLANG_FORMAT_EXE)
   add_custom_target(
     format
-    COMMAND ${CLANG_FORMAT_EXE} -i --style=file ${PAYLOAD_MANAGER_FORMAT_FILES}
+    COMMAND
+      ${CMAKE_COMMAND}
+      -DCLANG_FORMAT_EXE=${CLANG_FORMAT_EXE}
+      -DSOURCE_DIR=${CMAKE_SOURCE_DIR}
+      -P
+      ${CMAKE_SOURCE_DIR}/cmake/RunClangFormat.cmake
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
     COMMENT "Running clang-format using ${CMAKE_SOURCE_DIR}/.clang-format")
 else()
