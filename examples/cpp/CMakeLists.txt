@@ -24,3 +24,21 @@ target_link_libraries(payload_manager_example_metadata
   PRIVATE
     payload_manager::client
 )
+
+add_executable(payload_manager_example_catalog_admin
+  catalog_admin_example.cpp
+)
+
+target_link_libraries(payload_manager_example_catalog_admin
+  PRIVATE
+    payload_manager::client
+)
+
+add_executable(payload_manager_example_stream
+  stream_example.cpp
+)
+
+target_link_libraries(payload_manager_example_stream
+  PRIVATE
+    payload_manager::client
+)
