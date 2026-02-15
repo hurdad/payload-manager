@@ -100,15 +100,15 @@ int main(int argc, char** argv) {
     return 1;
   }
 
-  grpc::ClientContext subscribe_context;
+  grpc::ClientContext                    subscribe_context;
   payload::manager::v1::SubscribeRequest subscribe_request;
   *subscribe_request.mutable_stream() = stream;
   subscribe_request.set_offset(append_response->first_offset());
   subscribe_request.set_max_inflight(1);
 
-  auto reader = client.Subscribe(subscribe_request, &subscribe_context);
+  auto                                    reader = client.Subscribe(subscribe_request, &subscribe_context);
   payload::manager::v1::SubscribeResponse subscribe_response;
-  bool                                   got_entry = reader->Read(&subscribe_response);
+  bool                                    got_entry = reader->Read(&subscribe_response);
   subscribe_context.TryCancel();
   const grpc::Status subscribe_finish = reader->Finish();
 
@@ -160,7 +160,6 @@ int main(int argc, char** argv) {
 
   std::cout << "Stream API calls completed for stream " << stream.namespace_() << "/" << stream.name()
             << ", read entries=" << read_response->entries_size() << ", range entries=" << range_response->entries_size()
-            << ", subscribe_received=" << (got_entry ? "yes" : "no")
-            << ", committed_offset=" << committed_response->offset() << '\n';
+            << ", subscribe_received=" << (got_entry ? "yes" : "no") << ", committed_offset=" << committed_response->offset() << '\n';
   return 0;
 }

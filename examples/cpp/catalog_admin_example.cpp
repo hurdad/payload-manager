@@ -87,8 +87,8 @@ int main(int argc, char** argv) {
 
   payload::manager::v1::AddLineageRequest add_lineage_request;
   *add_lineage_request.mutable_child() = MakePayloadId(raw_uuid);
-  auto* parent_edge                     = add_lineage_request.add_parents();
-  *parent_edge->mutable_parent()        = MakePayloadId(raw_uuid);
+  auto* parent_edge                    = add_lineage_request.add_parents();
+  *parent_edge->mutable_parent()       = MakePayloadId(raw_uuid);
   parent_edge->set_operation("identity");
   parent_edge->set_role("demo");
   parent_edge->set_parameters("{}", 2);
@@ -120,7 +120,6 @@ int main(int argc, char** argv) {
     return 1;
   }
 
-  std::cout << "Catalog/Admin API calls completed for payload " << uuid
-            << " (lineage edges returned=" << lineage.ValueOrDie().edges_size() << ")\n";
+  std::cout << "Catalog/Admin API calls completed for payload " << uuid << " (lineage edges returned=" << lineage.ValueOrDie().edges_size() << ")\n";
   return 0;
 }
