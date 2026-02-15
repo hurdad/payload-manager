@@ -41,10 +41,12 @@ payload::manager::v1::StreamID MakeStreamId() {
 } // namespace
 
 int main(int argc, char** argv) {
+  // Optional endpoint argument keeps the example portable across environments.
   const std::string target = argc > 1 ? argv[1] : "localhost:50051";
 
   payload::manager::client::PayloadClient client(grpc::CreateChannel(target, grpc::InsecureChannelCredentials()));
 
+  // Create and commit a payload that stream entries will reference by ID.
   auto writable = client.AllocateWritableBuffer(8, payload::manager::v1::TIER_RAM);
   if (!writable.ok()) {
     std::cerr << "AllocateWritableBuffer failed: " << writable.status().ToString() << '\n';
@@ -66,6 +68,7 @@ int main(int argc, char** argv) {
 
   const auto stream = MakeStreamId();
 
+  // Create an example stream with bounded retention for repeatable demos.
   payload::manager::v1::CreateStreamRequest create_request;
   *create_request.mutable_stream() = stream;
   create_request.set_retention_max_entries(1024);
@@ -76,6 +79,7 @@ int main(int argc, char** argv) {
     return 1;
   }
 
+  // Append one entry carrying payload reference + simple provenance tags.
   payload::manager::v1::AppendRequest append_request;
   *append_request.mutable_stream() = stream;
   auto* item                       = append_request.add_items();
@@ -100,6 +104,8 @@ int main(int argc, char** argv) {
     return 1;
   }
 
+  // Subscribe demonstrates the streaming RPC path; we read one item then
+  // cancel to keep the sample finite.
   grpc::ClientContext                    subscribe_context;
   payload::manager::v1::SubscribeRequest subscribe_request;
   *subscribe_request.mutable_stream() = stream;
@@ -117,6 +123,7 @@ int main(int argc, char** argv) {
     return 1;
   }
 
+  // Commit consumer progress to a group checkpoint and query it back.
   payload::manager::v1::CommitRequest commit_request;
   *commit_request.mutable_stream() = stream;
   commit_request.set_consumer_group("example-group");
@@ -149,6 +156,7 @@ int main(int argc, char** argv) {
     return 1;
   }
 
+  // Clean up to make reruns idempotent.
   payload::manager::v1::DeleteStreamRequest delete_request;
   *delete_request.mutable_stream() = stream;
 

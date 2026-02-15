@@ -33,10 +33,14 @@ payload::manager::v1::PayloadID MakePayloadId(const std::string& raw_uuid) {
 } // namespace
 
 int main(int argc, char** argv) {
+  // Optional target parameter allows this admin walkthrough to run against any
+  // reachable Payload Manager endpoint.
   const std::string target = argc > 1 ? argv[1] : "localhost:50051";
 
   payload::manager::client::PayloadClient client(grpc::CreateChannel(target, grpc::InsecureChannelCredentials()));
 
+  // Allocate a short-lived RAM payload to exercise tiering/catalog APIs
+  // without leaving persistent demo data behind.
   auto writable = client.AllocateWritableBuffer(16, payload::manager::v1::TIER_RAM, 60'000, false);
   if (!writable.ok()) {
     std::cerr << "AllocateWritableBuffer failed: " << writable.status().ToString() << '\n';
@@ -63,6 +67,7 @@ int main(int argc, char** argv) {
     return 1;
   }
 
+  // Promotion and spill operations demonstrate runtime tier-management APIs.
   payload::manager::v1::PromoteRequest promote_request;
   *promote_request.mutable_id() = MakePayloadId(raw_uuid);
   promote_request.set_target_tier(payload::manager::v1::TIER_RAM);
@@ -85,6 +90,7 @@ int main(int argc, char** argv) {
     return 1;
   }
 
+  // Attach a synthetic lineage edge to show provenance graph updates.
   payload::manager::v1::AddLineageRequest add_lineage_request;
   *add_lineage_request.mutable_child() = MakePayloadId(raw_uuid);
   auto* parent_edge                    = add_lineage_request.add_parents();
@@ -110,6 +116,7 @@ int main(int argc, char** argv) {
     return 1;
   }
 
+  // Force delete ensures example reruns are clean and deterministic.
   payload::manager::v1::DeleteRequest delete_request;
   *delete_request.mutable_id() = MakePayloadId(raw_uuid);
   delete_request.set_force(true);

@@ -15,9 +15,13 @@ from payload.manager.core.v1 import placement_pb2
 
 
 def main() -> int:
+    # Accept an optional target for convenience when running against staged
+    # environments.
     target = sys.argv[1] if len(sys.argv) > 1 else "localhost:50051"
     client = PayloadClient(grpc.insecure_channel(target))
 
+    # Allocate and seed a payload that we will later annotate via catalog
+    # metadata APIs.
     writable = client.AllocateWritableBuffer(8, placement_pb2.TIER_RAM)
     writable.mmap_obj[0] = 42
 
@@ -25,6 +29,8 @@ def main() -> int:
     raw_uuid = payload_uuid.bytes
     client.CommitPayload(str(payload_uuid))
 
+    # UpdatePayloadMetadata writes the canonical metadata document for this
+    # payload ID. REPLACE mode swaps the full document in one operation.
     update_request = metadata_pb2.UpdatePayloadMetadataRequest(
         mode=metadata_pb2.METADATA_UPDATE_MODE_REPLACE,
         actor="examples/python/metadata_example",
@@ -36,6 +42,8 @@ def main() -> int:
     update_request.metadata.data = '{"producer":"metadata_example","notes":"hello payload manager"}'
     client.UpdatePayloadMetadata(update_request)
 
+    # AppendPayloadMetadataEvent stores an immutable event entry so consumers
+    # can track metadata evolution over time.
     event_request = metadata_pb2.AppendPayloadMetadataEventRequest(
         source="examples/python/metadata_example",
         version="v1",

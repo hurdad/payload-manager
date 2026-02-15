@@ -10,10 +10,12 @@
 #include "payload/manager/v1.hpp"
 
 int main(int argc, char** argv) {
+  // Allow optional endpoint override for local/remote diagnostics.
   const std::string target = argc > 1 ? argv[1] : "localhost:50051";
 
   payload::manager::client::PayloadClient client(grpc::CreateChannel(target, grpc::InsecureChannelCredentials()));
 
+  // Stats returns a tier-wise summary of payload counts and byte usage.
   payload::manager::v1::StatsRequest request;
   auto                               result = client.Stats(request);
   if (!result.ok()) {

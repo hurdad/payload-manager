@@ -14,16 +14,24 @@ from payload.manager.core.v1 import placement_pb2
 
 
 def main() -> int:
+    # Allow overriding the gRPC endpoint from the command line so this script can
+    # run against local, containerized, or remote Payload Manager deployments.
     target = sys.argv[1] if len(sys.argv) > 1 else "localhost:50051"
     client = PayloadClient(grpc.insecure_channel(target))
 
     payload_size = 64
+    # Allocate a writable RAM-tier buffer. The server returns a descriptor
+    # (including UUID) plus an mmap-backed byte region we can fill directly.
     writable = client.AllocateWritableBuffer(payload_size, placement_pb2.TIER_RAM)
     writable.mmap_obj[:] = bytes((i & 0xFF) for i in range(payload_size))
 
+    # Convert the raw 16-byte protobuf UUID into standard text form used by most
+    # Payload Manager APIs.
     payload_uuid = uuid.UUID(bytes=bytes(writable.descriptor.id.value))
+    # Commit makes the payload visible/immutable for readers.
     client.CommitPayload(str(payload_uuid))
 
+    # AcquireReadableBuffer returns a lease-scoped view of committed data.
     readable = client.AcquireReadableBuffer(str(payload_uuid))
     print(f"Committed and acquired payload UUID={payload_uuid}, size={readable.buffer.size} bytes")
 
@@ -31,6 +39,7 @@ def main() -> int:
     preview = " ".join(str(x) for x in readable.buffer.to_pybytes()[:preview_len])
     print(f"First {preview_len} bytes: {preview}")
 
+    # Always release leases once done to avoid pinning payload placement.
     client.Release(readable.lease_id)
     return 0
 
