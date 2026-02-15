@@ -24,13 +24,13 @@ int main(int argc, char** argv) {
   }
 
   try {
-    payload::observability::InitializeTracing();
-    payload::observability::InitializeMetrics();
-
     // ------------------------------------------------------------
     // Load configuration
     // ------------------------------------------------------------
     auto config = payload::config::ConfigLoader::LoadFromYaml(argv[1]);
+
+    payload::observability::InitializeTracing(config);
+    payload::observability::InitializeMetrics(config);
     payload::observability::InitializeLogging(config);
 
     // ------------------------------------------------------------

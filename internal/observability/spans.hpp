@@ -5,6 +5,10 @@
 #include <string>
 #include <string_view>
 
+namespace payload::runtime::config {
+class RuntimeConfig;
+}
+
 namespace payload::observability {
 
 enum class OtlpTransport {
@@ -21,6 +25,8 @@ struct OtlpConfig {
 
 bool InitializeTracing(const OtlpConfig& config = {});
 bool InitializeMetrics(const OtlpConfig& config = {});
+bool InitializeTracing(const payload::runtime::config::RuntimeConfig& config);
+bool InitializeMetrics(const payload::runtime::config::RuntimeConfig& config);
 void ShutdownTracing();
 void ShutdownMetrics();
 
@@ -71,6 +77,14 @@ inline bool InitializeTracing(const OtlpConfig&) {
 }
 
 inline bool InitializeMetrics(const OtlpConfig&) {
+  return false;
+}
+
+inline bool InitializeTracing(const payload::runtime::config::RuntimeConfig&) {
+  return false;
+}
+
+inline bool InitializeMetrics(const payload::runtime::config::RuntimeConfig&) {
   return false;
 }
 
