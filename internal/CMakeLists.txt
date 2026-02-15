@@ -187,7 +187,39 @@ if(PAYLOAD_MANAGER_ENABLE_OTEL)
     )
 endif()
 
-# Arrow CUDA optional
+option(PAYLOAD_MANAGER_ENABLE_ARROW_CUDA "Enable Arrow CUDA integration for internal runtime" OFF)
+
+set(_payload_manager_arrow_cuda_targets)
+if(PAYLOAD_MANAGER_ENABLE_ARROW_CUDA)
+    find_package(Arrow CONFIG QUIET)
+
+    foreach(_arrow_cuda_target IN ITEMS
+            ArrowCUDA::arrow_cuda
+            Arrow::arrow_cuda
+            ArrowCUDA::arrow_cuda_static
+            ArrowCUDA::arrow_cuda_shared)
+        if(TARGET ${_arrow_cuda_target})
+            list(APPEND _payload_manager_arrow_cuda_targets ${_arrow_cuda_target})
+        endif()
+    endforeach()
+
+    list(REMOVE_DUPLICATES _payload_manager_arrow_cuda_targets)
+
+    if(NOT _payload_manager_arrow_cuda_targets)
+        message(FATAL_ERROR
+                "PAYLOAD_MANAGER_ENABLE_ARROW_CUDA=ON but no Arrow CUDA target was found. "
+                "Install Arrow with CUDA support so targets such as ArrowCUDA::arrow_cuda are available.")
+    endif()
+
+    target_compile_definitions(payload_manager_internal PRIVATE PAYLOAD_MANAGER_ARROW_CUDA=1)
+
+    target_link_libraries(payload_manager_internal
+            PUBLIC
+            ${_payload_manager_arrow_cuda_targets}
+    )
+endif()
+
+unset(_payload_manager_arrow_cuda_targets)
 # ================================================================
 # Compile settings
 # ================================================================
