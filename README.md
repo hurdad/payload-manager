@@ -82,6 +82,24 @@ cmake --build build-otel
 ./payload-manager --config config.yaml
 ```
 
+## Docker
+
+Build the production image:
+
+```bash
+docker build -t payload-manager:latest .
+```
+
+Run the service with PostgreSQL using Docker Compose:
+
+```bash
+docker compose up --build
+```
+
+Compose uses `docker-compose.yml` and the Docker-ready config file `confng/runtime-docker-postgres.yaml`.
+
+The compose stack also includes Grafana Alloy (`confng/alloy/config.alloy`) to receive OTLP metrics from `payload-manager` and forward them to your backend. Set `ALLOY_METRICS_BACKEND_OTLP_ENDPOINT` (and optionally `ALLOY_METRICS_BACKEND_AUTH_HEADER`) before starting compose.
+
 ## Repository layout
 
 - `cmd/`: executable entrypoints (`payload-manager`, `payloadctl`).

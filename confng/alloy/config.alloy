@@ -1,0 +1,28 @@
+otelcol.receiver.otlp "payload_manager" {
+  grpc {
+    endpoint = "0.0.0.0:4317"
+  }
+
+  http {
+    endpoint = "0.0.0.0:4318"
+  }
+
+  output {
+    metrics = [otelcol.processor.batch.metrics.input]
+  }
+}
+
+otelcol.processor.batch "metrics" {
+  output {
+    metrics = [otelcol.exporter.otlphttp.metrics_backend.input]
+  }
+}
+
+otelcol.exporter.otlphttp "metrics_backend" {
+  client {
+    endpoint = sys.env("ALLOY_METRICS_BACKEND_OTLP_ENDPOINT")
+    headers = {
+      "Authorization" = sys.env("ALLOY_METRICS_BACKEND_AUTH_HEADER"),
+    }
+  }
+}
