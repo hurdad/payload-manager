@@ -6,7 +6,7 @@
 #include <memory>
 #include <string>
 
-#include "client/cpp/payload_client.h"
+#include "client/cpp/payload_manager_client.h"
 #include "payload/manager/v1.hpp"
 
 namespace {
