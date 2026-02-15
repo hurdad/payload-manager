@@ -12,6 +12,8 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 option(PAYLOAD_MANAGER_ENABLE_OTEL "Enable OpenTelemetry integration" OFF)
 option(PAYLOAD_MANAGER_BUILD_SERVICE "Build payload-manager service components" ON)
 option(PAYLOAD_MANAGER_BUILD_PAYLOADCTL "Build payloadctl CLI" ON)
+option(PAYLOAD_MANAGER_BUILD_CLIENT "Build C++ client library" ON)
+option(PAYLOAD_MANAGER_BUILD_EXAMPLES "Build C++ examples" ON)
 
 if(PAYLOAD_MANAGER_ENABLE_OTEL)
   add_compile_definitions(ENABLE_OTEL)
@@ -94,8 +96,17 @@ if(PAYLOAD_MANAGER_BUILD_PAYLOADCTL)
   add_subdirectory(cmd/payloadctl)
 endif()
 
-add_subdirectory(client/cpp)
-add_subdirectory(examples/cpp)
+if(PAYLOAD_MANAGER_BUILD_CLIENT)
+  add_subdirectory(client/cpp)
+endif()
+
+if(PAYLOAD_MANAGER_BUILD_EXAMPLES)
+  if(NOT PAYLOAD_MANAGER_BUILD_CLIENT)
+    message(FATAL_ERROR "PAYLOAD_MANAGER_BUILD_EXAMPLES=ON requires PAYLOAD_MANAGER_BUILD_CLIENT=ON")
+  endif()
+
+  add_subdirectory(examples/cpp)
+endif()
 
 if(BUILD_TESTING AND PAYLOAD_MANAGER_BUILD_SERVICE)
   add_subdirectory(tests)
