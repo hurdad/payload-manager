@@ -40,10 +40,9 @@ auto ObserveRpc(std::string_view route, const PayloadID* payload_id, Fn&& fn) {
     }
   } catch (const std::exception& ex) {
     span.RecordException(ex.what());
-    PAYLOAD_LOG_ERROR("RPC failed", {payload::observability::StringField("route", route),
-                                      payload::observability::StringField("error", ex.what()),
-                                      payload_id ? payload::observability::StringField("payload_id", payload_id->value())
-                                                 : payload::observability::StringField("payload_id", "")});
+    PAYLOAD_LOG_ERROR("RPC failed", {payload::observability::StringField("route", route), payload::observability::StringField("error", ex.what()),
+                                     payload_id ? payload::observability::StringField("payload_id", payload_id->value())
+                                                : payload::observability::StringField("payload_id", "")});
     payload::observability::Metrics::Instance().RecordRequest(route, false);
     payload::observability::Metrics::Instance().ObserveRequestLatencyMs(
         route, std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - started_at).count());

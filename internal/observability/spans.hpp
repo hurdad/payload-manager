@@ -17,10 +17,10 @@ enum class OtlpTransport {
 };
 
 struct OtlpConfig {
-  std::string service_name{"payload-manager"};
-  std::string endpoint{};
+  std::string   service_name{"payload-manager"};
+  std::string   endpoint{};
   OtlpTransport transport{OtlpTransport::kGrpc};
-  bool insecure{true};
+  bool          insecure{true};
 };
 
 bool InitializeTracing(const OtlpConfig& config = {});
@@ -31,7 +31,7 @@ void ShutdownTracing();
 void ShutdownMetrics();
 
 class SpanScope {
-public:
+ public:
   explicit SpanScope(std::string_view name);
   ~SpanScope();
 
@@ -47,7 +47,7 @@ public:
   void AddEvent(std::string_view name);
   void RecordException(std::string_view description);
 
-private:
+ private:
 #ifdef ENABLE_OTEL
   struct Impl;
   std::unique_ptr<Impl> impl_;
@@ -55,7 +55,7 @@ private:
 };
 
 class Metrics {
-public:
+ public:
   static Metrics& Instance();
 
   void RecordRequest(std::string_view route, bool success);
@@ -63,7 +63,7 @@ public:
   void ObserveSpillDurationMs(std::string_view op, double duration_ms);
   void SetTierOccupancyBytes(std::string_view tier, std::uint64_t bytes);
 
-private:
+ private:
   Metrics();
 #ifdef ENABLE_OTEL
   struct Impl;

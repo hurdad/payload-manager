@@ -2,10 +2,6 @@
 
 #ifdef ENABLE_OTEL
 
-#include <chrono>
-#include <cstdlib>
-#include <utility>
-
 #include <opentelemetry/exporters/otlp/otlp_grpc_exporter_factory.h>
 #include <opentelemetry/exporters/otlp/otlp_grpc_exporter_options.h>
 #include <opentelemetry/exporters/otlp/otlp_http_exporter_factory.h>
@@ -19,6 +15,10 @@
 #include <opentelemetry/sdk/trace/tracer_provider_factory.h>
 #include <opentelemetry/trace/provider.h>
 
+#include <chrono>
+#include <cstdlib>
+#include <utility>
+
 #include "config/config.pb.h"
 
 namespace payload::observability {
@@ -28,7 +28,7 @@ namespace sdktrace  = opentelemetry::sdk::trace;
 namespace resource  = opentelemetry::sdk::resource;
 
 namespace {
-std::shared_ptr<sdktrace::TracerProvider> g_sdk_provider;
+std::shared_ptr<sdktrace::TracerProvider>           g_sdk_provider;
 opentelemetry::nostd::shared_ptr<trace_api::Tracer> g_tracer;
 
 std::string ResolveEndpoint(const OtlpConfig& config) {
@@ -63,14 +63,13 @@ bool InitializeTracing(const OtlpConfig& config) {
     exporter    = otlp::OtlpHttpExporterFactory::Create(options);
   } else {
     otlp::OtlpGrpcExporterOptions options;
-    options.endpoint = endpoint;
+    options.endpoint            = endpoint;
     options.use_ssl_credentials = !config.insecure;
-    exporter         = otlp::OtlpGrpcExporterFactory::Create(options);
+    exporter                    = otlp::OtlpGrpcExporterFactory::Create(options);
   }
 
-  auto span_processor =
-      sdktrace::BatchSpanProcessorFactory::Create(std::move(exporter), sdktrace::BatchSpanProcessorOptions{});
-  auto provider = sdktrace::TracerProviderFactory::Create(std::move(span_processor), BuildResource(config));
+  auto span_processor = sdktrace::BatchSpanProcessorFactory::Create(std::move(exporter), sdktrace::BatchSpanProcessorOptions{});
+  auto provider       = sdktrace::TracerProviderFactory::Create(std::move(span_processor), BuildResource(config));
 
   g_sdk_provider = std::shared_ptr<sdktrace::TracerProvider>(std::move(provider));
   trace_api::Provider::SetTracerProvider(opentelemetry::nostd::shared_ptr<trace_api::TracerProvider>(g_sdk_provider));
@@ -87,9 +86,8 @@ bool InitializeTracing(const payload::runtime::config::RuntimeConfig& config) {
 
   OtlpConfig otlp_config;
   otlp_config.endpoint = observability.otlp_endpoint();
-  otlp_config.transport = observability.transport() == payload::runtime::config::OTLP_TRANSPORT_HTTP
-                              ? OtlpTransport::kHttpProtobuf
-                              : OtlpTransport::kGrpc;
+  otlp_config.transport =
+      observability.transport() == payload::runtime::config::OTLP_TRANSPORT_HTTP ? OtlpTransport::kHttpProtobuf : OtlpTransport::kGrpc;
 
   auto endpoint = ResolveEndpoint(otlp_config);
 
@@ -100,14 +98,13 @@ bool InitializeTracing(const payload::runtime::config::RuntimeConfig& config) {
     exporter    = otlp::OtlpHttpExporterFactory::Create(options);
   } else {
     otlp::OtlpGrpcExporterOptions options;
-    options.endpoint = endpoint;
+    options.endpoint            = endpoint;
     options.use_ssl_credentials = !otlp_config.insecure;
-    exporter         = otlp::OtlpGrpcExporterFactory::Create(options);
+    exporter                    = otlp::OtlpGrpcExporterFactory::Create(options);
   }
 
   std::unique_ptr<sdktrace::SpanProcessor> span_processor;
-  if (observability.tracing().processor() ==
-      payload::runtime::config::ObservabilityConfig_TracingConfig_TraceProcessorType_TRACE_PROCESSOR_SIMPLE) {
+  if (observability.tracing().processor() == payload::runtime::config::ObservabilityConfig_TracingConfig_TraceProcessorType_TRACE_PROCESSOR_SIMPLE) {
     span_processor = sdktrace::SimpleSpanProcessorFactory::Create(std::move(exporter));
   } else {
     sdktrace::BatchSpanProcessorOptions batch_options;
@@ -124,11 +121,9 @@ bool InitializeTracing(const payload::runtime::config::RuntimeConfig& config) {
   }
 
   std::unique_ptr<sdktrace::Sampler> sampler;
-  if (observability.tracing().trace_hint() ==
-      payload::runtime::config::ObservabilityConfig_TracingConfig_TraceHint_TRACE_HINT_ALWAYS) {
+  if (observability.tracing().trace_hint() == payload::runtime::config::ObservabilityConfig_TracingConfig_TraceHint_TRACE_HINT_ALWAYS) {
     sampler = sdktrace::AlwaysOnSamplerFactory::Create();
-  } else if (observability.tracing().trace_hint() ==
-             payload::runtime::config::ObservabilityConfig_TracingConfig_TraceHint_TRACE_HINT_NEVER) {
+  } else if (observability.tracing().trace_hint() == payload::runtime::config::ObservabilityConfig_TracingConfig_TraceHint_TRACE_HINT_NEVER) {
     sampler = sdktrace::AlwaysOffSamplerFactory::Create();
   }
 
@@ -156,7 +151,7 @@ void ShutdownTracing() {
 
 struct SpanScope::Impl {
   opentelemetry::nostd::shared_ptr<trace_api::Span> span;
-  std::unique_ptr<trace_api::Scope> scope;
+  std::unique_ptr<trace_api::Scope>                 scope;
 };
 
 SpanScope::SpanScope(std::string_view name) : impl_(std::make_unique<Impl>()) {
@@ -181,7 +176,7 @@ SpanScope::~SpanScope() {
   }
 }
 
-SpanScope::SpanScope(SpanScope&&) noexcept = default;
+SpanScope::SpanScope(SpanScope&&) noexcept            = default;
 SpanScope& SpanScope::operator=(SpanScope&&) noexcept = default;
 
 void SpanScope::SetAttribute(std::string_view key, std::string_view value) {

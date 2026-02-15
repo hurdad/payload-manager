@@ -21,7 +21,7 @@ static void SetScalarValue(const YAML::Node& node, google::protobuf::Value* valu
     return;
   }
 
-  char* endptr = nullptr;
+  char*        endptr        = nullptr;
   const double numeric_value = strtod(scalar_value.c_str(), &endptr);
   if (endptr && *endptr == '\0') {
     value->set_number_value(numeric_value);
@@ -78,7 +78,7 @@ payload::runtime::config::RuntimeConfig ConfigLoader::LoadFromYaml(const std::st
   YamlToProtoValue(yaml, &json_value);
 
   std::string json;
-  auto to_json_status = google::protobuf::util::MessageToJsonString(json_value, &json);
+  auto        to_json_status = google::protobuf::util::MessageToJsonString(json_value, &json);
   if (!to_json_status.ok()) {
     throw std::runtime_error("Failed to serialize YAML to JSON: " + std::string(to_json_status.message()));
   }

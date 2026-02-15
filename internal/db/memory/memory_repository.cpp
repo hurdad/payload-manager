@@ -48,7 +48,7 @@ std::optional<model::PayloadRecord> MemoryRepository::GetPayload(Transaction& t,
 }
 
 std::vector<model::PayloadRecord> MemoryRepository::ListPayloads(Transaction& t) {
-  const auto& s = TX(t).View();
+  const auto&                       s = TX(t).View();
   std::vector<model::PayloadRecord> records;
   records.reserve(s.payloads.size());
   for (const auto& [_, record] : s.payloads) {

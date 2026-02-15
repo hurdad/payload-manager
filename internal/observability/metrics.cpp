@@ -2,14 +2,6 @@
 
 #ifdef ENABLE_OTEL
 
-#include <algorithm>
-#include <chrono>
-#include <cstdlib>
-#include <memory>
-#include <mutex>
-#include <unordered_map>
-#include <utility>
-
 #include <opentelemetry/common/attribute_value.h>
 #include <opentelemetry/context/context.h>
 #include <opentelemetry/exporters/otlp/otlp_grpc_metric_exporter_factory.h>
@@ -18,6 +10,14 @@
 #include <opentelemetry/exporters/otlp/otlp_http_metric_exporter_options.h>
 #include <opentelemetry/metrics/provider.h>
 #include <opentelemetry/sdk/metrics/meter_provider.h>
+
+#include <algorithm>
+#include <chrono>
+#include <cstdlib>
+#include <memory>
+#include <mutex>
+#include <unordered_map>
+#include <utility>
 #if __has_include(<opentelemetry/sdk/metrics/periodic_exporting_metric_reader_factory.h>)
 #define PAYLOAD_OTEL_METRIC_READER_FACTORY 1
 #include <opentelemetry/sdk/metrics/periodic_exporting_metric_reader_factory.h>
@@ -91,9 +91,7 @@ void AddMetricReaderCompat(const std::shared_ptr<Provider>& provider, std::uniqu
 }
 
 template <typename Instrument, typename Value, typename Attributes>
-void AddWithAttributes(const opentelemetry::nostd::shared_ptr<Instrument>& instrument,
-                       Value value,
-                       Attributes&& attributes) {
+void AddWithAttributes(const opentelemetry::nostd::shared_ptr<Instrument>& instrument, Value value, Attributes&& attributes) {
   if constexpr (requires { instrument->Add(value, std::forward<Attributes>(attributes), opentelemetry::context::Context{}); }) {
     instrument->Add(value, std::forward<Attributes>(attributes), opentelemetry::context::Context{});
   } else {
@@ -102,9 +100,7 @@ void AddWithAttributes(const opentelemetry::nostd::shared_ptr<Instrument>& instr
 }
 
 template <typename Instrument, typename Value, typename Attributes>
-void RecordWithAttributes(const opentelemetry::nostd::shared_ptr<Instrument>& instrument,
-                          Value value,
-                          Attributes&& attributes) {
+void RecordWithAttributes(const opentelemetry::nostd::shared_ptr<Instrument>& instrument, Value value, Attributes&& attributes) {
   if constexpr (requires { instrument->Record(value, std::forward<Attributes>(attributes), opentelemetry::context::Context{}); }) {
     instrument->Record(value, std::forward<Attributes>(attributes), opentelemetry::context::Context{});
   } else {
@@ -118,11 +114,11 @@ struct Metrics::Impl {
   opentelemetry::nostd::shared_ptr<metrics_api::Meter> meter;
 
   opentelemetry::nostd::shared_ptr<metrics_api::Counter<std::uint64_t>> request_count;
-  opentelemetry::nostd::shared_ptr<metrics_api::Histogram<double>> request_latency_ms;
-  opentelemetry::nostd::shared_ptr<metrics_api::Histogram<double>> spill_duration_ms;
-  opentelemetry::nostd::shared_ptr<metrics_api::ObservableInstrument> tier_occupancy_gauge;
+  opentelemetry::nostd::shared_ptr<metrics_api::Histogram<double>>      request_latency_ms;
+  opentelemetry::nostd::shared_ptr<metrics_api::Histogram<double>>      spill_duration_ms;
+  opentelemetry::nostd::shared_ptr<metrics_api::ObservableInstrument>   tier_occupancy_gauge;
 
-  std::mutex tier_occupancy_mutex;
+  std::mutex                                    tier_occupancy_mutex;
   std::unordered_map<std::string, std::int64_t> tier_occupancy_values;
 };
 
@@ -136,9 +132,9 @@ bool InitializeMetrics(const OtlpConfig& config) {
     exporter    = otlp::OtlpHttpMetricExporterFactory::Create(options);
   } else {
     otlp::OtlpGrpcMetricExporterOptions options;
-    options.endpoint = endpoint;
+    options.endpoint            = endpoint;
     options.use_ssl_credentials = !config.insecure;
-    exporter         = otlp::OtlpGrpcMetricExporterFactory::Create(options);
+    exporter                    = otlp::OtlpGrpcMetricExporterFactory::Create(options);
   }
 
   sdkmetrics::PeriodicExportingMetricReaderOptions reader_options;
@@ -150,8 +146,7 @@ bool InitializeMetrics(const OtlpConfig& config) {
 #endif
 
   auto resource = BuildResource(config);
-  g_provider    = std::make_shared<sdkmetrics::MeterProvider>(
-      std::unique_ptr<sdkmetrics::ViewRegistry>(new sdkmetrics::ViewRegistry()), resource);
+  g_provider    = std::make_shared<sdkmetrics::MeterProvider>(std::unique_ptr<sdkmetrics::ViewRegistry>(new sdkmetrics::ViewRegistry()), resource);
   ConfigureResource(*g_provider, resource);
   AddMetricReaderCompat(g_provider, std::move(reader));
 
@@ -168,9 +163,8 @@ bool InitializeMetrics(const payload::runtime::config::RuntimeConfig& config) {
 
   OtlpConfig otlp_config;
   otlp_config.endpoint = observability.otlp_endpoint();
-  otlp_config.transport = observability.transport() == payload::runtime::config::OTLP_TRANSPORT_HTTP
-                              ? OtlpTransport::kHttpProtobuf
-                              : OtlpTransport::kGrpc;
+  otlp_config.transport =
+      observability.transport() == payload::runtime::config::OTLP_TRANSPORT_HTTP ? OtlpTransport::kHttpProtobuf : OtlpTransport::kGrpc;
 
   auto endpoint = ResolveEndpoint(otlp_config);
 
@@ -181,16 +175,15 @@ bool InitializeMetrics(const payload::runtime::config::RuntimeConfig& config) {
     exporter    = otlp::OtlpHttpMetricExporterFactory::Create(options);
   } else {
     otlp::OtlpGrpcMetricExporterOptions options;
-    options.endpoint = endpoint;
+    options.endpoint            = endpoint;
     options.use_ssl_credentials = !otlp_config.insecure;
-    exporter         = otlp::OtlpGrpcMetricExporterFactory::Create(options);
+    exporter                    = otlp::OtlpGrpcMetricExporterFactory::Create(options);
   }
 
-  const auto& metric_config = observability.metrics();
+  const auto&                                      metric_config = observability.metrics();
   sdkmetrics::PeriodicExportingMetricReaderOptions reader_options;
-  const auto min_interval_ms = metric_config.min_collection_interval_ms();
-  const auto configured_interval_ms =
-      metric_config.collection_interval_ms() > 0 ? metric_config.collection_interval_ms() : 1000;
+  const auto                                       min_interval_ms = metric_config.min_collection_interval_ms();
+  const auto configured_interval_ms     = metric_config.collection_interval_ms() > 0 ? metric_config.collection_interval_ms() : 1000;
   reader_options.export_interval_millis = std::chrono::milliseconds(std::max(min_interval_ms, configured_interval_ms));
   if (metric_config.export_timeout_ms() > 0) {
     reader_options.export_timeout_millis = std::chrono::milliseconds(metric_config.export_timeout_ms());
@@ -203,19 +196,18 @@ bool InitializeMetrics(const payload::runtime::config::RuntimeConfig& config) {
 #endif
 
   auto resource = BuildResource(otlp_config);
-  g_provider    = std::make_shared<sdkmetrics::MeterProvider>(
-      std::unique_ptr<sdkmetrics::ViewRegistry>(new sdkmetrics::ViewRegistry()), resource);
+  g_provider    = std::make_shared<sdkmetrics::MeterProvider>(std::unique_ptr<sdkmetrics::ViewRegistry>(new sdkmetrics::ViewRegistry()), resource);
   ConfigureResource(*g_provider, resource);
   AddMetricReaderCompat(g_provider, std::move(reader));
 
   metrics_api::Provider::SetMeterProvider(opentelemetry::nostd::shared_ptr<metrics_api::MeterProvider>(g_provider));
 
-  g_metrics_options.request_metrics_enabled = metric_config.request_metrics_enabled();
-  g_metrics_options.spill_metrics_enabled = metric_config.spill_metrics_enabled();
-  g_metrics_options.tier_occupancy_metrics_enabled = metric_config.tier_occupancy_metrics_enabled();
+  g_metrics_options.request_metrics_enabled            = metric_config.request_metrics_enabled();
+  g_metrics_options.spill_metrics_enabled              = metric_config.spill_metrics_enabled();
+  g_metrics_options.tier_occupancy_metrics_enabled     = metric_config.tier_occupancy_metrics_enabled();
   g_metrics_options.request_latency_histograms_enabled = metric_config.request_latency_histograms_enabled();
-  g_metrics_options.route_labels_enabled = metric_config.route_labels_enabled();
-  g_metrics_options.tier_labels_enabled = metric_config.tier_labels_enabled();
+  g_metrics_options.route_labels_enabled               = metric_config.route_labels_enabled();
+  g_metrics_options.tier_labels_enabled                = metric_config.tier_labels_enabled();
 
   return true;
 }
@@ -232,16 +224,13 @@ Metrics::Metrics() : impl_(std::make_unique<Impl>()) {
   auto provider = metrics_api::Provider::GetMeterProvider();
   impl_->meter  = provider->GetMeter("payload-manager", "0.1.0");
 
-  impl_->request_count = impl_->meter->CreateUInt64Counter("payload.request.count", "1", "Total number of service requests");
-  impl_->request_latency_ms =
-      impl_->meter->CreateDoubleHistogram("payload.request.latency_ms", "ms", "End-to-end request latency in milliseconds");
-  impl_->spill_duration_ms =
-      impl_->meter->CreateDoubleHistogram("payload.spill.duration_ms", "ms", "Spill operation duration in milliseconds");
-  impl_->tier_occupancy_gauge =
-      impl_->meter->CreateInt64ObservableGauge("payload.tier.occupancy_bytes", "Current tier occupancy in bytes", "By");
+  impl_->request_count        = impl_->meter->CreateUInt64Counter("payload.request.count", "1", "Total number of service requests");
+  impl_->request_latency_ms   = impl_->meter->CreateDoubleHistogram("payload.request.latency_ms", "ms", "End-to-end request latency in milliseconds");
+  impl_->spill_duration_ms    = impl_->meter->CreateDoubleHistogram("payload.spill.duration_ms", "ms", "Spill operation duration in milliseconds");
+  impl_->tier_occupancy_gauge = impl_->meter->CreateInt64ObservableGauge("payload.tier.occupancy_bytes", "Current tier occupancy in bytes", "By");
   impl_->tier_occupancy_gauge->AddCallback(
       [](metrics_api::ObserverResult result, void* state) {
-        auto* impl = static_cast<Impl*>(state);
+        auto*                       impl = static_cast<Impl*>(state);
         std::lock_guard<std::mutex> lock(impl->tier_occupancy_mutex);
         auto int_result = opentelemetry::nostd::get<opentelemetry::nostd::shared_ptr<metrics_api::ObserverResultT<std::int64_t>>>(result);
         for (const auto& [tier, bytes] : impl->tier_occupancy_values) {
@@ -277,8 +266,7 @@ void Metrics::RecordRequest(std::string_view route, bool success) {
 }
 
 void Metrics::ObserveRequestLatencyMs(std::string_view route, double latency_ms) {
-  if (!impl_ || !impl_->request_latency_ms || !g_metrics_options.request_metrics_enabled ||
-      !g_metrics_options.request_latency_histograms_enabled) {
+  if (!impl_ || !impl_->request_latency_ms || !g_metrics_options.request_metrics_enabled || !g_metrics_options.request_latency_histograms_enabled) {
     return;
   }
 

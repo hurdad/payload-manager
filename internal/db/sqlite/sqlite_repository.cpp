@@ -214,8 +214,8 @@ std::optional<model::MetadataRecord> SqliteRepository::GetMetadata(Transaction& 
   }
 
   model::MetadataRecord r;
-  r.id     = ColText(st, 0);
-  r.json   = ColText(st, 1);
+  r.id            = ColText(st, 0);
+  r.json          = ColText(st, 1);
   r.schema        = ColText(st, 2);
   r.updated_at_ms = ColU64(st, 3);
 
@@ -265,10 +265,10 @@ std::vector<model::LineageRecord> SqliteRepository::GetParents(Transaction& t, c
   std::vector<model::LineageRecord> out;
   while (sqlite3_step(st) == SQLITE_ROW) {
     model::LineageRecord r;
-    r.parent_id  = ColText(st, 0);
-    r.child_id   = ColText(st, 1);
-    r.operation  = ColText(st, 2);
-    r.role       = ColText(st, 3);
+    r.parent_id     = ColText(st, 0);
+    r.child_id      = ColText(st, 1);
+    r.operation     = ColText(st, 2);
+    r.role          = ColText(st, 3);
     r.parameters    = ColText(st, 4);
     r.created_at_ms = ColU64(st, 5);
     out.push_back(std::move(r));
@@ -293,10 +293,10 @@ std::vector<model::LineageRecord> SqliteRepository::GetChildren(Transaction& t, 
   std::vector<model::LineageRecord> out;
   while (sqlite3_step(st) == SQLITE_ROW) {
     model::LineageRecord r;
-    r.parent_id  = ColText(st, 0);
-    r.child_id   = ColText(st, 1);
-    r.operation  = ColText(st, 2);
-    r.role       = ColText(st, 3);
+    r.parent_id     = ColText(st, 0);
+    r.child_id      = ColText(st, 1);
+    r.operation     = ColText(st, 2);
+    r.role          = ColText(st, 3);
     r.parameters    = ColText(st, 4);
     r.created_at_ms = ColU64(st, 5);
     out.push_back(std::move(r));

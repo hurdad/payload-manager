@@ -1,11 +1,11 @@
 #include "internal/observability/logging.hpp"
 
+#include <spdlog/sinks/stdout_color_sinks.h>
+#include <spdlog/spdlog.h>
+
 #include <cstdlib>
 #include <sstream>
 #include <string>
-
-#include <spdlog/sinks/stdout_color_sinks.h>
-#include <spdlog/spdlog.h>
 
 #include "config/config.pb.h"
 
@@ -52,7 +52,7 @@ bool g_include_trace_context{false};
 
 std::string SerializeFields(std::initializer_list<LogField> fields) {
   std::ostringstream out;
-  bool first = true;
+  bool               first = true;
   for (const auto& field : fields) {
     if (!first) {
       out << ' ';
@@ -66,7 +66,7 @@ std::string SerializeFields(std::initializer_list<LogField> fields) {
 #ifdef ENABLE_OTEL
 std::string HexId(const uint8_t* data, std::size_t size) {
   static constexpr char kHex[] = "0123456789abcdef";
-  std::string result;
+  std::string           result;
   result.reserve(size * 2);
   for (std::size_t i = 0; i < size; ++i) {
     result.push_back(kHex[(data[i] >> 4) & 0x0F]);

@@ -1,8 +1,8 @@
+#include "internal/lease/lease_table.hpp"
+
 #include <cassert>
 #include <chrono>
 #include <iostream>
-
-#include "internal/lease/lease_table.hpp"
 
 namespace {
 

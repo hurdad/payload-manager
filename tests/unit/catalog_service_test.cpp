@@ -1,3 +1,5 @@
+#include "internal/service/catalog_service.hpp"
+
 #include <algorithm>
 #include <cassert>
 #include <iostream>
@@ -6,7 +8,6 @@
 
 #include "internal/db/memory/memory_repository.hpp"
 #include "internal/metadata/metadata_cache.hpp"
-#include "internal/service/catalog_service.hpp"
 #include "internal/service/service_context.hpp"
 #include "payload/manager/v1.hpp"
 
@@ -38,7 +39,7 @@ AddLineageRequest MakeLineageRequest(const std::string& child, const std::string
 }
 
 void TestUpdateMetadataUpsertsIntoRepositoryWithoutCache() {
-  auto ctx = BuildServiceContext(false);
+  auto                             ctx = BuildServiceContext(false);
   payload::service::CatalogService service(ctx);
 
   UpdatePayloadMetadataRequest req;
@@ -49,7 +50,7 @@ void TestUpdateMetadataUpsertsIntoRepositoryWithoutCache() {
 
   const auto resp = service.UpdateMetadata(req);
 
-  auto record_tx = ctx.repository->Begin();
+  auto       record_tx = ctx.repository->Begin();
   const auto db_record = ctx.repository->GetMetadata(*record_tx, "payload-1");
   assert(db_record.has_value());
   assert(db_record->json == "{\"state\":\"new\"}");
@@ -60,7 +61,7 @@ void TestUpdateMetadataUpsertsIntoRepositoryWithoutCache() {
 }
 
 void TestUpdateMetadataMergeUsesRepositoryStateAndWritesThroughCache() {
-  auto ctx = BuildServiceContext(true);
+  auto                             ctx = BuildServiceContext(true);
   payload::service::CatalogService service(ctx);
 
   UpdatePayloadMetadataRequest replace;
@@ -77,7 +78,7 @@ void TestUpdateMetadataMergeUsesRepositoryStateAndWritesThroughCache() {
 
   const auto resp = service.UpdateMetadata(merge);
 
-  auto record_tx = ctx.repository->Begin();
+  auto       record_tx = ctx.repository->Begin();
   const auto db_record = ctx.repository->GetMetadata(*record_tx, "payload-merge");
   assert(db_record.has_value());
   assert(db_record->json == "initial");
@@ -93,13 +94,13 @@ void TestUpdateMetadataMergeUsesRepositoryStateAndWritesThroughCache() {
 }
 
 void TestAddLineageInsertsIntoRepositoryWhenGraphIsMissing() {
-  auto ctx = BuildServiceContext(false);
+  auto                             ctx = BuildServiceContext(false);
   payload::service::CatalogService service(ctx);
 
   service.AddLineage(MakeLineageRequest("child", "parent-a", "op-a"));
   service.AddLineage(MakeLineageRequest("child", "parent-b", "op-b"));
 
-  auto tx = ctx.repository->Begin();
+  auto       tx      = ctx.repository->Begin();
   const auto parents = ctx.repository->GetParents(*tx, "child");
   assert(parents.size() == 2);
 
@@ -110,7 +111,7 @@ void TestAddLineageInsertsIntoRepositoryWhenGraphIsMissing() {
 }
 
 void TestGetLineageTraversesRepositoryGraph() {
-  auto ctx = BuildServiceContext(false);
+  auto                             ctx = BuildServiceContext(false);
   payload::service::CatalogService service(ctx);
 
   service.AddLineage(MakeLineageRequest("B", "A", "a_to_b"));

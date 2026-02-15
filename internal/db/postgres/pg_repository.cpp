@@ -41,7 +41,6 @@ std::optional<model::PayloadRecord> PgRepository::GetPayload(Transaction& t, con
   return r;
 }
 
-
 std::vector<model::PayloadRecord> PgRepository::ListPayloads(Transaction& t) {
   auto res = TX(t).Work().exec("SELECT id,tier,state,size_bytes,version FROM payload;");
 

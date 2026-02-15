@@ -194,14 +194,14 @@ PayloadDescriptor PayloadManager::Promote(const PayloadID& id, Tier target) {
 }
 
 void PayloadManager::HydrateCaches() {
-  auto tx = repository_->Begin();
+  auto       tx      = repository_->Begin();
   const auto records = repository_->ListPayloads(*tx);
   tx->Commit();
 
   std::unique_lock lock(snapshot_cache_mutex_);
   snapshot_cache_.clear();
   for (const auto& record : records) {
-    const auto descriptor = ToPayloadDescriptor(record);
+    const auto descriptor                    = ToPayloadDescriptor(record);
     snapshot_cache_[descriptor.id().value()] = descriptor;
   }
 }

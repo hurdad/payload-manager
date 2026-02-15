@@ -1,11 +1,11 @@
 #pragma once
 
+#include <spdlog/common.h>
+
 #include <cstdint>
 #include <initializer_list>
 #include <string>
 #include <string_view>
-
-#include <spdlog/common.h>
 
 namespace payload::runtime::config {
 class RuntimeConfig;

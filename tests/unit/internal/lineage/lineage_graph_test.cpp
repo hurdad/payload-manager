@@ -1,10 +1,11 @@
+#include "internal/lineage/lineage_graph.hpp"
+
 #include <algorithm>
 #include <cassert>
 #include <iostream>
 #include <string>
 #include <vector>
 
-#include "internal/lineage/lineage_graph.hpp"
 #include "payload/manager/v1.hpp"
 
 namespace {

@@ -47,8 +47,8 @@ void TestResolveSnapshotUsesCachedDescriptorUntilRefresh() {
     auto tx      = repository->Begin();
     auto current = repository->GetPayload(*tx, "payload-preloaded");
     assert(current.has_value());
-    current->tier    = TIER_DISK;
-    current->version = 2;
+    current->tier      = TIER_DISK;
+    current->version   = 2;
     auto update_result = repository->UpdatePayload(*tx, *current);
     assert(update_result);
     tx->Commit();

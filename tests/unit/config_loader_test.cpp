@@ -1,3 +1,5 @@
+#include "internal/config/config_loader.hpp"
+
 #include <cassert>
 #include <filesystem>
 #include <fstream>
@@ -5,15 +7,13 @@
 #include <stdexcept>
 #include <string>
 
-#include "internal/config/config_loader.hpp"
-
 namespace {
 
 std::filesystem::path WriteYaml(const std::string& test_name, const std::string& yaml_content) {
   const auto base_dir = std::filesystem::temp_directory_path() / "payload_manager_config_loader_tests";
   std::filesystem::create_directories(base_dir);
 
-  const auto file_path = base_dir / (test_name + ".yaml");
+  const auto    file_path = base_dir / (test_name + ".yaml");
   std::ofstream out(file_path);
   out << yaml_content;
   out.close();
@@ -22,9 +22,8 @@ std::filesystem::path WriteYaml(const std::string& test_name, const std::string&
 }
 
 void TestScalarEscapingForQuotedAndBackslashValues() {
-  const auto yaml_path = WriteYaml(
-    "quoted_backslash",
-    R"(server:
+  const auto yaml_path = WriteYaml("quoted_backslash",
+                                   R"(server:
   bind_address: "0.0.0.0:50051"
 database:
   sqlite:
@@ -46,9 +45,8 @@ leases:
 }
 
 void TestScalarEscapingForNewlineAndUnicode() {
-  const auto yaml_path = WriteYaml(
-    "newline_unicode",
-    R"(server:
+  const auto yaml_path = WriteYaml("newline_unicode",
+                                   R"(server:
   bind_address: "line1\nline2☃"
 database:
   sqlite:
@@ -70,9 +68,8 @@ leases:
 }
 
 void TestUnknownFieldsAreRejected() {
-  const auto yaml_path = WriteYaml(
-    "unknown_field",
-    R"(server:
+  const auto yaml_path = WriteYaml("unknown_field",
+                                   R"(server:
   bind_address: "0.0.0.0:50051"
 unknown_field: 123
 database:

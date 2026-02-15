@@ -37,7 +37,7 @@ class MemoryRepository final : public db::Repository {
   Result                             AppendStreamEntries(Transaction&, uint64_t stream_id, std::vector<model::StreamEntryRecord>& entries) override;
   std::vector<model::StreamEntryRecord> ReadStreamEntries(Transaction&, uint64_t stream_id, uint64_t start_offset,
                                                           std::optional<uint64_t> max_entries, std::optional<uint64_t> min_append_time_ms) override;
-  std::optional<uint64_t>                 GetMaxStreamOffset(Transaction&, uint64_t stream_id) override;
+  std::optional<uint64_t>               GetMaxStreamOffset(Transaction&, uint64_t stream_id) override;
   std::vector<model::StreamEntryRecord> ReadStreamEntriesRange(Transaction&, uint64_t stream_id, uint64_t start_offset, uint64_t end_offset) override;
   Result                                TrimStreamEntriesToMaxCount(Transaction&, uint64_t stream_id, uint64_t max_entries) override;
   Result                                DeleteStreamEntriesOlderThan(Transaction&, uint64_t stream_id, uint64_t min_append_time_ms) override;

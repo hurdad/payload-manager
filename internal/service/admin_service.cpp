@@ -41,15 +41,14 @@ StatsResponse AdminService::Stats(const StatsRequest&) {
     resp.set_payloads_disk(disk_count);
     resp.set_payloads_gpu(gpu_count);
 
-
     payload::observability::Metrics::Instance().RecordRequest("AdminService.Stats", true);
     payload::observability::Metrics::Instance().ObserveRequestLatencyMs(
         "AdminService.Stats", std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - started_at).count());
     return resp;
   } catch (const std::exception& ex) {
     span.RecordException(ex.what());
-    PAYLOAD_LOG_ERROR("RPC failed", {payload::observability::StringField("route", "AdminService.Stats"),
-                                      payload::observability::StringField("error", ex.what())});
+    PAYLOAD_LOG_ERROR("RPC failed",
+                      {payload::observability::StringField("route", "AdminService.Stats"), payload::observability::StringField("error", ex.what())});
     payload::observability::Metrics::Instance().RecordRequest("AdminService.Stats", false);
     payload::observability::Metrics::Instance().ObserveRequestLatencyMs(
         "AdminService.Stats", std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - started_at).count());
