@@ -17,6 +17,15 @@ jobs:
     permissions:
       contents: read
       packages: write
+    strategy:
+      matrix:
+        include:
+          - component: payload-manager
+            dockerfile: ./Dockerfile
+            image: ghcr.io/${{ github.repository }}
+          - component: payloadctl
+            dockerfile: ./Dockerfile.payloadctl
+            image: ghcr.io/${{ github.repository }}/payloadctl
 
     steps:
       - name: Checkout
@@ -40,17 +49,17 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ghcr.io/${{ github.repository }}
+          images: ${{ matrix.image }}
           tags: |
             type=ref,event=branch
             type=ref,event=tag
             type=sha
 
-      - name: Build and (optionally) push Docker image
+      - name: Build and (optionally) push Docker image (${{ matrix.component }})
         uses: docker/build-push-action@v6
         with:
           context: .
-          file: ./Dockerfile
+          file: ${{ matrix.dockerfile }}
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}

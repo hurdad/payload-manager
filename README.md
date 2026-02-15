@@ -90,6 +90,12 @@ Build the production image:
 docker build -t payload-manager:latest .
 ```
 
+Build the `payloadctl` image:
+
+```bash
+docker build -f Dockerfile.payloadctl -t payloadctl:latest .
+```
+
 Run the service with PostgreSQL using Docker Compose:
 
 ```bash
