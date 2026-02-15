@@ -1,0 +1,54 @@
+#!/usr/bin/env python3
+
+import sys
+from pathlib import Path
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(REPO_ROOT / "client/python"))
+import uuid
+
+import grpc
+
+from payload_manager_client import PayloadClient
+from payload.manager.catalog.v1 import metadata_pb2
+from payload.manager.core.v1 import placement_pb2
+
+
+def main() -> int:
+    target = sys.argv[1] if len(sys.argv) > 1 else "localhost:50051"
+    client = PayloadClient(grpc.insecure_channel(target))
+
+    writable = client.AllocateWritableBuffer(8, placement_pb2.TIER_RAM)
+    writable.mmap_obj[0] = 42
+
+    payload_uuid = uuid.UUID(bytes=bytes(writable.descriptor.id.value))
+    raw_uuid = payload_uuid.bytes
+    client.CommitPayload(str(payload_uuid))
+
+    update_request = metadata_pb2.UpdatePayloadMetadataRequest(
+        mode=metadata_pb2.METADATA_UPDATE_MODE_REPLACE,
+        actor="examples/python/metadata_example",
+        reason="demonstrate metadata update flow",
+    )
+    update_request.id.value = raw_uuid
+    update_request.metadata.id.value = raw_uuid
+    update_request.metadata.schema = "example.payload.v1"
+    update_request.metadata.data = '{"producer":"metadata_example","notes":"hello payload manager"}'
+    client.UpdatePayloadMetadata(update_request)
+
+    event_request = metadata_pb2.AppendPayloadMetadataEventRequest(
+        source="examples/python/metadata_example",
+        version="v1",
+    )
+    event_request.id.value = raw_uuid
+    event_request.metadata.id.value = raw_uuid
+    event_request.metadata.schema = "example.payload.v1"
+    event_request.metadata.data = '{"event":"metadata_updated","component":"metadata_example"}'
+    client.AppendPayloadMetadataEvent(event_request)
+
+    print(f"Metadata updated for payload {payload_uuid}")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
