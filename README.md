@@ -51,6 +51,7 @@ For detailed documentation, see:
 - [Architecture Overview](docs/ARCHITECTURE.md)
 - [Design Details](docs/DESIGN.md)
 - [Testing Strategy](docs/TESTING_STRATEGY.md)
+- [Metrics Reference](docs/METRICS.md)
 
 ## Build
 
