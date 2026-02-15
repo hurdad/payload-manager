@@ -1,6 +1,7 @@
 #pragma once
 
-#include <mutex>
+#include <array>
+#include <shared_mutex>
 #include <string>
 #include <vector>
 
@@ -30,10 +31,24 @@ class StreamService {
   payload::manager::v1::GetRangeResponse GetRange(const payload::manager::v1::GetRangeRequest& req);
 
  private:
+  static constexpr std::size_t kStreamLockShardCount = 64;
+
   static std::string Key(const payload::manager::v1::StreamID& stream);
+  std::size_t        StreamShardIndex(const payload::manager::v1::StreamID& stream) const;
+
+  std::shared_mutex& StreamShard(const payload::manager::v1::StreamID& stream);
 
   ServiceContext ctx_;
-  std::mutex     mutex_;
+  // Locking strategy:
+  // - global_mu_ protects stream lifecycle transitions (create/delete) from racing
+  //   with per-stream operations.
+  // - stream_mu_ shards coordinate stream-scoped read/write operations so work on
+  //   different streams can proceed concurrently.
+  // We always lock global_mu_ first and then a shard lock to avoid deadlocks.
+  // This is especially important for the memory backend where transactions commit
+  // by swapping a snapshot in memory (see internal/db/memory/memory_tx.cpp).
+  std::shared_mutex                                global_mu_;
+  std::array<std::shared_mutex, kStreamLockShardCount> stream_mu_;
 };
 
 } // namespace payload::service

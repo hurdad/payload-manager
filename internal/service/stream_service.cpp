@@ -4,6 +4,7 @@
 #include <google/protobuf/util/json_util.h>
 
 #include <chrono>
+#include <functional>
 #include <limits>
 #include <optional>
 #include <stdexcept>
@@ -155,14 +156,22 @@ std::string StreamService::Key(const StreamID& stream) {
   return stream.namespace_() + "/" + stream.name();
 }
 
+std::size_t StreamService::StreamShardIndex(const StreamID& stream) const {
+  return std::hash<std::string>{}(Key(stream)) % stream_mu_.size();
+}
+
+std::shared_mutex& StreamService::StreamShard(const StreamID& stream) {
+  return stream_mu_[StreamShardIndex(stream)];
+}
+
 void StreamService::CreateStream(const CreateStreamRequest& req) {
   ObserveRpc("StreamService.CreateStream", req.has_stream() ? &req.stream() : nullptr, nullptr, [&] {
     if (!req.has_stream() || req.stream().name().empty()) {
       throw payload::util::InvalidState("create stream: missing stream name; set stream.name and retry");
     }
 
-    std::lock_guard<std::mutex> lock(mutex_);
-    auto                        tx = ctx_.repository->Begin();
+    std::unique_lock<std::shared_mutex> global_lock(global_mu_);
+    auto                                tx = ctx_.repository->Begin();
 
     if (ctx_.repository->GetStreamByName(*tx, req.stream().namespace_(), req.stream().name()).has_value()) {
       throw payload::util::AlreadyExists("create stream: stream already exists; choose a different stream name or delete existing stream");
@@ -185,8 +194,8 @@ void StreamService::DeleteStream(const DeleteStreamRequest& req) {
       throw payload::util::InvalidState("delete stream: missing stream name; set stream.name and retry");
     }
 
-    std::lock_guard<std::mutex> lock(mutex_);
-    auto                        tx = ctx_.repository->Begin();
+    std::unique_lock<std::shared_mutex> global_lock(global_mu_);
+    auto                                tx = ctx_.repository->Begin();
 
     ThrowIfError(ctx_.repository->DeleteStreamByName(*tx, req.stream().namespace_(), req.stream().name()), "delete stream");
     tx->Commit();
@@ -196,8 +205,9 @@ void StreamService::DeleteStream(const DeleteStreamRequest& req) {
 AppendResponse StreamService::Append(const AppendRequest& req) {
   const PayloadID* payload_id = req.items().empty() ? nullptr : &req.items().begin()->payload_id();
   return ObserveRpc("StreamService.Append", &req.stream(), payload_id, [&] {
-    std::lock_guard<std::mutex> lock(mutex_);
-    auto                        tx = ctx_.repository->Begin();
+    std::shared_lock<std::shared_mutex> global_lock(global_mu_);
+    std::unique_lock<std::shared_mutex> stream_lock(StreamShard(req.stream()));
+    auto                                tx = ctx_.repository->Begin();
 
     const auto stream = GetStreamOrThrow(*ctx_.repository, *tx, req.stream(), "append");
 
@@ -235,8 +245,9 @@ AppendResponse StreamService::Append(const AppendRequest& req) {
 
 ReadResponse StreamService::Read(const ReadRequest& req) {
   return ObserveRpc("StreamService.Read", &req.stream(), nullptr, [&] {
-    std::lock_guard<std::mutex> lock(mutex_);
-    auto                        tx = ctx_.repository->Begin();
+    std::shared_lock<std::shared_mutex> global_lock(global_mu_);
+    std::shared_lock<std::shared_mutex> stream_lock(StreamShard(req.stream()));
+    auto                                tx = ctx_.repository->Begin();
 
     const auto stream      = GetStreamOrThrow(*ctx_.repository, *tx, req.stream(), "read");
     const auto max_entries = req.max_entries() == 0 ? std::optional<uint64_t>{} : std::make_optional<uint64_t>(req.max_entries());
@@ -256,8 +267,9 @@ ReadResponse StreamService::Read(const ReadRequest& req) {
 
 std::vector<SubscribeResponse> StreamService::Subscribe(const SubscribeRequest& req) {
   return ObserveRpc("StreamService.Subscribe", &req.stream(), nullptr, [&] {
-    std::lock_guard<std::mutex> lock(mutex_);
-    auto                        tx = ctx_.repository->Begin();
+    std::shared_lock<std::shared_mutex> global_lock(global_mu_);
+    std::shared_lock<std::shared_mutex> stream_lock(StreamShard(req.stream()));
+    auto                                tx = ctx_.repository->Begin();
 
     const auto stream = GetStreamOrThrow(*ctx_.repository, *tx, req.stream(), "subscribe");
 
@@ -287,8 +299,9 @@ std::vector<SubscribeResponse> StreamService::Subscribe(const SubscribeRequest& 
 
 void StreamService::Commit(const CommitRequest& req) {
   ObserveRpc("StreamService.Commit", &req.stream(), nullptr, [&] {
-    std::lock_guard<std::mutex> lock(mutex_);
-    auto                        tx = ctx_.repository->Begin();
+    std::shared_lock<std::shared_mutex> global_lock(global_mu_);
+    std::unique_lock<std::shared_mutex> stream_lock(StreamShard(req.stream()));
+    auto                                tx = ctx_.repository->Begin();
 
     const auto stream = GetStreamOrThrow(*ctx_.repository, *tx, req.stream(), "commit");
 
@@ -303,8 +316,9 @@ void StreamService::Commit(const CommitRequest& req) {
 
 GetCommittedResponse StreamService::GetCommitted(const GetCommittedRequest& req) {
   return ObserveRpc("StreamService.GetCommitted", &req.stream(), nullptr, [&] {
-    std::lock_guard<std::mutex> lock(mutex_);
-    auto                        tx = ctx_.repository->Begin();
+    std::shared_lock<std::shared_mutex> global_lock(global_mu_);
+    std::shared_lock<std::shared_mutex> stream_lock(StreamShard(req.stream()));
+    auto                                tx = ctx_.repository->Begin();
 
     const auto stream = GetStreamOrThrow(*ctx_.repository, *tx, req.stream(), "get committed");
 
@@ -319,8 +333,9 @@ GetCommittedResponse StreamService::GetCommitted(const GetCommittedRequest& req)
 
 GetRangeResponse StreamService::GetRange(const GetRangeRequest& req) {
   return ObserveRpc("StreamService.GetRange", &req.stream(), nullptr, [&] {
-    std::lock_guard<std::mutex> lock(mutex_);
-    auto                        tx = ctx_.repository->Begin();
+    std::shared_lock<std::shared_mutex> global_lock(global_mu_);
+    std::shared_lock<std::shared_mutex> stream_lock(StreamShard(req.stream()));
+    auto                                tx = ctx_.repository->Begin();
 
     const auto stream = GetStreamOrThrow(*ctx_.repository, *tx, req.stream(), "get range");
 
