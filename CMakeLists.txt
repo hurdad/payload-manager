@@ -21,7 +21,15 @@ if(PAYLOAD_MANAGER_ENABLE_OTEL)
         "PAYLOAD_MANAGER_ENABLE_OTEL=ON but ${_otel_dir} is missing. Initialize submodules with: git submodule update --init --recursive")
   endif()
 
-  set(_saved_build_testing ${BUILD_TESTING})
+  set(_otel_cache_vars BUILD_TESTING WITH_OTLP_GRPC WITH_OTLP_HTTP WITH_EXAMPLES WITH_FUNC_TESTS WITH_BENCHMARK)
+  foreach(_otel_var IN LISTS _otel_cache_vars)
+    if(DEFINED CACHE{${_otel_var}})
+      set(_saved_${_otel_var} "$CACHE{${_otel_var}}")
+      set(_had_${_otel_var} TRUE)
+    else()
+      set(_had_${_otel_var} FALSE)
+    endif()
+  endforeach()
 
   set(BUILD_TESTING OFF CACHE BOOL "Disable OpenTelemetry tests" FORCE)
   set(WITH_OTLP_GRPC ON CACHE BOOL "Enable OTLP gRPC exporter" FORCE)
@@ -32,8 +40,18 @@ if(PAYLOAD_MANAGER_ENABLE_OTEL)
 
   add_subdirectory(third_party/opentelemetry-cpp)
 
-  set(BUILD_TESTING ${_saved_build_testing} CACHE BOOL "Build tests" FORCE)
-  unset(_saved_build_testing)
+  foreach(_otel_var IN LISTS _otel_cache_vars)
+    if(_had_${_otel_var})
+      set(${_otel_var} "${_saved_${_otel_var}}" CACHE BOOL "Restored after OpenTelemetry subproject" FORCE)
+    else()
+      unset(${_otel_var} CACHE)
+    endif()
+
+    unset(_saved_${_otel_var})
+    unset(_had_${_otel_var})
+  endforeach()
+
+  unset(_otel_cache_vars)
   unset(_otel_dir)
 endif()
 
