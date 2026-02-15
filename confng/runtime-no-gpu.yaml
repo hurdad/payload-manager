@@ -1,0 +1,52 @@
+server:
+  bind_address: "0.0.0.0:50051"
+
+database:
+  postgres:
+    connection_uri: "postgresql://payload:payload@localhost:5432/payload_manager"
+    max_connections: 32
+
+storage:
+  ram:
+    capacity_bytes: 8589934592  # 8 GiB
+    use_hugepages: false
+  disk:
+    root_path: "/var/lib/payload-manager/payloads"
+    capacity_bytes: 107374182400  # 100 GiB
+    fsync: true
+  object:
+    endpoint: "s3.us-east-1.amazonaws.com"
+    bucket: "payload-manager-prod"
+    access_key: "REPLACE_ME"
+    secret_key: "REPLACE_ME"
+    tls: true
+
+spill_workers:
+  threads: 4
+  retry_backoff: "1s"
+
+leases:
+  default_lease: "20s"
+  max_lease: "120s"
+
+logging:
+  level: "warn"
+  pattern: "%+"
+  include_trace_context: false
+
+observability:
+  metrics_enabled: true
+  tracing_enabled: false
+  logs_enabled: false
+  otlp_endpoint: "http://localhost:4317"
+  transport: OTLP_TRANSPORT_HTTP
+  metrics:
+    request_metrics_enabled: true
+    spill_metrics_enabled: true
+    tier_occupancy_metrics_enabled: true
+    request_latency_histograms_enabled: false
+    route_labels_enabled: false
+    tier_labels_enabled: true
+    min_collection_interval_ms: 1000
+    collection_interval_ms: 10000
+    export_timeout_ms: 3000

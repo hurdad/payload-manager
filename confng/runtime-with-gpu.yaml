@@ -1,0 +1,65 @@
+server:
+  bind_address: "0.0.0.0:50051"
+
+database:
+  sqlite:
+    path: "./data/payload-manager.db"
+    wal_mode: true
+
+storage:
+  ram:
+    capacity_bytes: 17179869184   # 16 GiB
+    use_hugepages: true
+  disk:
+    root_path: "./data/payloads"
+    capacity_bytes: 214748364800  # 200 GiB
+    fsync: false
+  gpu:
+    devices:
+      - device_id: 0
+        capacity_bytes: 12884901888  # 12 GiB
+      - device_id: 1
+        capacity_bytes: 12884901888  # 12 GiB
+
+spill_workers:
+  threads: 8
+  retry_backoff: "0.500s"
+
+leases:
+  default_lease: "30s"
+  max_lease: "300s"
+
+logging:
+  level: "info"
+  pattern: "%Y-%m-%d %H:%M:%S [%^%l%$] %v"
+  include_trace_context: true
+
+observability:
+  metrics_enabled: true
+  tracing_enabled: true
+  logs_enabled: false
+  otlp_endpoint: "http://localhost:4317"
+  transport: OTLP_TRANSPORT_GRPC
+  tracing:
+    trace_hint: TRACE_HINT_DEFAULT
+    processor: TRACE_PROCESSOR_BATCH
+    batch:
+      max_queue_size: 2048
+      max_export_batch_size: 512
+      schedule_delay_ms: 500
+      export_timeout_ms: 3000
+    stage_spans_enabled: true
+    queue_spans_enabled: true
+    record_spans_enabled: false
+    attribute_level: ATTRIBUTES_STANDARD
+    latency_budget_ms: 20
+  metrics:
+    request_metrics_enabled: true
+    spill_metrics_enabled: true
+    tier_occupancy_metrics_enabled: true
+    request_latency_histograms_enabled: true
+    route_labels_enabled: false
+    tier_labels_enabled: true
+    min_collection_interval_ms: 1000
+    collection_interval_ms: 5000
+    export_timeout_ms: 3000
