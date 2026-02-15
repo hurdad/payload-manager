@@ -181,6 +181,10 @@ void StreamService::CreateStream(const CreateStreamRequest& req) {
 
 void StreamService::DeleteStream(const DeleteStreamRequest& req) {
   ObserveRpc("StreamService.DeleteStream", &req.stream(), nullptr, [&] {
+    if (!req.has_stream() || req.stream().name().empty()) {
+      throw payload::util::InvalidState("delete stream: missing stream name; set stream.name and retry");
+    }
+
     std::lock_guard<std::mutex> lock(mutex_);
     auto                        tx = ctx_.repository->Begin();
 
