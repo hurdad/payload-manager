@@ -11,4 +11,11 @@ setup(
         "protobuf>=4.25",
         "pyarrow>=14",
     ],
+    extras_require={
+        # Explicit opt-in for CUDA-capable client environments. The base
+        # install remains CPU-safe; this extra conveys install intent.
+        "cuda": [
+            "pyarrow>=14",
+        ],
+    },
 )
