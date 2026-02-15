@@ -10,6 +10,8 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
 option(PAYLOAD_MANAGER_ENABLE_OTEL "Enable OpenTelemetry integration" OFF)
+option(PAYLOAD_MANAGER_BUILD_SERVICE "Build payload-manager service components" ON)
+option(PAYLOAD_MANAGER_BUILD_PAYLOADCTL "Build payloadctl CLI" ON)
 
 if(PAYLOAD_MANAGER_ENABLE_OTEL)
   add_compile_definitions(ENABLE_OTEL)
@@ -81,13 +83,20 @@ else()
 endif()
 
 add_subdirectory(api)
-add_subdirectory(internal)
 add_subdirectory(internal/db)
-add_subdirectory(cmd/payload-manager)
-add_subdirectory(cmd/payloadctl)
+
+if(PAYLOAD_MANAGER_BUILD_SERVICE)
+  add_subdirectory(internal)
+  add_subdirectory(cmd/payload-manager)
+endif()
+
+if(PAYLOAD_MANAGER_BUILD_PAYLOADCTL)
+  add_subdirectory(cmd/payloadctl)
+endif()
+
 add_subdirectory(client/cpp)
 add_subdirectory(examples/cpp)
 
-if(BUILD_TESTING)
+if(BUILD_TESTING AND PAYLOAD_MANAGER_BUILD_SERVICE)
   add_subdirectory(tests)
 endif()
