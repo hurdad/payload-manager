@@ -187,16 +187,29 @@ if(PAYLOAD_MANAGER_ENABLE_OTEL)
     )
 endif()
 
-option(PAYLOAD_MANAGER_ENABLE_ARROW_CUDA "Enable Arrow CUDA integration for internal runtime" OFF)
+option(PAYLOAD_MANAGER_ENABLE_ARROW_CUDA
+        "Enable Arrow CUDA integration for internal runtime"
+        OFF)
 
 set(_payload_manager_arrow_cuda_targets)
-if(PAYLOAD_MANAGER_ENABLE_ARROW_CUDA)
-    find_package(Arrow CONFIG QUIET)
 
+if(PAYLOAD_MANAGER_ENABLE_ARROW_CUDA)
+
+    # -------------------------------------------------------
+    # Locate Arrow
+    # -------------------------------------------------------
+    find_package(Arrow CONFIG REQUIRED)
+
+    # ArrowCUDA is a separate config in many installs
+    find_package(ArrowCUDA CONFIG QUIET)
+
+    # -------------------------------------------------------
+    # Detect valid targets across Arrow versions/distros
+    # -------------------------------------------------------
     foreach(_arrow_cuda_target IN ITEMS
             ArrowCUDA::arrow_cuda
             Arrow::arrow_cuda
-            ArrowCUDA::arrow_cuda_static
+            arrow_cuda
             ArrowCUDA::arrow_cuda_shared)
         if(TARGET ${_arrow_cuda_target})
             list(APPEND _payload_manager_arrow_cuda_targets ${_arrow_cuda_target})
@@ -207,17 +220,39 @@ if(PAYLOAD_MANAGER_ENABLE_ARROW_CUDA)
 
     if(NOT _payload_manager_arrow_cuda_targets)
         message(FATAL_ERROR
-                "PAYLOAD_MANAGER_ENABLE_ARROW_CUDA=ON but no Arrow CUDA target was found. "
-                "Install Arrow with CUDA support so targets such as ArrowCUDA::arrow_cuda are available.")
+                "PAYLOAD_MANAGER_ENABLE_ARROW_CUDA=ON but Arrow was not built with CUDA.\n"
+                "Rebuild Arrow with -DARROW_CUDA=ON or install libarrow-cuda-dev.")
     endif()
 
-    target_compile_definitions(payload_manager_internal PRIVATE PAYLOAD_MANAGER_ARROW_CUDA=1)
+    # -------------------------------------------------------
+    # CUDA runtime (required even if Arrow found)
+    # -------------------------------------------------------
+    find_package(CUDAToolkit REQUIRED)
 
-    target_link_libraries(payload_manager_internal
-            PUBLIC
-            ${_payload_manager_arrow_cuda_targets}
+    # -------------------------------------------------------
+    # Compile flags
+    # -------------------------------------------------------
+    target_compile_definitions(payload_manager_internal
+            PRIVATE
+            PAYLOAD_MANAGER_ARROW_CUDA=1
     )
+
+    # -------------------------------------------------------
+    # Link libraries
+    # PRIVATE because API surface should stay CPU-compatible
+    # -------------------------------------------------------
+    target_link_libraries(payload_manager_internal
+            PRIVATE
+            ${_payload_manager_arrow_cuda_targets}
+            CUDA::cudart
+    )
+
+    message(STATUS "Payload Manager GPU tier enabled via Arrow CUDA")
+
+else()
+    message(STATUS "Payload Manager built without GPU tier (CPU-only)")
 endif()
+
 
 unset(_payload_manager_arrow_cuda_targets)
 # ================================================================
