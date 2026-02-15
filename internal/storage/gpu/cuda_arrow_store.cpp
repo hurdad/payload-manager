@@ -50,8 +50,12 @@ std::shared_ptr<arrow::Buffer> CudaArrowStore::Read(const PayloadID& id) {
   Copy CPU → GPU
 */
 void CudaArrowStore::Write(const PayloadID& id, const std::shared_ptr<arrow::Buffer>& buffer, bool /*fsync*/) {
-  auto gpu_buf = ctx_->Allocate(buffer->size()).ValueOrDie();
-  ctx_->CopyHostToDevice(buffer->data(), gpu_buf->mutable_data(), buffer->size()).ValueOrDie();
+  auto maybe_buf = ctx_->Allocate(buffer->size());
+  if (!maybe_buf.ok()) throw std::runtime_error("GPU allocate failed: " + maybe_buf.status().ToString());
+  auto gpu_buf = *maybe_buf;
+
+  auto copy_status = ctx_->CopyHostToDevice(buffer->data(), gpu_buf->mutable_data(), buffer->size());
+  if (!copy_status.ok()) throw std::runtime_error("GPU host-to-device copy failed: " + copy_status.ToString());
 
   std::unique_lock lock(mutex_);
   buffers_[Key(id)] = gpu_buf;

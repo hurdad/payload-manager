@@ -1,6 +1,7 @@
 #pragma once
 
 #include <memory>
+#include <mutex>
 #include <shared_mutex>
 #include <string>
 #include <unordered_map>
@@ -54,6 +55,9 @@ class PayloadManager {
   payload::storage::StorageFactory::TierMap     storage_;
   std::shared_ptr<payload::lease::LeaseManager> lease_mgr_;
   std::shared_ptr<payload::db::Repository>      repository_;
+
+  // Serializes Delete with AcquireReadLease to prevent TOCTOU on lease checks.
+  mutable std::mutex delete_mutex_;
 
   // Snapshot cache consistency model:
   // - ResolveSnapshot first serves reads from this cache.

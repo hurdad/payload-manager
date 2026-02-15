@@ -29,33 +29,41 @@ Result PgRepository::InsertPayload(Transaction& t, const model::PayloadRecord& r
 }
 
 std::optional<model::PayloadRecord> PgRepository::GetPayload(Transaction& t, const std::string& id) {
-  auto res = TX(t).Work().exec_prepared("get_payload", id);
-  if (res.empty()) return std::nullopt;
+  try {
+    auto res = TX(t).Work().exec_prepared("get_payload", id);
+    if (res.empty()) return std::nullopt;
 
-  model::PayloadRecord r;
-  r.id         = res[0][0].c_str();
-  r.tier       = (payload::manager::v1::Tier)res[0][1].as<int>();
-  r.state      = (payload::manager::v1::PayloadState)res[0][2].as<int>();
-  r.size_bytes = res[0][3].as<uint64_t>();
-  r.version    = res[0][4].as<uint64_t>();
-  return r;
+    model::PayloadRecord r;
+    r.id         = res[0][0].c_str();
+    r.tier       = (payload::manager::v1::Tier)res[0][1].as<int>();
+    r.state      = (payload::manager::v1::PayloadState)res[0][2].as<int>();
+    r.size_bytes = res[0][3].as<uint64_t>();
+    r.version    = res[0][4].as<uint64_t>();
+    return r;
+  } catch (const std::exception& e) {
+    throw std::runtime_error(std::string("GetPayload failed: ") + e.what());
+  }
 }
 
 std::vector<model::PayloadRecord> PgRepository::ListPayloads(Transaction& t) {
-  auto res = TX(t).Work().exec("SELECT id,tier,state,size_bytes,version FROM payload;");
+  try {
+    auto res = TX(t).Work().exec("SELECT id,tier,state,size_bytes,version FROM payload;");
 
-  std::vector<model::PayloadRecord> records;
-  records.reserve(res.size());
-  for (const auto& row : res) {
-    model::PayloadRecord r;
-    r.id         = row[0].c_str();
-    r.tier       = (payload::manager::v1::Tier)row[1].as<int>();
-    r.state      = (payload::manager::v1::PayloadState)row[2].as<int>();
-    r.size_bytes = row[3].as<uint64_t>();
-    r.version    = row[4].as<uint64_t>();
-    records.push_back(std::move(r));
+    std::vector<model::PayloadRecord> records;
+    records.reserve(res.size());
+    for (const auto& row : res) {
+      model::PayloadRecord r;
+      r.id         = row[0].c_str();
+      r.tier       = (payload::manager::v1::Tier)row[1].as<int>();
+      r.state      = (payload::manager::v1::PayloadState)row[2].as<int>();
+      r.size_bytes = row[3].as<uint64_t>();
+      r.version    = row[4].as<uint64_t>();
+      records.push_back(std::move(r));
+    }
+    return records;
+  } catch (const std::exception& e) {
+    throw std::runtime_error(std::string("ListPayloads failed: ") + e.what());
   }
-  return records;
 }
 Result PgRepository::UpdatePayload(Transaction& t, const model::PayloadRecord& r) {
   try {
@@ -88,17 +96,21 @@ Result PgRepository::UpsertMetadata(Transaction& t, const model::MetadataRecord&
 }
 
 std::optional<model::MetadataRecord> PgRepository::GetMetadata(Transaction& t, const std::string& id) {
-  auto res = TX(t).Work().exec_params("SELECT id,json::text,schema,updated_at_ms FROM payload_metadata WHERE id=$1;", id);
-  if (res.empty()) {
-    return std::nullopt;
-  }
+  try {
+    auto res = TX(t).Work().exec_params("SELECT id,json::text,schema,updated_at_ms FROM payload_metadata WHERE id=$1;", id);
+    if (res.empty()) {
+      return std::nullopt;
+    }
 
-  model::MetadataRecord r;
-  r.id            = res[0][0].c_str();
-  r.json          = res[0][1].c_str();
-  r.schema        = res[0][2].is_null() ? "" : res[0][2].c_str();
-  r.updated_at_ms = res[0][3].as<uint64_t>();
-  return r;
+    model::MetadataRecord r;
+    r.id            = res[0][0].c_str();
+    r.json          = res[0][1].c_str();
+    r.schema        = res[0][2].is_null() ? "" : res[0][2].c_str();
+    r.updated_at_ms = res[0][3].as<uint64_t>();
+    return r;
+  } catch (const std::exception& e) {
+    throw std::runtime_error(std::string("GetMetadata failed: ") + e.what());
+  }
 }
 
 Result PgRepository::InsertLineage(Transaction& t, const model::LineageRecord& r) {
@@ -112,41 +124,49 @@ Result PgRepository::InsertLineage(Transaction& t, const model::LineageRecord& r
 }
 
 std::vector<model::LineageRecord> PgRepository::GetParents(Transaction& t, const std::string& id) {
-  auto res = TX(t).Work().exec_params(
-      "SELECT parent_id,child_id,operation,role,parameters,created_at_ms FROM payload_lineage WHERE child_id=$1 ORDER BY created_at_ms ASC;", id);
+  try {
+    auto res = TX(t).Work().exec_params(
+        "SELECT parent_id,child_id,operation,role,parameters,created_at_ms FROM payload_lineage WHERE child_id=$1 ORDER BY created_at_ms ASC;", id);
 
-  std::vector<model::LineageRecord> out;
-  out.reserve(res.size());
-  for (const auto& row : res) {
-    model::LineageRecord r;
-    r.parent_id     = row[0].c_str();
-    r.child_id      = row[1].c_str();
-    r.operation     = row[2].is_null() ? "" : row[2].c_str();
-    r.role          = row[3].is_null() ? "" : row[3].c_str();
-    r.parameters    = row[4].is_null() ? "" : row[4].c_str();
-    r.created_at_ms = row[5].as<uint64_t>();
-    out.push_back(std::move(r));
+    std::vector<model::LineageRecord> out;
+    out.reserve(res.size());
+    for (const auto& row : res) {
+      model::LineageRecord r;
+      r.parent_id     = row[0].c_str();
+      r.child_id      = row[1].c_str();
+      r.operation     = row[2].is_null() ? "" : row[2].c_str();
+      r.role          = row[3].is_null() ? "" : row[3].c_str();
+      r.parameters    = row[4].is_null() ? "" : row[4].c_str();
+      r.created_at_ms = row[5].as<uint64_t>();
+      out.push_back(std::move(r));
+    }
+    return out;
+  } catch (const std::exception& e) {
+    throw std::runtime_error(std::string("GetParents failed: ") + e.what());
   }
-  return out;
 }
 
 std::vector<model::LineageRecord> PgRepository::GetChildren(Transaction& t, const std::string& id) {
-  auto res = TX(t).Work().exec_params(
-      "SELECT parent_id,child_id,operation,role,parameters,created_at_ms FROM payload_lineage WHERE parent_id=$1 ORDER BY created_at_ms ASC;", id);
+  try {
+    auto res = TX(t).Work().exec_params(
+        "SELECT parent_id,child_id,operation,role,parameters,created_at_ms FROM payload_lineage WHERE parent_id=$1 ORDER BY created_at_ms ASC;", id);
 
-  std::vector<model::LineageRecord> out;
-  out.reserve(res.size());
-  for (const auto& row : res) {
-    model::LineageRecord r;
-    r.parent_id     = row[0].c_str();
-    r.child_id      = row[1].c_str();
-    r.operation     = row[2].is_null() ? "" : row[2].c_str();
-    r.role          = row[3].is_null() ? "" : row[3].c_str();
-    r.parameters    = row[4].is_null() ? "" : row[4].c_str();
-    r.created_at_ms = row[5].as<uint64_t>();
-    out.push_back(std::move(r));
+    std::vector<model::LineageRecord> out;
+    out.reserve(res.size());
+    for (const auto& row : res) {
+      model::LineageRecord r;
+      r.parent_id     = row[0].c_str();
+      r.child_id      = row[1].c_str();
+      r.operation     = row[2].is_null() ? "" : row[2].c_str();
+      r.role          = row[3].is_null() ? "" : row[3].c_str();
+      r.parameters    = row[4].is_null() ? "" : row[4].c_str();
+      r.created_at_ms = row[5].as<uint64_t>();
+      out.push_back(std::move(r));
+    }
+    return out;
+  } catch (const std::exception& e) {
+    throw std::runtime_error(std::string("GetChildren failed: ") + e.what());
   }
-  return out;
 }
 
 Result PgRepository::CreateStream(Transaction& t, model::StreamRecord& r) {
@@ -165,43 +185,51 @@ Result PgRepository::CreateStream(Transaction& t, model::StreamRecord& r) {
 }
 
 std::optional<model::StreamRecord> PgRepository::GetStreamByName(Transaction& t, const std::string& stream_namespace, const std::string& name) {
-  auto res = TX(t).Work().exec_params(
-      "SELECT stream_id, namespace, name, COALESCE(retention_max_entries,0), "
-      "COALESCE(retention_max_age_sec,0), EXTRACT(EPOCH FROM created_at)::bigint * 1000 "
-      "FROM streams WHERE namespace=$1 AND name=$2;",
-      stream_namespace, name);
-  if (res.empty()) {
-    return std::nullopt;
-  }
+  try {
+    auto res = TX(t).Work().exec_params(
+        "SELECT stream_id, namespace, name, COALESCE(retention_max_entries,0), "
+        "COALESCE(retention_max_age_sec,0), EXTRACT(EPOCH FROM created_at)::bigint * 1000 "
+        "FROM streams WHERE namespace=$1 AND name=$2;",
+        stream_namespace, name);
+    if (res.empty()) {
+      return std::nullopt;
+    }
 
-  model::StreamRecord r;
-  r.stream_id             = res[0][0].as<uint64_t>();
-  r.stream_namespace      = res[0][1].c_str();
-  r.name                  = res[0][2].c_str();
-  r.retention_max_entries = res[0][3].as<uint64_t>();
-  r.retention_max_age_sec = res[0][4].as<uint64_t>();
-  r.created_at_ms         = res[0][5].as<uint64_t>();
-  return r;
+    model::StreamRecord r;
+    r.stream_id             = res[0][0].as<uint64_t>();
+    r.stream_namespace      = res[0][1].c_str();
+    r.name                  = res[0][2].c_str();
+    r.retention_max_entries = res[0][3].as<uint64_t>();
+    r.retention_max_age_sec = res[0][4].as<uint64_t>();
+    r.created_at_ms         = res[0][5].as<uint64_t>();
+    return r;
+  } catch (const std::exception& e) {
+    throw std::runtime_error(std::string("GetStreamByName failed: ") + e.what());
+  }
 }
 
 std::optional<model::StreamRecord> PgRepository::GetStreamById(Transaction& t, uint64_t stream_id) {
-  auto res = TX(t).Work().exec_params(
-      "SELECT stream_id, namespace, name, COALESCE(retention_max_entries,0), "
-      "COALESCE(retention_max_age_sec,0), EXTRACT(EPOCH FROM created_at)::bigint * 1000 "
-      "FROM streams WHERE stream_id=$1;",
-      stream_id);
-  if (res.empty()) {
-    return std::nullopt;
-  }
+  try {
+    auto res = TX(t).Work().exec_params(
+        "SELECT stream_id, namespace, name, COALESCE(retention_max_entries,0), "
+        "COALESCE(retention_max_age_sec,0), EXTRACT(EPOCH FROM created_at)::bigint * 1000 "
+        "FROM streams WHERE stream_id=$1;",
+        stream_id);
+    if (res.empty()) {
+      return std::nullopt;
+    }
 
-  model::StreamRecord r;
-  r.stream_id             = res[0][0].as<uint64_t>();
-  r.stream_namespace      = res[0][1].c_str();
-  r.name                  = res[0][2].c_str();
-  r.retention_max_entries = res[0][3].as<uint64_t>();
-  r.retention_max_age_sec = res[0][4].as<uint64_t>();
-  r.created_at_ms         = res[0][5].as<uint64_t>();
-  return r;
+    model::StreamRecord r;
+    r.stream_id             = res[0][0].as<uint64_t>();
+    r.stream_namespace      = res[0][1].c_str();
+    r.name                  = res[0][2].c_str();
+    r.retention_max_entries = res[0][3].as<uint64_t>();
+    r.retention_max_age_sec = res[0][4].as<uint64_t>();
+    r.created_at_ms         = res[0][5].as<uint64_t>();
+    return r;
+  } catch (const std::exception& e) {
+    throw std::runtime_error(std::string("GetStreamById failed: ") + e.what());
+  }
 }
 
 Result PgRepository::DeleteStreamByName(Transaction& t, const std::string& stream_namespace, const std::string& name) {

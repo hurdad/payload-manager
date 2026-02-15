@@ -165,9 +165,11 @@ void PayloadManager::PopulateLocation(PayloadDescriptor* descriptor) {
         throw payload::util::InvalidState("payload GPU backend is not CUDA-capable");
       }
 
-      auto ipc_handle = cuda_backend->ExportIPC(id);
-      auto gpu_buffer = backend->Read(id);
-      auto serialized = ipc_handle->Serialize().ValueOrDie();
+      auto ipc_handle       = cuda_backend->ExportIPC(id);
+      auto gpu_buffer       = backend->Read(id);
+      auto maybe_serialized = ipc_handle->Serialize();
+      if (!maybe_serialized.ok()) throw std::runtime_error("GPU IPC handle serialize failed: " + maybe_serialized.status().ToString());
+      auto serialized = *maybe_serialized;
 
       GpuLocation gpu;
       gpu.set_device_id(0);
@@ -250,7 +252,9 @@ PayloadDescriptor PayloadManager::Commit(const PayloadID& id) {
 }
 
 void PayloadManager::Delete(const PayloadID& id, bool force) {
-  // Lease operations must complete before mutating persistent payload state.
+  // Hold delete_mutex_ to prevent new leases from being acquired between the check and the DB mutation.
+  std::lock_guard<std::mutex> delete_lock(delete_mutex_);
+
   if (force) {
     lease_mgr_->InvalidateAll(id);
   }
@@ -287,6 +291,8 @@ PayloadDescriptor PayloadManager::ResolveSnapshot(const PayloadID& id) {
 }
 
 AcquireReadLeaseResponse PayloadManager::AcquireReadLease(const PayloadID& id, Tier min_tier, uint64_t min_duration_ms) {
+  std::lock_guard<std::mutex> delete_lock(delete_mutex_);
+
   auto desc = ResolveSnapshot(id);
   if (desc.tier() < min_tier) {
     desc = Promote(id, min_tier);

@@ -30,7 +30,9 @@ class MemoryTransaction final : public db::Transaction {
  private:
   MemoryRepository&       repo_;
   MemoryRepository::State working_;
-  bool                    committed_ = false;
+  uint64_t                snapshot_version_{0};
+  bool                    committed_   = false;
+  bool                    rolled_back_ = false;
 };
 
 } // namespace payload::db::memory

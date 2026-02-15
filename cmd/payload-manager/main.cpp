@@ -1,5 +1,6 @@
 #include <chrono>
 #include <csignal>
+#include <iostream>
 #include <thread>
 
 #include "internal/config/config_loader.hpp"
@@ -11,15 +12,15 @@
 using payload::factory::Build;
 using payload::runtime::Server;
 
-static bool g_running = true;
+static volatile std::sig_atomic_t g_running = 1;
 
 void HandleSignal(int) {
-  g_running = false;
+  g_running = 0;
 }
 
 int main(int argc, char** argv) {
   if (argc < 2) {
-    PAYLOAD_LOG_ERROR("Usage: payload-manager <config.yaml>");
+    std::cerr << "Usage: payload-manager <config.yaml>" << std::endl;
     return 1;
   }
 
@@ -43,14 +44,12 @@ int main(int argc, char** argv) {
     // ------------------------------------------------------------
     Server server(config.server().bind_address(), std::move(app.grpc_services));
 
-    server.Start();
-    PAYLOAD_LOG_INFO("Payload Manager started", {payload::observability::StringField("bind_address", config.server().bind_address())});
-
-    // ------------------------------------------------------------
-    // Wait for shutdown signal
-    // ------------------------------------------------------------
+    // Register signal handlers before starting server to avoid race window.
     std::signal(SIGINT, HandleSignal);
     std::signal(SIGTERM, HandleSignal);
+
+    server.Start();
+    PAYLOAD_LOG_INFO("Payload Manager started", {payload::observability::StringField("bind_address", config.server().bind_address())});
 
     while (g_running) std::this_thread::sleep_for(std::chrono::seconds(1));
 

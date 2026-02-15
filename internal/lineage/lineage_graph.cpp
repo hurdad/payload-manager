@@ -18,7 +18,8 @@ std::string LineageGraph::Key(const PayloadID& id) {
 // ------------------------------------------------------------
 
 void LineageGraph::Add(const AddLineageRequest& req) {
-  const auto child_key = Key(req.child());
+  std::unique_lock lock(mutex_);
+  const auto       child_key = Key(req.child());
 
   for (const auto& parent_edge : req.parents()) {
     const auto parent_key = parent_edge.parent().value();
@@ -42,6 +43,7 @@ void LineageGraph::Add(const AddLineageRequest& req) {
 // ------------------------------------------------------------
 
 std::vector<LineageEdge> LineageGraph::Query(const GetLineageRequest& req) const {
+  std::shared_lock         lock(mutex_);
   std::vector<LineageEdge> result;
 
   const auto     start     = Key(req.id());

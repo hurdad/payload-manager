@@ -4,6 +4,7 @@
 #include <arrow/result.h>
 
 #include "internal/storage/common/arrow_utils.hpp"
+#include "internal/storage/common/path_utils.hpp"
 #include "payload/manager/v1.hpp"
 
 namespace payload::storage {
@@ -21,6 +22,7 @@ ObjectArrowStore::ObjectArrowStore(std::shared_ptr<arrow::fs::S3FileSystem> fs, 
       s3://bucket/prefix/<uuid>.bin
 */
 std::string ObjectArrowStore::ObjectPath(const PayloadID& id) const {
+  common::ValidatePayloadId(id.value());
   return bucket_ + "/" + prefix_ + "/" + id.value() + ".bin";
 }
 

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <shared_mutex>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -23,6 +24,7 @@ class LineageGraph {
 
   static std::string Key(const payload::manager::v1::PayloadID& id);
 
+  mutable std::shared_mutex                                mutex_;
   std::unordered_map<std::string, std::vector<EdgeRecord>> parents_;
   std::unordered_map<std::string, std::vector<EdgeRecord>> children_;
 };

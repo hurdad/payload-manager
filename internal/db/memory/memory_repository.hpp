@@ -62,6 +62,7 @@ class MemoryRepository final : public db::Repository {
 
   std::mutex mutex_;
   State      committed_;
+  uint64_t   committed_version_{0};
 };
 
 } // namespace payload::db::memory
