@@ -1,6 +1,3 @@
-#include "internal/storage/gpu/cuda_arrow_store.hpp"
-#include "internal/storage/gpu/cuda_context.hpp"
-
 #include <arrow/buffer.h>
 
 #include <cassert>
@@ -9,6 +6,9 @@
 #include <memory>
 #include <stdexcept>
 #include <vector>
+
+#include "internal/storage/gpu/cuda_arrow_store.hpp"
+#include "internal/storage/gpu/cuda_context.hpp"
 
 namespace {
 
@@ -28,7 +28,7 @@ bool HasCudaDevice() {
 }
 
 void TestContextManagerReturnsSingletonContext() {
-  const auto first = CudaContextManager::Get(0);
+  const auto first  = CudaContextManager::Get(0);
   const auto second = CudaContextManager::Get(0);
 
   assert(first);
@@ -38,10 +38,10 @@ void TestContextManagerReturnsSingletonContext() {
 
 void TestAllocateReadExportAndRemoveLifecycle() {
   CudaArrowStore store(0);
-  const auto id = MakePayloadID("cuda-lifecycle");
+  const auto     id = MakePayloadID("cuda-lifecycle");
 
   constexpr int64_t size_bytes = 32;
-  const auto allocated = store.Allocate(id, size_bytes);
+  const auto        allocated  = store.Allocate(id, size_bytes);
   assert(allocated);
   assert(allocated->size() == size_bytes);
 
@@ -66,9 +66,9 @@ void TestAllocateReadExportAndRemoveLifecycle() {
 
 void TestWriteCopiesHostBufferToDeviceBuffer() {
   CudaArrowStore store(0);
-  const auto id = MakePayloadID("cuda-write");
+  const auto     id = MakePayloadID("cuda-write");
 
-  auto host_buffer = arrow::AllocateBuffer(4).ValueOrDie();
+  auto host_buffer               = arrow::AllocateBuffer(4).ValueOrDie();
   host_buffer->mutable_data()[0] = static_cast<uint8_t>(1);
   host_buffer->mutable_data()[1] = static_cast<uint8_t>(2);
   host_buffer->mutable_data()[2] = static_cast<uint8_t>(3);
@@ -80,7 +80,7 @@ void TestWriteCopiesHostBufferToDeviceBuffer() {
   assert(device_buffer->size() == host_buffer->size());
 
   std::vector<uint8_t> round_trip(static_cast<size_t>(host_buffer->size()), 0);
-  auto ctx = CudaContextManager::Get(0);
+  auto                 ctx = CudaContextManager::Get(0);
   ctx->CopyDeviceToHost(device_buffer->data(), round_trip.data(), device_buffer->size()).ValueOrDie();
 
   assert(round_trip[0] == 1);

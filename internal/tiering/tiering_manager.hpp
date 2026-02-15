@@ -19,7 +19,7 @@ namespace payload::tiering {
 class TieringManager {
  public:
   TieringManager(std::shared_ptr<TieringPolicy> policy, std::shared_ptr<spill::SpillScheduler> scheduler,
-                 std::shared_ptr<payload::core::PayloadManager> manager, PressureState state);
+                 std::shared_ptr<payload::core::PayloadManager> manager, std::shared_ptr<PressureState> state);
 
   void Start();
   void Stop();
@@ -30,7 +30,7 @@ class TieringManager {
   std::shared_ptr<TieringPolicy>                 policy_;
   std::shared_ptr<spill::SpillScheduler>         scheduler_;
   std::shared_ptr<payload::core::PayloadManager> manager_;
-  PressureState                                  state_;
+  std::shared_ptr<PressureState>                 state_;
 
   std::thread       thread_;
   std::atomic<bool> running_{false};

@@ -1,5 +1,6 @@
 #include <grpcpp/grpcpp.h>
 
+#include <cstdlib>
 #include <iostream>
 #include <memory>
 #include <optional>
@@ -25,9 +26,38 @@ static void Usage() {
             << "  payloadctl <addr> stats\n";
 }
 
+static int HexNibble(char c) {
+  if (c >= '0' && c <= '9') return c - '0';
+  if (c >= 'a' && c <= 'f') return 10 + (c - 'a');
+  if (c >= 'A' && c <= 'F') return 10 + (c - 'A');
+  return -1;
+}
+
 static PayloadID MakeID(const std::string& s) {
+  // Strip dashes and collect hex characters.
+  std::string hex;
+  hex.reserve(32);
+  for (char c : s) {
+    if (c == '-') continue;
+    if (HexNibble(c) < 0) {
+      std::cerr << "invalid uuid: non-hex character in '" << s << "'\n";
+      std::exit(1);
+    }
+    hex.push_back(c);
+  }
+  if (hex.size() != 32) {
+    std::cerr << "invalid uuid: expected 32 hex chars, got " << hex.size() << "\n";
+    std::exit(1);
+  }
+
+  // Convert 32 hex chars to 16 raw bytes.
+  std::string bytes(16, '\0');
+  for (size_t i = 0; i < 16; ++i) {
+    bytes[i] = static_cast<char>((HexNibble(hex[2 * i]) << 4) | HexNibble(hex[2 * i + 1]));
+  }
+
   PayloadID id;
-  id.set_value(s);
+  id.set_value(bytes);
   return id;
 }
 

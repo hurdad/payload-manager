@@ -43,7 +43,7 @@ class PayloadManager {
 
   void                                    ReleaseLease(const std::string& lease_id);
   payload::manager::v1::PayloadDescriptor Promote(const payload::manager::v1::PayloadID& id, payload::manager::v1::Tier target);
-  void                                    ExecuteSpill(const payload::manager::v1::PayloadID& id, payload::manager::v1::Tier target, bool /*fsync*/);
+  void                                    ExecuteSpill(const payload::manager::v1::PayloadID& id, payload::manager::v1::Tier target, bool fsync);
 
  private:
   static std::string Key(const payload::manager::v1::PayloadID& id);
