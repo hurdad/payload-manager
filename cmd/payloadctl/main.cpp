@@ -2,6 +2,8 @@
 
 #include <iostream>
 #include <memory>
+#include <optional>
+#include <string>
 
 #include "payload/manager/services/v1/payload_admin_service.grpc.pb.h"
 #include "payload/manager/services/v1/payload_catalog_service.grpc.pb.h"
@@ -12,9 +14,14 @@ using namespace payload::manager::v1;
 
 static void Usage() {
   std::cout << "Usage:\n"
+            << "  payloadctl <addr> allocate <size_bytes> [tier=ram|disk|gpu]\n"
+            << "  payloadctl <addr> commit <uuid>\n"
             << "  payloadctl <addr> resolve <uuid>\n"
             << "  payloadctl <addr> lease <uuid>\n"
+            << "  payloadctl <addr> release <lease_id>\n"
             << "  payloadctl <addr> delete <uuid>\n"
+            << "  payloadctl <addr> promote <uuid> <tier=ram|disk|gpu>\n"
+            << "  payloadctl <addr> spill <uuid>\n"
             << "  payloadctl <addr> stats\n";
 }
 
@@ -22,6 +29,19 @@ static PayloadID MakeID(const std::string& s) {
   PayloadID id;
   id.set_value(s);
   return id;
+}
+
+static std::optional<Tier> ParseTier(const std::string& value) {
+  if (value == "ram") {
+    return TIER_RAM;
+  }
+  if (value == "disk") {
+    return TIER_DISK;
+  }
+  if (value == "gpu") {
+    return TIER_GPU;
+  }
+  return std::nullopt;
 }
 
 int main(int argc, char** argv) {
@@ -40,6 +60,61 @@ int main(int argc, char** argv) {
   auto admin_stub   = PayloadAdminService::NewStub(channel);
 
   grpc::ClientContext ctx;
+
+  // ------------------------------------------------------------
+
+  if (cmd == "allocate") {
+    if (argc < 4) return 1;
+
+    uint64_t size_bytes = std::stoull(argv[3]);
+
+    Tier preferred_tier = TIER_RAM;
+    if (argc >= 5) {
+      auto parsed = ParseTier(argv[4]);
+      if (!parsed.has_value()) {
+        std::cerr << "unsupported tier: " << argv[4] << "\n";
+        return 1;
+      }
+      preferred_tier = parsed.value();
+    }
+
+    AllocatePayloadRequest req;
+    req.set_size_bytes(size_bytes);
+    req.set_preferred_tier(preferred_tier);
+
+    AllocatePayloadResponse resp;
+
+    auto status = catalog_stub->AllocatePayload(&ctx, req, &resp);
+
+    if (!status.ok()) {
+      std::cerr << status.error_message() << "\n";
+      return 2;
+    }
+
+    std::cout << "tier=" << resp.payload_descriptor().tier() << "\n";
+    return 0;
+  }
+
+  // ------------------------------------------------------------
+
+  if (cmd == "commit") {
+    if (argc < 4) return 1;
+
+    CommitPayloadRequest req;
+    *req.mutable_id() = MakeID(argv[3]);
+
+    CommitPayloadResponse resp;
+
+    auto status = catalog_stub->CommitPayload(&ctx, req, &resp);
+
+    if (!status.ok()) {
+      std::cerr << status.error_message() << "\n";
+      return 2;
+    }
+
+    std::cout << "committed\n";
+    return 0;
+  }
 
   // ------------------------------------------------------------
 
@@ -102,6 +177,78 @@ int main(int argc, char** argv) {
     }
 
     std::cout << "deleted\n";
+    return 0;
+  }
+
+  // ------------------------------------------------------------
+
+  if (cmd == "release") {
+    if (argc < 4) return 1;
+
+    ReleaseLeaseRequest req;
+    req.set_lease_id(argv[3]);
+
+    google::protobuf::Empty resp;
+
+    auto status = data_stub->ReleaseLease(&ctx, req, &resp);
+
+    if (!status.ok()) {
+      std::cerr << status.error_message() << "\n";
+      return 2;
+    }
+
+    std::cout << "released\n";
+    return 0;
+  }
+
+  // ------------------------------------------------------------
+
+  if (cmd == "promote") {
+    if (argc < 5) return 1;
+
+    auto parsed = ParseTier(argv[4]);
+    if (!parsed.has_value()) {
+      std::cerr << "unsupported tier: " << argv[4] << "\n";
+      return 1;
+    }
+
+    PromoteRequest req;
+    *req.mutable_id() = MakeID(argv[3]);
+    req.set_target_tier(parsed.value());
+    req.set_policy(PROMOTION_POLICY_BEST_EFFORT);
+
+    PromoteResponse resp;
+
+    auto status = catalog_stub->Promote(&ctx, req, &resp);
+
+    if (!status.ok()) {
+      std::cerr << status.error_message() << "\n";
+      return 2;
+    }
+
+    std::cout << "tier=" << resp.payload_descriptor().tier() << "\n";
+    return 0;
+  }
+
+  // ------------------------------------------------------------
+
+  if (cmd == "spill") {
+    if (argc < 4) return 1;
+
+    SpillRequest req;
+    *req.add_ids() = MakeID(argv[3]);
+    req.set_policy(SPILL_POLICY_BEST_EFFORT);
+
+    SpillResponse resp;
+
+    auto status = catalog_stub->Spill(&ctx, req, &resp);
+
+    if (!status.ok()) {
+      std::cerr << status.error_message() << "\n";
+      return 2;
+    }
+
+    std::cout << "results=" << resp.results_size() << "\n";
     return 0;
   }
 
