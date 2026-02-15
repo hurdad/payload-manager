@@ -1,6 +1,10 @@
 #include "client/cpp/payload_manager_client.h"
 
 #include <arrow/status.h>
+#if PAYLOAD_CLIENT_ARROW_CUDA
+#include <arrow/gpu/cuda_context.h>
+#include <arrow/gpu/cuda_memory.h>
+#endif
 #include <fcntl.h>
 #include <grpcpp/client_context.h>
 #include <sys/mman.h>
@@ -124,6 +128,35 @@ class MutableMMapBuffer final : public arrow::MutableBuffer {
   size_t mapped_size_;
   int    fd_;
 };
+
+#if PAYLOAD_CLIENT_ARROW_CUDA
+class MutableCudaIpcBuffer final : public arrow::MutableBuffer {
+ public:
+  explicit MutableCudaIpcBuffer(std::shared_ptr<arrow::cuda::CudaBuffer> buffer)
+      : arrow::MutableBuffer(buffer->mutable_data(), buffer->size()), buffer_(std::move(buffer)) {
+  }
+
+ private:
+  std::shared_ptr<arrow::cuda::CudaBuffer> buffer_;
+};
+
+arrow::Result<std::shared_ptr<arrow::cuda::CudaBuffer>> OpenCudaIpcBuffer(const payload::manager::v1::PayloadDescriptor& descriptor) {
+  const auto& gpu = descriptor.gpu();
+
+  if (gpu.ipc_handle().empty()) {
+    return arrow::Status::Invalid("payload descriptor GPU location has empty IPC handle");
+  }
+
+  if (gpu.ipc_handle().size() != sizeof(CUipcMemHandle)) {
+    return arrow::Status::Invalid("payload descriptor GPU IPC handle must be ", sizeof(CUipcMemHandle), " bytes, got ", gpu.ipc_handle().size());
+  }
+
+  ARROW_ASSIGN_OR_RAISE(auto* device_manager, arrow::cuda::CudaDeviceManager::Instance());
+  ARROW_ASSIGN_OR_RAISE(auto context, device_manager->GetContext(static_cast<int>(gpu.device_id())));
+  ARROW_ASSIGN_OR_RAISE(auto ipc_handle, arrow::cuda::CudaIpcMemHandle::FromBuffer(gpu.ipc_handle().data()));
+  return context->OpenIpcBuffer(*ipc_handle);
+}
+#endif
 
 arrow::Result<std::shared_ptr<arrow::Buffer>> MMapReadOnly(int fd, uint64_t offset, uint64_t length) {
   if (length == 0) {
@@ -381,10 +414,8 @@ arrow::Result<std::shared_ptr<arrow::MutableBuffer>> PayloadClient::OpenMutableB
 
   if (descriptor.has_gpu()) {
 #if PAYLOAD_CLIENT_ARROW_CUDA
-    // TODO(payload::manager::client::cuda): Import/open descriptor.gpu().ipc_handle() via Arrow CUDA APIs
-    // and return an Arrow buffer that references device memory.
-    return arrow::Status::NotImplemented(
-        "PAYLOAD_CLIENT_ARROW_CUDA=1 build detected, but GPU buffer import is not implemented yet in payload::manager::client::PayloadClient");
+    ARROW_ASSIGN_OR_RAISE(auto cuda_buffer, OpenCudaIpcBuffer(descriptor));
+    return std::make_shared<MutableCudaIpcBuffer>(std::move(cuda_buffer));
 #else
     return arrow::Status::NotImplemented(
         "Payload descriptor tier GPU is not available because this client was built without CUDA support (PAYLOAD_CLIENT_ARROW_CUDA=0)");
@@ -424,10 +455,8 @@ arrow::Result<std::shared_ptr<arrow::Buffer>> PayloadClient::OpenReadableBuffer(
 
   if (descriptor.has_gpu()) {
 #if PAYLOAD_CLIENT_ARROW_CUDA
-    // TODO(payload::manager::client::cuda): Import/open descriptor.gpu().ipc_handle() via Arrow CUDA APIs
-    // and return a readable Arrow buffer that references device memory.
-    return arrow::Status::NotImplemented(
-        "PAYLOAD_CLIENT_ARROW_CUDA=1 build detected, but GPU buffer import is not implemented yet in payload::manager::client::PayloadClient");
+    ARROW_ASSIGN_OR_RAISE(auto cuda_buffer, OpenCudaIpcBuffer(descriptor));
+    return std::static_pointer_cast<arrow::Buffer>(std::move(cuda_buffer));
 #else
     return arrow::Status::NotImplemented(
         "Payload descriptor tier GPU is not available because this client was built without CUDA support (PAYLOAD_CLIENT_ARROW_CUDA=0)");
