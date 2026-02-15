@@ -86,6 +86,8 @@ set(INTERNAL_SRC
         spill/spill_worker.cpp
         # storage
         storage/storage_factory.cpp
+        storage/ram/ram_arrow_store.cpp
+        storage/disk/disk_arrow_store.cpp
 
         # util
         util/time.cpp
@@ -196,6 +198,11 @@ option(PAYLOAD_MANAGER_ENABLE_ARROW_CUDA
 set(_payload_manager_arrow_cuda_targets)
 
 if(PAYLOAD_MANAGER_ENABLE_ARROW_CUDA)
+    list(APPEND INTERNAL_SRC
+            storage/gpu/cuda_context.cpp
+            storage/gpu/cuda_arrow_store.cpp
+    )
+
     # ArrowCUDA is a separate config in many installs
     find_package(ArrowCUDA CONFIG QUIET)
 

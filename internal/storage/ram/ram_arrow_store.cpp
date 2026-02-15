@@ -23,7 +23,8 @@ std::shared_ptr<arrow::Buffer> RamArrowStore::Allocate(const PayloadID& id, uint
   auto result = arrow::AllocateResizableBuffer(size_bytes);
   if (!result.ok()) throw std::runtime_error(result.status().ToString());
 
-  std::shared_ptr<arrow::Buffer> buf = *result;
+  auto                           resizable = std::move(*result);
+  std::shared_ptr<arrow::Buffer> buf(std::move(resizable));
 
   {
     std::unique_lock lock(mutex_);
