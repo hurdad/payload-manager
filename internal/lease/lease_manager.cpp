@@ -1,20 +1,14 @@
 #include "lease_manager.hpp"
 
-#include <random>
-
+#include "internal/util/uuid.hpp"
 #include "payload/manager/v1.hpp"
 
 namespace payload::lease {
 
 LeaseManager::LeaseManager() = default;
 
-static std::string RandomID() {
-  static thread_local std::mt19937_64 rng{std::random_device{}()};
-  return std::to_string(rng());
-}
-
 std::string LeaseManager::GenerateLeaseID() {
-  return RandomID();
+  return payload::util::ToString(payload::util::GenerateUUID());
 }
 
 Lease LeaseManager::Acquire(const payload::manager::v1::PayloadID& id, const payload::manager::v1::PayloadDescriptor& payload_descriptor,
