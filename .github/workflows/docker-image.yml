@@ -23,6 +23,9 @@ jobs:
           - component: payload-manager
             dockerfile: ./Dockerfile
             image: ghcr.io/${{ github.repository }}
+          - component: payload-manager-cuda
+            dockerfile: ./Dockerfile.cuda
+            image: ghcr.io/${{ github.repository }}-cuda
           - component: payloadctl
             dockerfile: ./Dockerfile.payloadctl
             image: ghcr.io/${{ github.repository }}/payloadctl
