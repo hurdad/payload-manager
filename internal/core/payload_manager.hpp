@@ -54,8 +54,14 @@ class PayloadManager {
   std::shared_ptr<payload::lease::LeaseManager> lease_mgr_;
   std::shared_ptr<payload::db::Repository>       repository_;
 
-  mutable std::shared_mutex                                                     snapshot_cache_mutex_;
-  std::unordered_map<std::string, payload::manager::v1::PayloadDescriptor> snapshot_cache_;
+  // Snapshot cache consistency model:
+  // - ResolveSnapshot first serves reads from this cache.
+  // - Repository reads are only used on cache misses and during explicit refresh (HydrateCaches).
+  // - Mutations routed through PayloadManager (Allocate/Commit/Promote/Delete) refresh or invalidate
+  //   cache entries synchronously with successful transaction commits.
+  // - Out-of-band repository writes can be stale until HydrateCaches() is called.
+  mutable std::shared_mutex                                                  snapshot_cache_mutex_;
+  std::unordered_map<std::string, payload::manager::v1::PayloadDescriptor>  snapshot_cache_;
 };
 
 } // namespace payload::core
