@@ -220,6 +220,15 @@ std::vector<model::StreamEntryRecord> MemoryRepository::ReadStreamEntries(Transa
   return out;
 }
 
+std::optional<uint64_t> MemoryRepository::GetMaxStreamOffset(Transaction& t, uint64_t stream_id) {
+  const auto& s  = TX(t).View();
+  const auto  it = s.stream_entries.find(stream_id);
+  if (it == s.stream_entries.end() || it->second.empty()) {
+    return std::nullopt;
+  }
+  return it->second.back().offset;
+}
+
 std::vector<model::StreamEntryRecord> MemoryRepository::ReadStreamEntriesRange(Transaction& t, uint64_t stream_id, uint64_t start_offset,
                                                                                uint64_t end_offset) {
   std::vector<model::StreamEntryRecord> out;
