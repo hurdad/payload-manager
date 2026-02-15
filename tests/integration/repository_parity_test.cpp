@@ -29,6 +29,9 @@
 namespace {
 
 using payload::db::Repository;
+using payload::db::model::StreamConsumerOffsetRecord;
+using payload::db::model::StreamEntryRecord;
+using payload::db::model::StreamRecord;
 using payload::db::memory::MemoryRepository;
 using payload::db::model::LineageRecord;
 using payload::db::model::MetadataRecord;
@@ -161,6 +164,124 @@ void VerifyRollbackBehavior(Repository& repo, const std::string& id) {
   check_tx->Commit();
 }
 
+void VerifyStreamReadWrite(Repository& repo, const std::string& stream_namespace, const std::string& stream_name) {
+  StreamRecord stream;
+  stream.stream_namespace      = stream_namespace;
+  stream.name                  = stream_name;
+  stream.retention_max_entries = 100;
+  stream.retention_max_age_sec = 3600;
+
+  {
+    auto tx = repo.Begin();
+    assert(repo.CreateStream(*tx, stream));
+    assert(stream.stream_id != 0);
+    tx->Commit();
+  }
+
+  {
+    auto tx      = repo.Begin();
+    auto by_name = repo.GetStreamByName(*tx, stream_namespace, stream_name);
+    assert(by_name.has_value());
+    assert(by_name->stream_id == stream.stream_id);
+
+    auto by_id = repo.GetStreamById(*tx, stream.stream_id);
+    assert(by_id.has_value());
+    assert(by_id->name == stream_name);
+    tx->Commit();
+  }
+
+  std::vector<StreamEntryRecord> entries;
+  entries.push_back(StreamEntryRecord{.payload_uuid = stream_name + "-entry-0", .event_time_ms = 1000, .append_time_ms = 2000, .duration_ns = 10,
+                                      .tags = R"({"kind":"seed"})"});
+  entries.push_back(StreamEntryRecord{.payload_uuid = stream_name + "-entry-1", .event_time_ms = 1500, .append_time_ms = 2500, .duration_ns = 12,
+                                      .tags = R"({"kind":"seed"})"});
+  entries.push_back(StreamEntryRecord{.payload_uuid = stream_name + "-entry-2", .event_time_ms = 2000, .append_time_ms = 3500, .duration_ns = 14,
+                                      .tags = R"({"kind":"seed"})"});
+
+  {
+    auto tx = repo.Begin();
+    assert(repo.AppendStreamEntries(*tx, stream.stream_id, entries));
+    assert(entries[0].offset == 0);
+    assert(entries[1].offset == 1);
+    assert(entries[2].offset == 2);
+
+    auto max_offset = repo.GetMaxStreamOffset(*tx, stream.stream_id);
+    assert(max_offset.has_value());
+    assert(*max_offset == 2);
+    tx->Commit();
+  }
+
+  {
+    auto tx = repo.Begin();
+
+    auto full_read = repo.ReadStreamEntries(*tx, stream.stream_id, 0, std::nullopt, std::nullopt);
+    assert(full_read.size() == 3);
+
+    auto limited_read = repo.ReadStreamEntries(*tx, stream.stream_id, 1, 1, std::nullopt);
+    assert(limited_read.size() == 1);
+    assert(limited_read[0].offset == 1);
+
+    auto time_filtered = repo.ReadStreamEntries(*tx, stream.stream_id, 0, std::nullopt, 2600);
+    assert(time_filtered.size() == 1);
+    assert(time_filtered[0].offset == 2);
+
+    auto ranged = repo.ReadStreamEntriesRange(*tx, stream.stream_id, 1, 2);
+    assert(ranged.size() == 2);
+    assert(ranged[0].offset == 1);
+    assert(ranged[1].offset == 2);
+
+    tx->Commit();
+  }
+
+  {
+    auto tx = repo.Begin();
+    assert(repo.TrimStreamEntriesToMaxCount(*tx, stream.stream_id, 2));
+    auto remaining = repo.ReadStreamEntries(*tx, stream.stream_id, 0, std::nullopt, std::nullopt);
+    assert(remaining.size() == 2);
+    assert(remaining[0].offset == 1);
+    assert(remaining[1].offset == 2);
+    tx->Commit();
+  }
+
+  {
+    auto tx = repo.Begin();
+    assert(repo.DeleteStreamEntriesOlderThan(*tx, stream.stream_id, 3000));
+    auto remaining = repo.ReadStreamEntries(*tx, stream.stream_id, 0, std::nullopt, std::nullopt);
+    assert(remaining.size() == 1);
+    assert(remaining[0].offset == 2);
+    tx->Commit();
+  }
+
+  {
+    auto tx = repo.Begin();
+
+    StreamConsumerOffsetRecord offset{.stream_id = stream.stream_id, .consumer_group = stream_name + "-cg", .offset = 2, .updated_at_ms = 4500};
+    assert(repo.CommitConsumerOffset(*tx, offset));
+
+    auto read_offset = repo.GetConsumerOffset(*tx, stream.stream_id, offset.consumer_group);
+    assert(read_offset.has_value());
+    assert(read_offset->offset == 2);
+
+    offset.offset = 7;
+    assert(repo.CommitConsumerOffset(*tx, offset));
+
+    auto updated_offset = repo.GetConsumerOffset(*tx, stream.stream_id, offset.consumer_group);
+    assert(updated_offset.has_value());
+    assert(updated_offset->offset == 7);
+
+    tx->Commit();
+  }
+
+  {
+    auto tx = repo.Begin();
+    assert(repo.DeleteStreamByName(*tx, stream_namespace, stream_name));
+    assert(!repo.GetStreamById(*tx, stream.stream_id).has_value());
+    assert(repo.ReadStreamEntries(*tx, stream.stream_id, 0, std::nullopt, std::nullopt).empty());
+    assert(!repo.GetConsumerOffset(*tx, stream.stream_id, stream_name + "-cg").has_value());
+    tx->Commit();
+  }
+}
+
 void VerifyConcurrentUpdates(Repository& repo, const std::string& id, bool supports_parallel_transactions) {
   {
     auto          tx = repo.Begin();
@@ -276,6 +397,17 @@ BackendFactory MakeSqliteFactory() {
         "CREATE TABLE IF NOT EXISTS payload_lineage (parent_id TEXT NOT NULL, child_id TEXT NOT NULL, operation TEXT, role TEXT, parameters TEXT, "
         "created_at_ms INTEGER NOT NULL, FOREIGN KEY(parent_id) REFERENCES payload(id) ON DELETE CASCADE, FOREIGN KEY(child_id) REFERENCES "
         "payload(id) ON DELETE CASCADE);");
+    db->Exec(
+        "CREATE TABLE IF NOT EXISTS streams (stream_id INTEGER PRIMARY KEY AUTOINCREMENT, namespace TEXT NOT NULL, name TEXT NOT NULL, created_at "
+        "INTEGER NOT NULL DEFAULT (unixepoch() * 1000), retention_max_entries INTEGER, retention_max_age_sec INTEGER, UNIQUE(namespace, name));");
+    db->Exec(
+        "CREATE TABLE IF NOT EXISTS stream_entries (stream_id INTEGER NOT NULL REFERENCES streams(stream_id) ON DELETE CASCADE, offset INTEGER NOT "
+        "NULL, payload_uuid TEXT NOT NULL, event_time INTEGER, append_time INTEGER NOT NULL DEFAULT (unixepoch() * 1000), duration_ns INTEGER, tags "
+        "TEXT, PRIMARY KEY (stream_id, offset));");
+    db->Exec(
+        "CREATE TABLE IF NOT EXISTS stream_consumer_offsets (stream_id INTEGER NOT NULL REFERENCES streams(stream_id) ON DELETE CASCADE, "
+        "consumer_group TEXT NOT NULL, offset INTEGER NOT NULL, updated_at INTEGER NOT NULL DEFAULT (unixepoch() * 1000), PRIMARY KEY (stream_id, "
+        "consumer_group));");
     return std::make_shared<payload::db::sqlite::SqliteRepository>(std::move(db));
   };
 
@@ -311,6 +443,17 @@ BackendFactory MakePostgresFactory() {
     tx.exec(
         "CREATE TABLE IF NOT EXISTS payload_lineage (parent_id TEXT NOT NULL REFERENCES payload(id) ON DELETE CASCADE, child_id TEXT NOT NULL "
         "REFERENCES payload(id) ON DELETE CASCADE, operation TEXT, role TEXT, parameters TEXT, created_at_ms BIGINT NOT NULL);");
+    tx.exec(
+        "CREATE TABLE IF NOT EXISTS streams (stream_id BIGSERIAL PRIMARY KEY, namespace TEXT NOT NULL, name TEXT NOT NULL, created_at TIMESTAMPTZ "
+        "NOT NULL DEFAULT now(), retention_max_entries BIGINT, retention_max_age_sec BIGINT, UNIQUE(namespace, name));");
+    tx.exec(
+        "CREATE TABLE IF NOT EXISTS stream_entries (stream_id BIGINT NOT NULL REFERENCES streams(stream_id) ON DELETE CASCADE, offset BIGINT NOT "
+        "NULL, payload_uuid UUID NOT NULL, event_time TIMESTAMPTZ, append_time TIMESTAMPTZ NOT NULL DEFAULT now(), duration_ns BIGINT, tags JSONB, "
+        "PRIMARY KEY (stream_id, offset));");
+    tx.exec(
+        "CREATE TABLE IF NOT EXISTS stream_consumer_offsets (stream_id BIGINT NOT NULL REFERENCES streams(stream_id) ON DELETE CASCADE, "
+        "consumer_group TEXT NOT NULL, offset BIGINT NOT NULL, updated_at TIMESTAMPTZ NOT NULL DEFAULT now(), PRIMARY KEY (stream_id, "
+        "consumer_group));");
     tx.commit();
     return std::make_shared<payload::db::postgres::PgRepository>(std::move(pool));
   };
@@ -335,6 +478,7 @@ void RunBackendSuite(BackendFactory& backend) {
   VerifyLineageReadWrite(*repo, backend.name + "-lineage-parent", backend.name + "-lineage-child");
   VerifyRollbackBehavior(*repo, backend.name + "-rollback");
   VerifyConcurrentUpdates(*repo, backend.name + "-concurrency", backend.supports_parallel_transactions);
+  VerifyStreamReadWrite(*repo, "integration", backend.name + "-stream");
 
   VerifyRestartDurability(backend, backend.name + "-durable");
 
