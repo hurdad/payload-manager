@@ -39,6 +39,8 @@ RUN apt-get update \
 COPY . ./src
 
 RUN cmake -S ./src -B /workspace/build -G Ninja -DCMAKE_BUILD_TYPE=Release \
+    && cmake --build /workspace/build \
+    && ctest --test-dir /workspace/build --output-on-failure \
     && cmake --build /workspace/build --target payload-manager
 
 

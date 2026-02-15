@@ -1,0 +1,54 @@
+services:
+  postgres:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: payload
+      POSTGRES_PASSWORD: payload
+      POSTGRES_DB: payload_manager
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U payload -d payload_manager"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+
+  alloy:
+    image: grafana/alloy:latest
+    restart: unless-stopped
+    command:
+      - run
+      - /etc/alloy/config.alloy
+      - --server.http.listen-addr=0.0.0.0:12345
+      - --storage.path=/var/lib/alloy/data
+    environment:
+      ALLOY_METRICS_BACKEND_OTLP_ENDPOINT: ${ALLOY_METRICS_BACKEND_OTLP_ENDPOINT:-http://metrics-backend:4318/v1/metrics}
+      ALLOY_METRICS_BACKEND_AUTH_HEADER: ${ALLOY_METRICS_BACKEND_AUTH_HEADER:-}
+    volumes:
+      - ./confng/alloy/config.alloy:/etc/alloy/config.alloy:ro
+      - alloy-data:/var/lib/alloy/data
+    ports:
+      - "12345:12345"
+
+  payload-manager:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      alloy:
+        condition: service_started
+    command: ["./payload-manager", "--config", "/app/conf/runtime-docker-postgres.yaml"]
+    ports:
+      - "50051:50051"
+    volumes:
+      - ./confng/runtime-docker-postgres.yaml:/app/conf/runtime-docker-postgres.yaml:ro
+      - payload-data:/var/lib/payload-manager
+
+volumes:
+  postgres-data:
+  payload-data:
+  alloy-data:
