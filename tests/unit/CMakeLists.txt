@@ -19,3 +19,7 @@ payload_manager_add_unit_test(payload_manager_unit_catalog_service catalog_servi
 payload_manager_add_unit_test(payload_manager_unit_snapshot_reads payload_manager_snapshot_read_test.cpp "payload")
 payload_manager_add_unit_test(payload_manager_unit_metadata_cache metadata_cache_test.cpp "metadata")
 payload_manager_add_unit_test(payload_manager_unit_stream_service_concurrency stream_service_concurrency_test.cpp "stream")
+
+if(PAYLOAD_MANAGER_ENABLE_ARROW_CUDA)
+  payload_manager_add_unit_test(payload_manager_unit_cuda_integration cuda_integration_test.cpp "storage;gpu;cuda")
+endif()
