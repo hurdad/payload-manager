@@ -29,10 +29,13 @@ std::string UuidToHex(const std::string& uuid_bytes) {
 } // namespace
 
 int main(int argc, char** argv) {
+  // Allow overriding the service endpoint for remote or containerized runs.
   const std::string target = argc > 1 ? argv[1] : "localhost:50051";
 
   payload::manager::client::PayloadClient client(grpc::CreateChannel(target, grpc::InsecureChannelCredentials()));
 
+  // Allocate a writable payload in RAM, fill it locally, then commit so it
+  // becomes visible to readers.
   constexpr uint64_t kPayloadSize = 64;
   auto               writable     = client.AllocateWritableBuffer(kPayloadSize, payload::manager::v1::TIER_RAM);
   if (!writable.ok()) {
@@ -52,6 +55,7 @@ int main(int argc, char** argv) {
     return 1;
   }
 
+  // Acquire a read lease to validate what was committed.
   auto readable = client.AcquireReadableBuffer(UuidToHex(uuid));
   if (!readable.ok()) {
     std::cerr << "AcquireReadableBuffer failed: " << readable.status().ToString() << '\n';
@@ -68,6 +72,7 @@ int main(int argc, char** argv) {
   }
   std::cout << '\n';
 
+  // Release the lease to avoid holding resources/pinning placement.
   auto release_status = client.Release(readable_payload.lease_id);
   if (!release_status.ok()) {
     std::cerr << "Release failed: " << release_status.ToString() << '\n';

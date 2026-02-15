@@ -16,9 +16,13 @@ from payload.manager.runtime.v1 import lifecycle_pb2, tiering_pb2
 
 
 def main() -> int:
+    # Endpoint can be overridden to point this walkthrough at any running
+    # Payload Manager instance.
     target = sys.argv[1] if len(sys.argv) > 1 else "localhost:50051"
     client = PayloadClient(grpc.insecure_channel(target))
 
+    # Allocate a short-lived RAM payload (TTL 60s) so we can safely exercise
+    # admin APIs without leaving long-term test artifacts.
     writable = client.AllocateWritableBuffer(16, placement_pb2.TIER_RAM, ttl_ms=60_000, persist=False)
     writable.mmap_obj[:] = bytes(range(1, 17))
 
@@ -27,6 +31,8 @@ def main() -> int:
     client.CommitPayload(str(payload_uuid))
     client.Resolve(str(payload_uuid))
 
+    # Promotion/spill requests demonstrate tiering controls. BEST_EFFORT means
+    # the server may partially succeed depending on current constraints.
     promote_request = tiering_pb2.PromoteRequest(target_tier=placement_pb2.TIER_RAM, policy=policy_pb2.PROMOTION_POLICY_BEST_EFFORT)
     promote_request.id.value = raw_uuid
     client.Promote(promote_request)
@@ -35,6 +41,8 @@ def main() -> int:
     spill_request.ids.add().value = raw_uuid
     client.Spill(spill_request)
 
+    # Record a synthetic lineage edge to show how transformation provenance can
+    # be attached to payload IDs.
     add_lineage_request = lineage_pb2.AddLineageRequest()
     add_lineage_request.child.value = raw_uuid
     edge = add_lineage_request.parents.add()
@@ -48,6 +56,8 @@ def main() -> int:
     get_lineage_request.id.value = raw_uuid
     lineage = client.GetLineage(get_lineage_request)
 
+    # Force-delete keeps the example idempotent and avoids leaving stale
+    # payloads behind after the demo completes.
     delete_request = lifecycle_pb2.DeleteRequest(force=True)
     delete_request.id.value = raw_uuid
     client.Delete(delete_request)

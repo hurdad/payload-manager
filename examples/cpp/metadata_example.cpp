@@ -29,10 +29,12 @@ std::string UuidToHex(const std::string& uuid_bytes) {
 } // namespace
 
 int main(int argc, char** argv) {
+  // Endpoint can be passed on the command line for non-default deployments.
   const std::string target = argc > 1 ? argv[1] : "localhost:50051";
 
   payload::manager::client::PayloadClient client(grpc::CreateChannel(target, grpc::InsecureChannelCredentials()));
 
+  // Create a payload first; metadata APIs reference payload UUIDs.
   auto writable = client.AllocateWritableBuffer(8, payload::manager::v1::TIER_RAM);
   if (!writable.ok()) {
     std::cerr << "AllocateWritableBuffer failed: " << writable.status().ToString() << '\n';
@@ -50,6 +52,8 @@ int main(int argc, char** argv) {
     return 1;
   }
 
+  // UpdatePayloadMetadata writes the canonical metadata document for the
+  // payload. Here we use REPLACE for full document semantics.
   payload::manager::v1::UpdatePayloadMetadataRequest update_request;
   update_request.mutable_id()->set_value(uuid);
   update_request.set_mode(payload::manager::v1::METADATA_UPDATE_MODE_REPLACE);
@@ -65,6 +69,7 @@ int main(int argc, char** argv) {
     return 1;
   }
 
+  // AppendPayloadMetadataEvent records an immutable event for audit/history.
   payload::manager::v1::AppendPayloadMetadataEventRequest event_request;
   event_request.mutable_id()->set_value(uuid);
   event_request.mutable_metadata()->mutable_id()->set_value(uuid);

@@ -13,9 +13,13 @@ from payload.manager.admin.v1 import stats_pb2
 
 
 def main() -> int:
+    # Optional endpoint argument keeps this example flexible across local and
+    # remote deployments.
     target = sys.argv[1] if len(sys.argv) > 1 else "localhost:50051"
     client = PayloadClient(grpc.insecure_channel(target))
 
+    # Stats is a lightweight admin call that summarizes payload counts and
+    # allocated bytes per storage tier.
     stats = client.Stats(stats_pb2.StatsRequest())
     print(f"Payload Manager stats for {target}")
     print(
