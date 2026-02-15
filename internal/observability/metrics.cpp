@@ -6,6 +6,8 @@
 #include <chrono>
 #include <cstdlib>
 #include <memory>
+#include <mutex>
+#include <unordered_map>
 #include <utility>
 
 #include <opentelemetry/common/attribute_value.h>
@@ -118,7 +120,10 @@ struct Metrics::Impl {
   opentelemetry::nostd::shared_ptr<metrics_api::Counter<std::uint64_t>> request_count;
   opentelemetry::nostd::shared_ptr<metrics_api::Histogram<double>> request_latency_ms;
   opentelemetry::nostd::shared_ptr<metrics_api::Histogram<double>> spill_duration_ms;
-  opentelemetry::nostd::shared_ptr<metrics_api::UpDownCounter<std::int64_t>> tier_occupancy_bytes;
+  opentelemetry::nostd::shared_ptr<metrics_api::ObservableInstrument> tier_occupancy_gauge;
+
+  std::mutex tier_occupancy_mutex;
+  std::unordered_map<std::string, std::int64_t> tier_occupancy_values;
 };
 
 bool InitializeMetrics(const OtlpConfig& config) {
@@ -232,8 +237,23 @@ Metrics::Metrics() : impl_(std::make_unique<Impl>()) {
       impl_->meter->CreateDoubleHistogram("payload.request.latency_ms", "ms", "End-to-end request latency in milliseconds");
   impl_->spill_duration_ms =
       impl_->meter->CreateDoubleHistogram("payload.spill.duration_ms", "ms", "Spill operation duration in milliseconds");
-  impl_->tier_occupancy_bytes =
-      impl_->meter->CreateInt64UpDownCounter("payload.tier.occupancy_bytes", "By", "Current tier occupancy in bytes");
+  impl_->tier_occupancy_gauge =
+      impl_->meter->CreateInt64ObservableGauge("payload.tier.occupancy_bytes", "Current tier occupancy in bytes", "By");
+  impl_->tier_occupancy_gauge->AddCallback(
+      [](metrics_api::ObserverResult result, void* state) {
+        auto* impl = static_cast<Impl*>(state);
+        std::lock_guard<std::mutex> lock(impl->tier_occupancy_mutex);
+        auto int_result = opentelemetry::nostd::get<opentelemetry::nostd::shared_ptr<metrics_api::ObserverResultT<std::int64_t>>>(result);
+        for (const auto& [tier, bytes] : impl->tier_occupancy_values) {
+          if (g_metrics_options.tier_labels_enabled) {
+            const std::initializer_list<AttributePair> attributes = {{"tier", tier}};
+            int_result->Observe(bytes, attributes);
+          } else {
+            int_result->Observe(bytes);
+          }
+        }
+      },
+      impl_.get());
 }
 
 Metrics& Metrics::Instance() {
@@ -281,17 +301,12 @@ void Metrics::ObserveSpillDurationMs(std::string_view op, double duration_ms) {
 }
 
 void Metrics::SetTierOccupancyBytes(std::string_view tier, std::uint64_t bytes) {
-  if (!impl_ || !impl_->tier_occupancy_bytes || !g_metrics_options.tier_occupancy_metrics_enabled) {
+  if (!impl_ || !impl_->tier_occupancy_gauge || !g_metrics_options.tier_occupancy_metrics_enabled) {
     return;
   }
 
-  if (g_metrics_options.tier_labels_enabled) {
-    const std::initializer_list<AttributePair> attributes = {{"tier", std::string(tier)}};
-    AddWithAttributes(impl_->tier_occupancy_bytes, static_cast<std::int64_t>(bytes), attributes);
-    return;
-  }
-
-  AddWithAttributes(impl_->tier_occupancy_bytes, static_cast<std::int64_t>(bytes), std::initializer_list<AttributePair>{});
+  std::lock_guard<std::mutex> lock(impl_->tier_occupancy_mutex);
+  impl_->tier_occupancy_values[std::string(tier)] = static_cast<std::int64_t>(bytes);
 }
 
 } // namespace payload::observability
