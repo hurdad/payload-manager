@@ -1,5 +1,3 @@
-#include "internal/service/stream_service.hpp"
-
 #include <assert.h>
 
 #include <atomic>
@@ -16,6 +14,7 @@
 
 #include "internal/db/memory/memory_repository.hpp"
 #include "internal/service/service_context.hpp"
+#include "internal/service/stream_service.hpp"
 #include "internal/util/errors.hpp"
 #include "internal/util/uuid.hpp"
 #include "payload/manager/v1.hpp"
@@ -87,7 +86,7 @@ class HookedRepository : public Repository {
   }
 
   std::optional<payload::db::model::StreamRecord> GetStreamByName(Transaction& tx, const std::string& stream_namespace,
-                                                                   const std::string& name) override {
+                                                                  const std::string& name) override {
     return inner_.GetStreamByName(tx, stream_namespace, name);
   }
 
@@ -119,8 +118,8 @@ class HookedRepository : public Repository {
   }
 
   std::vector<payload::db::model::StreamEntryRecord> ReadStreamEntries(Transaction& tx, uint64_t stream_id, uint64_t start_offset,
-                                                                        std::optional<uint64_t> max_entries,
-                                                                        std::optional<uint64_t> min_append_time_ms) override {
+                                                                       std::optional<uint64_t> max_entries,
+                                                                       std::optional<uint64_t> min_append_time_ms) override {
     EnterBarrier(Op::kRead);
     return inner_.ReadStreamEntries(tx, stream_id, start_offset, max_entries, min_append_time_ms);
   }
@@ -130,7 +129,7 @@ class HookedRepository : public Repository {
   }
 
   std::vector<payload::db::model::StreamEntryRecord> ReadStreamEntriesRange(Transaction& tx, uint64_t stream_id, uint64_t start_offset,
-                                                                              uint64_t end_offset) override {
+                                                                            uint64_t end_offset) override {
     EnterBarrier(Op::kRead);
     return inner_.ReadStreamEntriesRange(tx, stream_id, start_offset, end_offset);
   }
@@ -148,7 +147,7 @@ class HookedRepository : public Repository {
   }
 
   std::optional<payload::db::model::StreamConsumerOffsetRecord> GetConsumerOffset(Transaction& tx, uint64_t stream_id,
-                                                                                   const std::string& consumer_group) override {
+                                                                                  const std::string& consumer_group) override {
     return inner_.GetConsumerOffset(tx, stream_id, consumer_group);
   }
 
@@ -202,9 +201,7 @@ class HookedRepository : public Repository {
       barrier_saw_append_ = true;
     }
 
-    const auto ready = [&] {
-      return (!barrier_require_read_ || barrier_saw_read_) && (!barrier_require_append_ || barrier_saw_append_);
-    };
+    const auto ready = [&] { return (!barrier_require_read_ || barrier_saw_read_) && (!barrier_require_append_ || barrier_saw_append_); };
 
     if (ready()) {
       barrier_active_ = false;
@@ -232,7 +229,7 @@ class HookedRepository : public Repository {
   bool barrier_require_append_ = false;
 
   std::chrono::milliseconds delete_sleep_{0};
-  bool                     delete_started_ = false;
+  bool                      delete_started_ = false;
 };
 
 StreamID MakeStream(const std::string& stream_name) {
@@ -250,8 +247,8 @@ CreateStreamRequest CreateRequest(const StreamID& stream) {
 
 AppendRequest AppendRequestWithOneEntry(const StreamID& stream) {
   AppendRequest req;
-  *req.mutable_stream() = stream;
-  AppendItem* item = req.add_items();
+  *req.mutable_stream()       = stream;
+  AppendItem* item            = req.add_items();
   *item->mutable_payload_id() = payload::util::ToProto(payload::util::GenerateUUID());
   return req;
 }
@@ -280,12 +277,8 @@ void TestParallelReadAndReadWriteDoNotSerializeGlobally() {
 
   repo->ArmBarrier(false, true);
 
-  std::thread read_a([&] {
-    service.Read(ReadFromStart(stream_a));
-  });
-  std::thread read_b([&] {
-    service.Read(ReadFromStart(stream_b));
-  });
+  std::thread read_a([&] { service.Read(ReadFromStart(stream_a)); });
+  std::thread read_b([&] { service.Read(ReadFromStart(stream_b)); });
 
   read_a.join();
   read_b.join();
@@ -294,12 +287,8 @@ void TestParallelReadAndReadWriteDoNotSerializeGlobally() {
 
   repo->ArmBarrier(true, true);
 
-  std::thread append_a([&] {
-    service.Append(AppendRequestWithOneEntry(stream_a));
-  });
-  std::thread read_again_b([&] {
-    service.Read(ReadFromStart(stream_b));
-  });
+  std::thread append_a([&] { service.Append(AppendRequestWithOneEntry(stream_a)); });
+  std::thread read_again_b([&] { service.Read(ReadFromStart(stream_b)); });
 
   append_a.join();
   read_again_b.join();
@@ -325,14 +314,12 @@ void TestDeleteRaceRejectsReadAndAppendWithNotFound() {
   DeleteStreamRequest delete_req;
   *delete_req.mutable_stream() = stream;
 
-  std::thread delete_thread([&] {
-    service.DeleteStream(delete_req);
-  });
+  std::thread delete_thread([&] { service.DeleteStream(delete_req); });
 
   const bool started = repo->WaitForDeleteToStart(std::chrono::milliseconds(500));
   assert(started);
 
-  const auto append_start = std::chrono::steady_clock::now();
+  const auto append_start     = std::chrono::steady_clock::now();
   bool       append_not_found = false;
   try {
     service.Append(AppendRequestWithOneEntry(stream));

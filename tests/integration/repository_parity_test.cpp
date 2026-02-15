@@ -29,13 +29,13 @@
 namespace {
 
 using payload::db::Repository;
-using payload::db::model::StreamConsumerOffsetRecord;
-using payload::db::model::StreamEntryRecord;
-using payload::db::model::StreamRecord;
 using payload::db::memory::MemoryRepository;
 using payload::db::model::LineageRecord;
 using payload::db::model::MetadataRecord;
 using payload::db::model::PayloadRecord;
+using payload::db::model::StreamConsumerOffsetRecord;
+using payload::db::model::StreamEntryRecord;
+using payload::db::model::StreamRecord;
 using payload::manager::v1::PAYLOAD_STATE_ACTIVE;
 using payload::manager::v1::PAYLOAD_STATE_ALLOCATED;
 using payload::manager::v1::TIER_RAM;
@@ -191,12 +191,12 @@ void VerifyStreamReadWrite(Repository& repo, const std::string& stream_namespace
   }
 
   std::vector<StreamEntryRecord> entries;
-  entries.push_back(StreamEntryRecord{.payload_uuid = stream_name + "-entry-0", .event_time_ms = 1000, .append_time_ms = 2000, .duration_ns = 10,
-                                      .tags = R"({"kind":"seed"})"});
-  entries.push_back(StreamEntryRecord{.payload_uuid = stream_name + "-entry-1", .event_time_ms = 1500, .append_time_ms = 2500, .duration_ns = 12,
-                                      .tags = R"({"kind":"seed"})"});
-  entries.push_back(StreamEntryRecord{.payload_uuid = stream_name + "-entry-2", .event_time_ms = 2000, .append_time_ms = 3500, .duration_ns = 14,
-                                      .tags = R"({"kind":"seed"})"});
+  entries.push_back(StreamEntryRecord{
+      .payload_uuid = stream_name + "-entry-0", .event_time_ms = 1000, .append_time_ms = 2000, .duration_ns = 10, .tags = R"({"kind":"seed"})"});
+  entries.push_back(StreamEntryRecord{
+      .payload_uuid = stream_name + "-entry-1", .event_time_ms = 1500, .append_time_ms = 2500, .duration_ns = 12, .tags = R"({"kind":"seed"})"});
+  entries.push_back(StreamEntryRecord{
+      .payload_uuid = stream_name + "-entry-2", .event_time_ms = 2000, .append_time_ms = 3500, .duration_ns = 14, .tags = R"({"kind":"seed"})"});
 
   {
     auto tx = repo.Begin();

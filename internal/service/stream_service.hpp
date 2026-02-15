@@ -47,7 +47,7 @@ class StreamService {
   // We always lock global_mu_ first and then a shard lock to avoid deadlocks.
   // This is especially important for the memory backend where transactions commit
   // by swapping a snapshot in memory (see internal/db/memory/memory_tx.cpp).
-  std::shared_mutex                                global_mu_;
+  std::shared_mutex                                    global_mu_;
   std::array<std::shared_mutex, kStreamLockShardCount> stream_mu_;
 };
 
