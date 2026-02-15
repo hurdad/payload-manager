@@ -8,12 +8,14 @@
 #include "internal/db/memory/memory_repository.hpp"
 #include "internal/grpc/catalog_server.hpp"
 #include "internal/grpc/data_server.hpp"
+#include "internal/grpc/stream_server.hpp"
 #include "internal/lease/lease_manager.hpp"
 #include "internal/lineage/lineage_graph.hpp"
 #include "internal/metadata/metadata_cache.hpp"
 #include "internal/service/catalog_service.hpp"
 #include "internal/service/data_service.hpp"
 #include "internal/service/service_context.hpp"
+#include "internal/service/stream_service.hpp"
 #include "payload/manager/v1.hpp"
 
 namespace {
@@ -87,12 +89,44 @@ void TestDeleteWithActiveLeaseReturnsAborted() {
   assert(status.error_code() == ::grpc::StatusCode::ABORTED);
 }
 
+void TestCreateStreamMissingNameReturnsFailedPrecondition() {
+  auto                        ctx            = BuildServiceContext();
+  auto                        stream_service = std::make_shared<payload::service::StreamService>(ctx);
+  payload::grpc::StreamServer server(stream_service);
+
+  payload::manager::v1::CreateStreamRequest req;
+  req.mutable_stream()->set_namespace_("ns");
+
+  google::protobuf::Empty resp;
+  ::grpc::ServerContext   grpc_ctx;
+
+  const auto status = server.CreateStream(&grpc_ctx, &req, &resp);
+  assert(status.error_code() == ::grpc::StatusCode::FAILED_PRECONDITION);
+}
+
+void TestDeleteStreamMissingNameReturnsFailedPrecondition() {
+  auto                        ctx            = BuildServiceContext();
+  auto                        stream_service = std::make_shared<payload::service::StreamService>(ctx);
+  payload::grpc::StreamServer server(stream_service);
+
+  payload::manager::v1::DeleteStreamRequest req;
+  req.mutable_stream()->set_namespace_("ns");
+
+  google::protobuf::Empty resp;
+  ::grpc::ServerContext   grpc_ctx;
+
+  const auto status = server.DeleteStream(&grpc_ctx, &req, &resp);
+  assert(status.error_code() == ::grpc::StatusCode::FAILED_PRECONDITION);
+}
+
 } // namespace
 
 int main() {
   TestCommitMissingPayloadReturnsNotFound();
   TestAcquireUnsupportedLeaseModeReturnsFailedPrecondition();
   TestDeleteWithActiveLeaseReturnsAborted();
+  TestCreateStreamMissingNameReturnsFailedPrecondition();
+  TestDeleteStreamMissingNameReturnsFailedPrecondition();
 
   std::cout << "payload_manager_unit_grpc_status: pass\n";
   return 0;
