@@ -290,6 +290,14 @@ std::vector<model::StreamEntryRecord> PgRepository::ReadStreamEntries(Transactio
   return out;
 }
 
+std::optional<uint64_t> PgRepository::GetMaxStreamOffset(Transaction& t, uint64_t stream_id) {
+  auto res = TX(t).Work().exec_params("SELECT MAX(offset) FROM stream_entries WHERE stream_id=$1;", stream_id);
+  if (res.empty() || res[0][0].is_null()) {
+    return std::nullopt;
+  }
+  return res[0][0].as<uint64_t>();
+}
+
 std::vector<model::StreamEntryRecord> PgRepository::ReadStreamEntriesRange(Transaction& t, uint64_t stream_id, uint64_t start_offset,
                                                                            uint64_t end_offset) {
   std::vector<model::StreamEntryRecord> out;

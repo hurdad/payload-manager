@@ -263,9 +263,9 @@ std::vector<SubscribeResponse> StreamService::Subscribe(const SubscribeRequest& 
     if (req.has_offset()) {
       start_offset = req.offset();
     } else if (req.has_from_latest() && req.from_latest()) {
-      const auto last = ctx_.repository->ReadStreamEntries(*tx, stream.stream_id, 0, std::optional<uint64_t>{}, std::nullopt);
-      if (!last.empty()) {
-        start_offset = last.back().offset + 1;
+      const auto max_offset = ctx_.repository->GetMaxStreamOffset(*tx, stream.stream_id);
+      if (max_offset.has_value()) {
+        start_offset = *max_offset + 1;
       }
     }
 

@@ -525,6 +525,25 @@ std::vector<model::StreamEntryRecord> SqliteRepository::ReadStreamEntries(Transa
   return out;
 }
 
+std::optional<uint64_t> SqliteRepository::GetMaxStreamOffset(Transaction& t, uint64_t stream_id) {
+  auto*       db  = TX(t).Handle();
+  const char* sql = "SELECT MAX(offset) FROM stream_entries WHERE stream_id=?;";
+
+  sqlite3_stmt* st = nullptr;
+  if (sqlite3_prepare_v2(db, sql, -1, &st, nullptr) != SQLITE_OK) {
+    return std::nullopt;
+  }
+
+  BindU64(st, 1, stream_id);
+  std::optional<uint64_t> max_offset;
+  if (sqlite3_step(st) == SQLITE_ROW && sqlite3_column_type(st, 0) != SQLITE_NULL) {
+    max_offset = static_cast<uint64_t>(sqlite3_column_int64(st, 0));
+  }
+
+  sqlite3_finalize(st);
+  return max_offset;
+}
+
 std::vector<model::StreamEntryRecord> SqliteRepository::ReadStreamEntriesRange(Transaction& t, uint64_t stream_id, uint64_t start_offset,
                                                                                uint64_t end_offset) {
   auto*       db = TX(t).Handle();

@@ -94,6 +94,8 @@ class Repository {
                                                                   std::optional<uint64_t> max_entries,
                                                                   std::optional<uint64_t> min_append_time_ms) = 0;
 
+  virtual std::optional<uint64_t> GetMaxStreamOffset(Transaction&, uint64_t stream_id) = 0;
+
   virtual std::vector<model::StreamEntryRecord> ReadStreamEntriesRange(Transaction&, uint64_t stream_id, uint64_t start_offset,
                                                                        uint64_t end_offset) = 0;
 
