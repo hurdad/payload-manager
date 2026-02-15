@@ -26,6 +26,9 @@ RUN apt-get update \
         libyaml-cpp-dev \
         libpqxx-dev \
         libsqlite3-dev \
+        libspdlog-dev \
+        libcurl4-openssl-dev \
+        libgtest-dev \
         protobuf-compiler-grpc \
         python3 \
         python3-pip \
@@ -63,6 +66,8 @@ RUN apt-get update \
         libyaml-cpp0.8 \
         libpqxx-7.8t64 \
         libsqlite3-0 \
+        libspdlog1.12 \
+        libcurl4t64 \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=builder /workspace/build/bin/payload-manager ./payload-manager
