@@ -44,10 +44,10 @@ void ThrowIfDbError(const payload::db::Result& result, const std::string& contex
 
 db::model::PayloadRecord ToPayloadRecord(const PayloadDescriptor& descriptor) {
   db::model::PayloadRecord record;
-  record.id         = descriptor.id().value();
-  record.tier       = descriptor.tier();
-  record.state      = descriptor.state();
-  record.version    = descriptor.version();
+  record.id      = descriptor.id().value();
+  record.tier    = descriptor.tier();
+  record.state   = descriptor.state();
+  record.version = descriptor.version();
   if (descriptor.has_ram()) {
     record.size_bytes = descriptor.ram().length_bytes();
   } else if (descriptor.has_gpu()) {
@@ -131,7 +131,7 @@ void PayloadManager::PopulateLocation(PayloadDescriptor* descriptor) {
 
   switch (descriptor->tier()) {
     case TIER_RAM: {
-      const auto buffer = backend->Read(id);
+      const auto  buffer = backend->Read(id);
       RamLocation ram;
       ram.set_length_bytes(static_cast<uint64_t>(buffer->size()));
       ram.set_slab_id(0);
@@ -141,7 +141,7 @@ void PayloadManager::PopulateLocation(PayloadDescriptor* descriptor) {
       return;
     }
     case TIER_DISK: {
-      const auto buffer = backend->Read(id);
+      const auto   buffer = backend->Read(id);
       DiskLocation disk;
       disk.set_length_bytes(static_cast<uint64_t>(buffer->size()));
       disk.set_offset_bytes(0);
@@ -150,7 +150,7 @@ void PayloadManager::PopulateLocation(PayloadDescriptor* descriptor) {
       return;
     }
     case TIER_OBJECT: {
-      const auto buffer = backend->Read(id);
+      const auto   buffer = backend->Read(id);
       DiskLocation object;
       object.set_length_bytes(static_cast<uint64_t>(buffer->size()));
       object.set_offset_bytes(0);
@@ -243,7 +243,7 @@ PayloadDescriptor PayloadManager::Commit(const PayloadID& id) {
   ThrowIfDbError(repository_->UpdatePayload(*tx, *record), "commit payload");
   tx->Commit();
   const auto descriptor = ToPayloadDescriptor(*record);
-  auto       hydrated = descriptor;
+  auto       hydrated   = descriptor;
   PopulateLocation(&hydrated);
   CacheSnapshot(hydrated);
   return hydrated;
