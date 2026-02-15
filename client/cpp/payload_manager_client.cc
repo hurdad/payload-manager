@@ -19,6 +19,10 @@
 
 namespace payload::manager::client {
 
+#ifndef PAYLOAD_CLIENT_ARROW_CUDA
+#define PAYLOAD_CLIENT_ARROW_CUDA 0
+#endif
+
 namespace {
 
 arrow::Status GrpcToArrow(const grpc::Status& status, std::string_view action) {
@@ -375,6 +379,18 @@ arrow::Result<std::shared_ptr<arrow::MutableBuffer>> PayloadClient::OpenMutableB
     const payload::manager::v1::PayloadDescriptor& descriptor) const {
   const uint64_t length = DescriptorLengthBytes(descriptor);
 
+  if (descriptor.has_gpu()) {
+#if PAYLOAD_CLIENT_ARROW_CUDA
+    // TODO(payload::manager::client::cuda): Import/open descriptor.gpu().ipc_handle() via Arrow CUDA APIs
+    // and return an Arrow buffer that references device memory.
+    return arrow::Status::NotImplemented(
+        "PAYLOAD_CLIENT_ARROW_CUDA=1 build detected, but GPU buffer import is not implemented yet in payload::manager::client::PayloadClient");
+#else
+    return arrow::Status::NotImplemented(
+        "Payload descriptor tier GPU is not available because this client was built without CUDA support (PAYLOAD_CLIENT_ARROW_CUDA=0)");
+#endif
+  }
+
   if (descriptor.has_ram()) {
     ARROW_ASSIGN_OR_RAISE(int fd, OpenShm(descriptor.ram().shm_name(), true));
     if (ftruncate(fd, static_cast<off_t>(length)) != 0) {
@@ -406,6 +422,18 @@ arrow::Result<std::shared_ptr<arrow::MutableBuffer>> PayloadClient::OpenMutableB
 arrow::Result<std::shared_ptr<arrow::Buffer>> PayloadClient::OpenReadableBuffer(const payload::manager::v1::PayloadDescriptor& descriptor) const {
   const uint64_t length = DescriptorLengthBytes(descriptor);
 
+  if (descriptor.has_gpu()) {
+#if PAYLOAD_CLIENT_ARROW_CUDA
+    // TODO(payload::manager::client::cuda): Import/open descriptor.gpu().ipc_handle() via Arrow CUDA APIs
+    // and return a readable Arrow buffer that references device memory.
+    return arrow::Status::NotImplemented(
+        "PAYLOAD_CLIENT_ARROW_CUDA=1 build detected, but GPU buffer import is not implemented yet in payload::manager::client::PayloadClient");
+#else
+    return arrow::Status::NotImplemented(
+        "Payload descriptor tier GPU is not available because this client was built without CUDA support (PAYLOAD_CLIENT_ARROW_CUDA=0)");
+#endif
+  }
+
   if (descriptor.has_ram()) {
     ARROW_ASSIGN_OR_RAISE(int fd, OpenShm(descriptor.ram().shm_name(), false));
     return MMapReadOnly(fd, 0, length);
@@ -424,9 +452,19 @@ arrow::Result<std::shared_ptr<arrow::Buffer>> PayloadClient::OpenReadableBuffer(
 }
 
 arrow::Status PayloadClient::ValidateHasLocation(const payload::manager::v1::PayloadDescriptor& descriptor) {
-  if (descriptor.has_gpu() || descriptor.has_ram() || descriptor.has_disk()) {
+  if (descriptor.has_ram() || descriptor.has_disk()) {
     return arrow::Status::OK();
   }
+
+  if (descriptor.has_gpu()) {
+#if PAYLOAD_CLIENT_ARROW_CUDA
+    return arrow::Status::OK();
+#else
+    return arrow::Status::Invalid(
+        "payload descriptor requested GPU tier, but this client was built without CUDA support (PAYLOAD_CLIENT_ARROW_CUDA=0)");
+#endif
+  }
+
   return arrow::Status::Invalid("payload descriptor is missing location for tier ", payload::manager::v1::Tier_Name(descriptor.tier()));
 }
 
