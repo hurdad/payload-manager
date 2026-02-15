@@ -136,6 +136,7 @@ endif()
 find_package(gRPC REQUIRED)
 find_package(Threads REQUIRED)
 find_package(yaml-cpp REQUIRED)
+find_package(Arrow CONFIG REQUIRED)
 
 target_link_libraries(payload_manager_internal
         PUBLIC
@@ -147,6 +148,7 @@ target_link_libraries(payload_manager_internal
         payload_manager::db
         yaml-cpp::yaml-cpp
         spdlog::spdlog
+        Arrow::arrow_shared
 )
 
 if(PAYLOAD_MANAGER_ENABLE_OTEL)
@@ -194,12 +196,6 @@ option(PAYLOAD_MANAGER_ENABLE_ARROW_CUDA
 set(_payload_manager_arrow_cuda_targets)
 
 if(PAYLOAD_MANAGER_ENABLE_ARROW_CUDA)
-
-    # -------------------------------------------------------
-    # Locate Arrow
-    # -------------------------------------------------------
-    find_package(Arrow CONFIG REQUIRED)
-
     # ArrowCUDA is a separate config in many installs
     find_package(ArrowCUDA CONFIG QUIET)
 
