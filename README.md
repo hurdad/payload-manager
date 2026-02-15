@@ -65,6 +65,15 @@ Optional CMake flags:
 
 - `-DPAYLOAD_MANAGER_ENABLE_SQLITE=ON`
 - `-DPAYLOAD_MANAGER_ENABLE_POSTGRES=ON`
+- `-DPAYLOAD_MANAGER_ENABLE_OTEL=ON` (builds OpenTelemetry support from `third_party/opentelemetry-cpp`)
+
+To build with OpenTelemetry enabled:
+
+```bash
+git submodule update --init --recursive
+cmake -S . -B build-otel -DPAYLOAD_MANAGER_ENABLE_OTEL=ON
+cmake --build build-otel
+```
 
 ## Run
 
