@@ -2,7 +2,7 @@ find_package(gRPC REQUIRED)
 find_package(Arrow CONFIG REQUIRED)
 
 add_library(payload_manager_client STATIC
-        payload_client.cc
+        payload_manager_client.cc
 )
 add_library(payload_manager::client ALIAS payload_manager_client)
 
