@@ -103,9 +103,9 @@ message LoggingConfig {
 
 // OTLP transport selection
 enum OtlpTransport {
-  OTLP_TRANSPORT_UNSPECIFIED = 0; // Runtime default (typically gRPC)
+  OTLP_TRANSPORT_UNSPECIFIED = 0; // Runtime default (gRPC)
   OTLP_TRANSPORT_GRPC = 1;        // OTLP over gRPC
-  OTLP_TRANSPORT_HTTP = 2;        // OTLP over HTTP/protobuf
+  OTLP_TRANSPORT_HTTP = 2;        // OTLP over HTTP
 }
 
 message ObservabilityConfig {
