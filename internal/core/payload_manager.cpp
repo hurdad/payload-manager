@@ -137,6 +137,15 @@ void PayloadManager::Delete(const PayloadID& id, bool force) {
 }
 
 PayloadDescriptor PayloadManager::ResolveSnapshot(const PayloadID& id) {
+  {
+    std::shared_lock lock(snapshot_cache_mutex_);
+    const auto       cached = snapshot_cache_.find(Key(id));
+    if (cached != snapshot_cache_.end()) {
+      return cached->second;
+    }
+  }
+
+  // Cache miss path: repository remains the durable backing store.
   auto tx     = repository_->Begin();
   auto record = repository_->GetPayload(*tx, Key(id));
   if (!record.has_value()) throw payload::util::NotFound("resolve snapshot: payload not found; verify payload id");

@@ -16,7 +16,7 @@ using payload::manager::v1::PAYLOAD_STATE_ACTIVE;
 using payload::manager::v1::TIER_DISK;
 using payload::manager::v1::TIER_RAM;
 
-void TestResolveSnapshotUsesRepositoryAsSourceOfTruth() {
+void TestResolveSnapshotUsesCachedDescriptorUntilRefresh() {
   auto repository = std::make_shared<MemoryRepository>();
   {
     auto tx = repository->Begin();
@@ -36,7 +36,12 @@ void TestResolveSnapshotUsesRepositoryAsSourceOfTruth() {
   auto manager = PayloadManager(/*storage=*/{}, std::make_shared<payload::lease::LeaseManager>(), /*metadata=*/nullptr,
                                 /*lineage=*/nullptr, repository);
 
-  manager.HydrateCaches();
+  payload::manager::v1::PayloadID id;
+  id.set_value("payload-preloaded");
+
+  const auto first = manager.ResolveSnapshot(id);
+  assert(first.tier() == TIER_RAM);
+  assert(first.version() == 1);
 
   {
     auto tx      = repository->Begin();
@@ -49,19 +54,21 @@ void TestResolveSnapshotUsesRepositoryAsSourceOfTruth() {
     tx->Commit();
   }
 
-  payload::manager::v1::PayloadID id;
-  id.set_value("payload-preloaded");
+  const auto stale_from_cache = manager.ResolveSnapshot(id);
+  assert(stale_from_cache.tier() == TIER_RAM);
+  assert(stale_from_cache.version() == 1);
 
-  const auto snapshot = manager.ResolveSnapshot(id);
-  assert(snapshot.id().value() == "payload-preloaded");
-  assert(snapshot.tier() == TIER_DISK);
-  assert(snapshot.version() == 2);
+  manager.HydrateCaches();
+
+  const auto refreshed = manager.ResolveSnapshot(id);
+  assert(refreshed.tier() == TIER_DISK);
+  assert(refreshed.version() == 2);
 }
 
 } // namespace
 
 int main() {
-  TestResolveSnapshotUsesRepositoryAsSourceOfTruth();
+  TestResolveSnapshotUsesCachedDescriptorUntilRefresh();
 
   std::cout << "payload_manager_unit_snapshot_reads: pass\n";
   return 0;

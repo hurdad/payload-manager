@@ -12,6 +12,7 @@ namespace {
 using payload::core::PayloadManager;
 using payload::lease::LeaseManager;
 using payload::manager::v1::PAYLOAD_STATE_ACTIVE;
+using payload::manager::v1::TIER_DISK;
 using payload::manager::v1::TIER_RAM;
 
 PayloadManager MakeManager(const std::shared_ptr<LeaseManager>& lease_mgr) {
@@ -62,11 +63,43 @@ void TestNonForceDeleteRejectsWhenLeaseIsActive() {
   assert(manager.ResolveSnapshot(descriptor.id()).id().value() == descriptor.id().value());
 }
 
+void TestCacheCoherenceAcrossCommitPromoteAndDelete() {
+  auto lease_mgr = std::make_shared<LeaseManager>();
+  auto manager   = MakeManager(lease_mgr);
+
+  const auto allocated = manager.Allocate(1024, TIER_RAM);
+  const auto committed = manager.Commit(allocated.id());
+  assert(committed.state() == PAYLOAD_STATE_ACTIVE);
+  assert(committed.version() == 2);
+
+  const auto committed_snapshot = manager.ResolveSnapshot(allocated.id());
+  assert(committed_snapshot.state() == PAYLOAD_STATE_ACTIVE);
+  assert(committed_snapshot.version() == 2);
+
+  const auto promoted = manager.Promote(allocated.id(), TIER_DISK);
+  assert(promoted.tier() == TIER_DISK);
+
+  const auto promoted_snapshot = manager.ResolveSnapshot(allocated.id());
+  assert(promoted_snapshot.tier() == TIER_DISK);
+  assert(promoted_snapshot.version() == promoted.version());
+
+  manager.Delete(allocated.id(), /*force=*/true);
+
+  bool threw = false;
+  try {
+    (void)manager.ResolveSnapshot(allocated.id());
+  } catch (const std::runtime_error&) {
+    threw = true;
+  }
+  assert(threw);
+}
+
 } // namespace
 
 int main() {
   TestForceDeleteRemovesPayloadAndLeases();
   TestNonForceDeleteRejectsWhenLeaseIsActive();
+  TestCacheCoherenceAcrossCommitPromoteAndDelete();
 
   std::cout << "payload_manager_unit_payload_delete: pass\n";
   return 0;
