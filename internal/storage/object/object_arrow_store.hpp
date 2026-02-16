@@ -1,7 +1,7 @@
 #pragma once
 
 #include <arrow/buffer.h>
-#include <arrow/filesystem/s3fs.h>
+#include <arrow/filesystem/filesystem.h>
 
 #include <memory>
 #include <string>
@@ -12,7 +12,7 @@
 namespace payload::storage {
 
 /*
-  Object storage tier (S3 / MinIO) using Arrow filesystem.
+  Object storage tier using Arrow filesystem.
 
   Characteristics:
     - immutable object writes
@@ -23,7 +23,7 @@ namespace payload::storage {
 
 class ObjectArrowStore final : public StorageBackend {
  public:
-  ObjectArrowStore(std::shared_ptr<arrow::fs::S3FileSystem> fs, std::string bucket, std::string prefix);
+  ObjectArrowStore(std::shared_ptr<arrow::fs::FileSystem> fs, std::string root_path);
 
   std::shared_ptr<arrow::Buffer> Allocate(const payload::manager::v1::PayloadID& id, uint64_t size_bytes) override;
 
@@ -40,9 +40,8 @@ class ObjectArrowStore final : public StorageBackend {
  private:
   std::string ObjectPath(const payload::manager::v1::PayloadID& id) const;
 
-  std::shared_ptr<arrow::fs::S3FileSystem> fs_;
-  std::string                              bucket_;
-  std::string                              prefix_;
+  std::shared_ptr<arrow::fs::FileSystem> fs_;
+  std::string                            root_path_;
 };
 
 } // namespace payload::storage
