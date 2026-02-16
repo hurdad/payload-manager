@@ -1,5 +1,5 @@
 CREATE TABLE IF NOT EXISTS payload_lease (
-                                             lease_id TEXT PRIMARY KEY,
+                                             lease_id BLOB PRIMARY KEY,
                                              payload_id TEXT NOT NULL,
                                              expires_at_ms INTEGER NOT NULL,
                                              FOREIGN KEY(payload_id) REFERENCES payload(id) ON DELETE CASCADE

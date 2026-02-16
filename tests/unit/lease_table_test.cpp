@@ -17,9 +17,15 @@ PayloadID MakePayloadID(const std::string& value) {
   return id;
 }
 
+payload::manager::v1::LeaseID MakeLeaseID(const std::string& value) {
+  payload::manager::v1::LeaseID id;
+  id.set_value(value);
+  return id;
+}
+
 Lease MakeLease(const std::string& lease_id, const PayloadID& payload_id, std::chrono::system_clock::time_point expires_at) {
   Lease lease;
-  lease.lease_id           = lease_id;
+  lease.lease_id           = MakeLeaseID(lease_id);
   lease.payload_id         = payload_id;
   lease.payload_descriptor = PayloadDescriptor{};
   lease.expires_at         = expires_at;
@@ -44,7 +50,7 @@ void TestMixedExpiredAndActiveLeases() {
 
   assert(table.HasActive(payload));
 
-  table.Remove("lease-active");
+  table.Remove(MakeLeaseID("lease-active"));
   assert(!table.HasActive(payload));
 }
 

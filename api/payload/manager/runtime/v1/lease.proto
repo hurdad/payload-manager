@@ -49,7 +49,7 @@ message AcquireReadLeaseRequest {
 
 message AcquireReadLeaseResponse {
   payload.manager.core.v1.PayloadDescriptor payload_descriptor = 1;
-  string lease_id = 2;
+  payload.manager.core.v1.LeaseID lease_id = 2;
   google.protobuf.Timestamp lease_expires_at = 3;
 }
 
@@ -57,5 +57,5 @@ message AcquireReadLeaseResponse {
   Idempotent.
 */
 message ReleaseLeaseRequest {
-  string lease_id = 1;
+  payload.manager.core.v1.LeaseID lease_id = 1;
 }

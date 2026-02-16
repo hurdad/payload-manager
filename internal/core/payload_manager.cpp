@@ -304,12 +304,12 @@ AcquireReadLeaseResponse PayloadManager::AcquireReadLease(const PayloadID& id, T
 
   AcquireReadLeaseResponse resp;
   *resp.mutable_payload_descriptor() = desc;
-  resp.set_lease_id(lease.lease_id);
+*resp.mutable_lease_id() = lease.lease_id;
   *resp.mutable_lease_expires_at() = payload::util::ToProto(lease.expires_at);
   return resp;
 }
 
-void PayloadManager::ReleaseLease(const std::string& lease_id) {
+void PayloadManager::ReleaseLease(const payload::manager::v1::LeaseID& lease_id) {
   lease_mgr_->Release(lease_id);
 }
 
