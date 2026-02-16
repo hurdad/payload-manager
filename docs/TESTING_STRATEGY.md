@@ -168,7 +168,7 @@ Focus files:
 
 - **C++ unit/integration framework:** GoogleTest + GoogleMock.
 - **Build/test orchestration:** CTest targets integrated in CMake.
-- **API smoke tests:** Python `pytest` using `client/python/payload_client.py` for black-box coverage.
+- **API smoke tests:** Python `pytest` using `client/python/payload_manager_client.py` for black-box coverage.
 - **Coverage:** `llvm-cov`/`gcovr` with thresholds by directory.
 
 Initial CMake setup:
