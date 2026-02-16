@@ -20,26 +20,38 @@ set(INTERNAL_PROTO_DIR ${CMAKE_CURRENT_SOURCE_DIR})
 set(INTERNAL_GEN_DIR ${CMAKE_CURRENT_BINARY_DIR}/generated)
 file(MAKE_DIRECTORY ${INTERNAL_GEN_DIR})
 
-set(CONFIG_PROTO internal/config/config.proto)
-set(CONFIG_PROTO_ABS ${INTERNAL_PROTO_DIR}/config/config.proto)
+file(GLOB_RECURSE CONFIG_PROTO_FILES
+        RELATIVE ${INTERNAL_PROTO_DIR}
+        config/*.proto
+)
+list(SORT CONFIG_PROTO_FILES)
 
-set(CONFIG_PROTO_SRC ${INTERNAL_GEN_DIR}/config/config.pb.cc)
-set(CONFIG_PROTO_HDR ${INTERNAL_GEN_DIR}/config/config.pb.h)
+set(CONFIG_PROTO_ABS)
+set(CONFIG_PROTO_SRCS)
+set(CONFIG_PROTO_HDRS)
+foreach(_proto_file IN LISTS CONFIG_PROTO_FILES)
+    list(APPEND CONFIG_PROTO_ABS ${INTERNAL_PROTO_DIR}/${_proto_file})
+
+    string(REPLACE ".proto" ".pb.cc" _proto_src ${_proto_file})
+    string(REPLACE ".proto" ".pb.h" _proto_hdr ${_proto_file})
+    list(APPEND CONFIG_PROTO_SRCS ${INTERNAL_GEN_DIR}/${_proto_src})
+    list(APPEND CONFIG_PROTO_HDRS ${INTERNAL_GEN_DIR}/${_proto_hdr})
+endforeach()
 
 add_custom_command(
-        OUTPUT ${CONFIG_PROTO_SRC} ${CONFIG_PROTO_HDR}
+        OUTPUT ${CONFIG_PROTO_SRCS} ${CONFIG_PROTO_HDRS}
         COMMAND ${PROTOC}
         --proto_path=${INTERNAL_PROTO_DIR}
         --cpp_out=${INTERNAL_GEN_DIR}
-        config/config.proto
+        ${CONFIG_PROTO_FILES}
         DEPENDS ${CONFIG_PROTO_ABS}
         WORKING_DIRECTORY ${INTERNAL_PROTO_DIR}
-        COMMENT "Generating internal config protobuf"
+        COMMENT "Generating internal config protobufs"
         VERBATIM
 )
 
 add_custom_target(internal_config_proto_gen
-        DEPENDS ${CONFIG_PROTO_SRC} ${CONFIG_PROTO_HDR}
+        DEPENDS ${CONFIG_PROTO_SRCS} ${CONFIG_PROTO_HDRS}
 )
 
 # ================================================================
@@ -97,7 +109,7 @@ set(INTERNAL_SRC
         observability/logging.cpp
 
         # generated config proto
-        ${CONFIG_PROTO_SRC}
+        ${CONFIG_PROTO_SRCS}
 )
 
 if(PAYLOAD_MANAGER_ENABLE_OTEL)
