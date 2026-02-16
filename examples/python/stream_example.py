@@ -34,9 +34,9 @@ def main() -> int:
     writable = client.AllocateWritableBuffer(8, placement_pb2.TIER_RAM)
     writable.mmap_obj[:] = bytes(range(10, 18))
 
-    raw_uuid = bytes(writable.descriptor.id.value)
-    payload_uuid = uuid.UUID(bytes=raw_uuid)
-    client.CommitPayload(str(payload_uuid))
+    payload_id = writable.descriptor.id
+    payload_uuid = uuid.UUID(bytes=bytes(payload_id.value))
+    client.CommitPayload(payload_id)
 
     stream = make_stream_id()
 
@@ -51,7 +51,7 @@ def main() -> int:
     append_request = stream_pb2.AppendRequest()
     append_request.stream.CopyFrom(stream)
     item = append_request.items.add()
-    item.payload_id.value = raw_uuid
+    item.payload_id.CopyFrom(payload_id)
     item.duration_ns = 1_000_000
     item.tags["source"] = "examples/python/stream_example"
     append_response = client.Append(append_request)

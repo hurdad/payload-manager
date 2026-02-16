@@ -26,40 +26,40 @@ def main() -> int:
     writable = client.AllocateWritableBuffer(16, placement_pb2.TIER_RAM, ttl_ms=60_000, persist=False)
     writable.mmap_obj[:] = bytes(range(1, 17))
 
-    raw_uuid = bytes(writable.descriptor.id.value)
-    payload_uuid = uuid.UUID(bytes=raw_uuid)
-    client.CommitPayload(str(payload_uuid))
-    client.Resolve(str(payload_uuid))
+    payload_id = writable.descriptor.id
+    payload_uuid = uuid.UUID(bytes=bytes(payload_id.value))
+    client.CommitPayload(payload_id)
+    client.Resolve(payload_id)
 
     # Promotion/spill requests demonstrate tiering controls. BEST_EFFORT means
     # the server may partially succeed depending on current constraints.
     promote_request = tiering_pb2.PromoteRequest(target_tier=placement_pb2.TIER_RAM, policy=policy_pb2.PROMOTION_POLICY_BEST_EFFORT)
-    promote_request.id.value = raw_uuid
+    promote_request.id.CopyFrom(payload_id)
     client.Promote(promote_request)
 
     spill_request = tiering_pb2.SpillRequest(policy=tiering_pb2.SPILL_POLICY_BEST_EFFORT, wait_for_leases=True)
-    spill_request.ids.add().value = raw_uuid
+    spill_request.ids.add().CopyFrom(payload_id)
     client.Spill(spill_request)
 
     # Record a synthetic lineage edge to show how transformation provenance can
     # be attached to payload IDs.
     add_lineage_request = lineage_pb2.AddLineageRequest()
-    add_lineage_request.child.value = raw_uuid
+    add_lineage_request.child.CopyFrom(payload_id)
     edge = add_lineage_request.parents.add()
-    edge.parent.value = raw_uuid
+    edge.parent.CopyFrom(payload_id)
     edge.operation = "identity"
     edge.role = "demo"
     edge.parameters = "{}"
     client.AddLineage(add_lineage_request)
 
     get_lineage_request = lineage_pb2.GetLineageRequest(upstream=True, max_depth=1)
-    get_lineage_request.id.value = raw_uuid
+    get_lineage_request.id.CopyFrom(payload_id)
     lineage = client.GetLineage(get_lineage_request)
 
     # Force-delete keeps the example idempotent and avoids leaving stale
     # payloads behind after the demo completes.
     delete_request = lifecycle_pb2.DeleteRequest(force=True)
-    delete_request.id.value = raw_uuid
+    delete_request.id.CopyFrom(payload_id)
     client.Delete(delete_request)
 
     print(f"Catalog/Admin API calls completed for payload {payload_uuid} (lineage edges returned={len(lineage.edges)})")

@@ -25,11 +25,6 @@ std::string UuidToHex(const std::string& uuid_bytes) {
   return os.str();
 }
 
-payload::manager::v1::PayloadID MakePayloadId(const std::string& raw_uuid) {
-  payload::manager::v1::PayloadID id;
-  id.set_value(raw_uuid);
-  return id;
-}
 
 payload::manager::v1::StreamID MakeStreamId() {
   payload::manager::v1::StreamID stream;
@@ -58,9 +53,9 @@ int main(int argc, char** argv) {
     writable_payload.buffer->mutable_data()[i] = static_cast<uint8_t>(10 + i);
   }
 
-  const std::string raw_uuid = writable_payload.descriptor.id().value();
-  const std::string uuid     = UuidToHex(raw_uuid);
-  auto              status   = client.CommitPayload(uuid);
+  const auto& payload_id = writable_payload.descriptor.id();
+  const auto  uuid_text  = UuidToHex(payload_id.value());
+  auto        status     = client.CommitPayload(payload_id);
   if (!status.ok()) {
     std::cerr << "CommitPayload failed: " << status.ToString() << '\n';
     return 1;
@@ -83,7 +78,7 @@ int main(int argc, char** argv) {
   payload::manager::v1::AppendRequest append_request;
   *append_request.mutable_stream() = stream;
   auto* item                       = append_request.add_items();
-  *item->mutable_payload_id()      = MakePayloadId(raw_uuid);
+  *item->mutable_payload_id()      = payload_id;
   item->set_duration_ns(1'000'000);
   (*item->mutable_tags())["source"] = "examples/cpp/stream_example";
 
