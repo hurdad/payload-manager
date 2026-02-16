@@ -23,7 +23,12 @@ PayloadID MakePayloadID(const std::string& value) {
 }
 
 bool HasCudaDevice() {
-  auto maybe_ctx = arrow::cuda::CudaDeviceManager::Instance()->GetContext(0);
+  auto maybe_manager = arrow::cuda::CudaDeviceManager::Instance();
+  if (!maybe_manager.ok()) {
+    return false;
+  }
+
+  auto maybe_ctx = (*maybe_manager)->GetContext(0);
   return maybe_ctx.ok();
 }
 

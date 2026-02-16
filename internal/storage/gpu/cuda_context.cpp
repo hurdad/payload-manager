@@ -21,7 +21,10 @@ std::shared_ptr<arrow::cuda::CudaContext> CudaContextManager::Get(int device_id)
     return ctx_;
   }
 
-  auto maybe = arrow::cuda::CudaDeviceManager::Instance()->GetContext(device_id);
+  auto maybe_manager = arrow::cuda::CudaDeviceManager::Instance();
+  if (!maybe_manager.ok()) throw std::runtime_error(maybe_manager.status().ToString());
+
+  auto maybe = (*maybe_manager)->GetContext(device_id);
   if (!maybe.ok()) throw std::runtime_error(maybe.status().ToString());
 
   ctx_       = *maybe;
