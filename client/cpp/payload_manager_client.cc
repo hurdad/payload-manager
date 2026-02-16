@@ -87,6 +87,13 @@ arrow::Status SetPayloadIdFromUuid(std::string_view uuid, payload::manager::v1::
   return arrow::Status::OK();
 }
 
+arrow::Status ValidatePayloadIdValue(const payload::manager::v1::PayloadID& id) {
+  if (id.value().size() != 16) {
+    return arrow::Status::Invalid("payload_id must contain 16 bytes, got ", id.value().size());
+  }
+  return arrow::Status::OK();
+}
+
 
 class ReadOnlyMMapBuffer final : public arrow::Buffer {
  public:
@@ -235,9 +242,20 @@ arrow::Result<PayloadClient::WritablePayload> PayloadClient::AllocateWritableBuf
   return WritablePayload{resp.payload_descriptor(), std::move(buffer)};
 }
 
-arrow::Status PayloadClient::CommitPayload(const std::string& uuid) const {
+arrow::Result<payload::manager::v1::PayloadID> PayloadClient::PayloadIdFromUuid(std::string_view uuid) {
+  payload::manager::v1::PayloadID id;
+  ARROW_RETURN_NOT_OK(SetPayloadIdFromUuid(uuid, &id));
+  return id;
+}
+
+arrow::Status PayloadClient::ValidatePayloadId(const payload::manager::v1::PayloadID& payload_id) {
+  return ValidatePayloadIdValue(payload_id);
+}
+
+arrow::Status PayloadClient::CommitPayload(const payload::manager::v1::PayloadID& payload_id) const {
   payload::manager::v1::CommitPayloadRequest req;
-  ARROW_RETURN_NOT_OK(SetPayloadIdFromUuid(uuid, req.mutable_id()));
+  ARROW_RETURN_NOT_OK(ValidatePayloadIdValue(payload_id));
+  *req.mutable_id() = payload_id;
 
   payload::manager::v1::CommitPayloadResponse resp;
   grpc::ClientContext                         ctx;
@@ -245,9 +263,10 @@ arrow::Status PayloadClient::CommitPayload(const std::string& uuid) const {
   return GrpcToArrow(catalog_stub_->CommitPayload(&ctx, req, &resp), "CommitPayload");
 }
 
-arrow::Result<payload::manager::v1::ResolveSnapshotResponse> PayloadClient::Resolve(const std::string& uuid) const {
+arrow::Result<payload::manager::v1::ResolveSnapshotResponse> PayloadClient::Resolve(const payload::manager::v1::PayloadID& payload_id) const {
   payload::manager::v1::ResolveSnapshotRequest request;
-  ARROW_RETURN_NOT_OK(SetPayloadIdFromUuid(uuid, request.mutable_id()));
+  ARROW_RETURN_NOT_OK(ValidatePayloadIdValue(payload_id));
+  *request.mutable_id() = payload_id;
 
   payload::manager::v1::ResolveSnapshotResponse response;
   grpc::ClientContext                           ctx;
@@ -256,11 +275,13 @@ arrow::Result<payload::manager::v1::ResolveSnapshotResponse> PayloadClient::Reso
   return response;
 }
 
-arrow::Result<PayloadClient::ReadablePayload> PayloadClient::AcquireReadableBuffer(const std::string& uuid, payload::manager::v1::Tier min_tier,
+arrow::Result<PayloadClient::ReadablePayload> PayloadClient::AcquireReadableBuffer(const payload::manager::v1::PayloadID& payload_id,
+                                                                                   payload::manager::v1::Tier min_tier,
                                                                                    payload::manager::v1::PromotionPolicy promotion_policy,
                                                                                    uint64_t min_lease_duration_ms) const {
   payload::manager::v1::AcquireReadLeaseRequest req;
-  ARROW_RETURN_NOT_OK(SetPayloadIdFromUuid(uuid, req.mutable_id()));
+  ARROW_RETURN_NOT_OK(ValidatePayloadIdValue(payload_id));
+  *req.mutable_id() = payload_id;
   req.set_min_tier(min_tier);
   req.set_promotion_policy(promotion_policy);
   req.set_min_lease_duration_ms(min_lease_duration_ms);

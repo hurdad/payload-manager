@@ -25,14 +25,15 @@ def main() -> int:
     writable = client.AllocateWritableBuffer(payload_size, placement_pb2.TIER_RAM)
     writable.mmap_obj[:] = bytes((i & 0xFF) for i in range(payload_size))
 
-    # Convert the raw 16-byte protobuf UUID into standard text form used by most
-    # Payload Manager APIs.
-    payload_uuid = uuid.UUID(bytes=bytes(writable.descriptor.id.value))
+    # Use the canonical PayloadID protobuf returned by AllocatePayload and
+    # derive a printable UUID only for logging.
+    payload_id = writable.descriptor.id
+    payload_uuid = uuid.UUID(bytes=bytes(payload_id.value))
     # Commit makes the payload visible/immutable for readers.
-    client.CommitPayload(str(payload_uuid))
+    client.CommitPayload(payload_id)
 
     # AcquireReadableBuffer returns a lease-scoped view of committed data.
-    readable = client.AcquireReadableBuffer(str(payload_uuid))
+    readable = client.AcquireReadableBuffer(payload_id)
     print(f"Committed and acquired payload UUID={payload_uuid}, size={readable.buffer.size} bytes")
 
     preview_len = min(8, readable.buffer.size)

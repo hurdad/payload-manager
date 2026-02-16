@@ -8,6 +8,7 @@
 #include <cstdint>
 #include <memory>
 #include <string>
+#include <string_view>
 
 #include "payload/manager/services/v1/payload_admin_service.grpc.pb.h"
 #include "payload/manager/services/v1/payload_catalog_service.grpc.pb.h"
@@ -36,12 +37,15 @@ class PayloadClient {
                                                         payload::manager::v1::Tier preferred_tier = payload::manager::v1::TIER_RAM,
                                                         uint64_t ttl_ms = 0, bool persist = false) const;
 
-  arrow::Status CommitPayload(const std::string& uuid) const;
+  static arrow::Result<payload::manager::v1::PayloadID> PayloadIdFromUuid(std::string_view uuid);
+  static arrow::Status                                   ValidatePayloadId(const payload::manager::v1::PayloadID& payload_id);
 
-  arrow::Result<payload::manager::v1::ResolveSnapshotResponse> Resolve(const std::string& uuid) const;
+  arrow::Status CommitPayload(const payload::manager::v1::PayloadID& payload_id) const;
+
+  arrow::Result<payload::manager::v1::ResolveSnapshotResponse> Resolve(const payload::manager::v1::PayloadID& payload_id) const;
 
   arrow::Result<ReadablePayload> AcquireReadableBuffer(
-      const std::string& uuid, payload::manager::v1::Tier min_tier = payload::manager::v1::TIER_RAM,
+      const payload::manager::v1::PayloadID& payload_id, payload::manager::v1::Tier min_tier = payload::manager::v1::TIER_RAM,
       payload::manager::v1::PromotionPolicy promotion_policy      = payload::manager::v1::PROMOTION_POLICY_BEST_EFFORT,
       uint64_t                              min_lease_duration_ms = 0) const;
 

@@ -25,9 +25,9 @@ def main() -> int:
     writable = client.AllocateWritableBuffer(8, placement_pb2.TIER_RAM)
     writable.mmap_obj[0] = 42
 
-    payload_uuid = uuid.UUID(bytes=bytes(writable.descriptor.id.value))
-    raw_uuid = payload_uuid.bytes
-    client.CommitPayload(str(payload_uuid))
+    payload_id = writable.descriptor.id
+    payload_uuid = uuid.UUID(bytes=bytes(payload_id.value))
+    client.CommitPayload(payload_id)
 
     # UpdatePayloadMetadata writes the canonical metadata document for this
     # payload ID. REPLACE mode swaps the full document in one operation.
@@ -36,8 +36,8 @@ def main() -> int:
         actor="examples/python/metadata_example",
         reason="demonstrate metadata update flow",
     )
-    update_request.id.value = raw_uuid
-    update_request.metadata.id.value = raw_uuid
+    update_request.id.CopyFrom(payload_id)
+    update_request.metadata.id.CopyFrom(payload_id)
     update_request.metadata.schema = "example.payload.v1"
     update_request.metadata.data = '{"producer":"metadata_example","notes":"hello payload manager"}'
     client.UpdatePayloadMetadata(update_request)
@@ -48,8 +48,8 @@ def main() -> int:
         source="examples/python/metadata_example",
         version="v1",
     )
-    event_request.id.value = raw_uuid
-    event_request.metadata.id.value = raw_uuid
+    event_request.id.CopyFrom(payload_id)
+    event_request.metadata.id.CopyFrom(payload_id)
     event_request.metadata.schema = "example.payload.v1"
     event_request.metadata.data = '{"event":"metadata_updated","component":"metadata_example"}'
     client.AppendPayloadMetadataEvent(event_request)

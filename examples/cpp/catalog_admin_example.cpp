@@ -24,11 +24,6 @@ std::string UuidToHex(const std::string& uuid_bytes) {
   return os.str();
 }
 
-payload::manager::v1::PayloadID MakePayloadId(const std::string& raw_uuid) {
-  payload::manager::v1::PayloadID id;
-  id.set_value(raw_uuid);
-  return id;
-}
 
 } // namespace
 
@@ -52,16 +47,16 @@ int main(int argc, char** argv) {
     writable_payload.buffer->mutable_data()[i] = static_cast<uint8_t>(i + 1);
   }
 
-  const std::string raw_uuid = writable_payload.descriptor.id().value();
-  const std::string uuid     = UuidToHex(raw_uuid);
+  const auto& payload_id = writable_payload.descriptor.id();
+  const auto  uuid_text  = UuidToHex(payload_id.value());
 
-  auto commit_status = client.CommitPayload(uuid);
+  auto commit_status = client.CommitPayload(payload_id);
   if (!commit_status.ok()) {
     std::cerr << "CommitPayload failed: " << commit_status.ToString() << '\n';
     return 1;
   }
 
-  auto snapshot = client.Resolve(uuid);
+  auto snapshot = client.Resolve(payload_id);
   if (!snapshot.ok()) {
     std::cerr << "Resolve failed: " << snapshot.status().ToString() << '\n';
     return 1;
@@ -69,7 +64,7 @@ int main(int argc, char** argv) {
 
   // Promotion and spill operations demonstrate runtime tier-management APIs.
   payload::manager::v1::PromoteRequest promote_request;
-  *promote_request.mutable_id() = MakePayloadId(raw_uuid);
+  *promote_request.mutable_id() = payload_id;
   promote_request.set_target_tier(payload::manager::v1::TIER_RAM);
   promote_request.set_policy(payload::manager::v1::PROMOTION_POLICY_BEST_EFFORT);
 
@@ -80,7 +75,7 @@ int main(int argc, char** argv) {
   }
 
   payload::manager::v1::SpillRequest spill_request;
-  *spill_request.add_ids() = MakePayloadId(raw_uuid);
+  *spill_request.add_ids() = payload_id;
   spill_request.set_policy(payload::manager::v1::SPILL_POLICY_BEST_EFFORT);
   spill_request.set_wait_for_leases(true);
 
@@ -92,9 +87,9 @@ int main(int argc, char** argv) {
 
   // Attach a synthetic lineage edge to show provenance graph updates.
   payload::manager::v1::AddLineageRequest add_lineage_request;
-  *add_lineage_request.mutable_child() = MakePayloadId(raw_uuid);
+  *add_lineage_request.mutable_child() = payload_id;
   auto* parent_edge                    = add_lineage_request.add_parents();
-  *parent_edge->mutable_parent()       = MakePayloadId(raw_uuid);
+  *parent_edge->mutable_parent()       = payload_id;
   parent_edge->set_operation("identity");
   parent_edge->set_role("demo");
   parent_edge->set_parameters("{}", 2);
@@ -106,7 +101,7 @@ int main(int argc, char** argv) {
   }
 
   payload::manager::v1::GetLineageRequest get_lineage_request;
-  *get_lineage_request.mutable_id() = MakePayloadId(raw_uuid);
+  *get_lineage_request.mutable_id() = payload_id;
   get_lineage_request.set_upstream(true);
   get_lineage_request.set_max_depth(1);
 
@@ -118,7 +113,7 @@ int main(int argc, char** argv) {
 
   // Force delete ensures example reruns are clean and deterministic.
   payload::manager::v1::DeleteRequest delete_request;
-  *delete_request.mutable_id() = MakePayloadId(raw_uuid);
+  *delete_request.mutable_id() = payload_id;
   delete_request.set_force(true);
 
   auto delete_status = client.Delete(delete_request);
@@ -127,6 +122,6 @@ int main(int argc, char** argv) {
     return 1;
   }
 
-  std::cout << "Catalog/Admin API calls completed for payload " << uuid << " (lineage edges returned=" << lineage.ValueOrDie().edges_size() << ")\n";
+  std::cout << "Catalog/Admin API calls completed for payload " << uuid_text << " (lineage edges returned=" << lineage.ValueOrDie().edges_size() << ")\n";
   return 0;
 }

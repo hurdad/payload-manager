@@ -15,6 +15,7 @@ import pyarrow as pa
 from payload.manager.admin.v1 import stats_pb2
 from payload.manager.catalog.v1 import lineage_pb2
 from payload.manager.catalog.v1 import metadata_pb2
+from payload.manager.core.v1 import id_pb2
 from payload.manager.core.v1 import placement_pb2
 from payload.manager.core.v1 import policy_pb2
 from payload.manager.runtime.v1 import lease_pb2
@@ -26,7 +27,7 @@ from payload.manager.services.v1 import payload_catalog_service_pb2_grpc
 from payload.manager.services.v1 import payload_data_service_pb2_grpc
 from payload.manager.services.v1 import payload_stream_service_pb2_grpc
 
-UuidLike = Union[bytes, bytearray, memoryview, str, uuidlib.UUID]
+PayloadIdLike = Union[id_pb2.PayloadID, bytes, bytearray, memoryview, str, uuidlib.UUID]
 
 
 @dataclass(frozen=True)
@@ -155,19 +156,19 @@ class PayloadClient:
         mmap_obj, buffer = self._OpenMutableBuffer(response.payload_descriptor)
         return WritablePayload(descriptor=response.payload_descriptor, mmap_obj=mmap_obj, buffer=buffer)
 
-    def CommitPayload(self, payload_id: UuidLike) -> lifecycle_pb2.CommitPayloadResponse:
+    def CommitPayload(self, payload_id: id_pb2.PayloadID) -> lifecycle_pb2.CommitPayloadResponse:
         request = lifecycle_pb2.CommitPayloadRequest()
-        request.id.value = _uuid_bytes(payload_id)
+        request.id.CopyFrom(validate_payload_id(payload_id))
         return self.CommitPayloadRpc(request)
 
-    def Resolve(self, payload_id: UuidLike) -> lease_pb2.ResolveSnapshotResponse:
+    def Resolve(self, payload_id: id_pb2.PayloadID) -> lease_pb2.ResolveSnapshotResponse:
         request = lease_pb2.ResolveSnapshotRequest()
-        request.id.value = _uuid_bytes(payload_id)
+        request.id.CopyFrom(validate_payload_id(payload_id))
         return self.ResolveSnapshot(request)
 
     def AcquireReadableBuffer(
         self,
-        payload_id: UuidLike,
+        payload_id: id_pb2.PayloadID,
         min_tier: int = placement_pb2.TIER_RAM,
         promotion_policy: int = policy_pb2.PROMOTION_POLICY_BEST_EFFORT,
         min_lease_duration_ms: int = 0,
@@ -178,7 +179,7 @@ class PayloadClient:
             min_lease_duration_ms=min_lease_duration_ms,
             mode=lease_pb2.LEASE_MODE_READ,
         )
-        request.id.value = _uuid_bytes(payload_id)
+        request.id.CopyFrom(validate_payload_id(payload_id))
         response = self.AcquireReadLease(request)
         self._ValidateHasLocation(response.payload_descriptor)
 
@@ -190,7 +191,7 @@ class PayloadClient:
             buffer=buffer,
         )
 
-    def Release(self, lease_id: UuidLike) -> None:
+    def Release(self, lease_id: PayloadIdLike) -> None:
         request = lease_pb2.ReleaseLeaseRequest()
         request.lease_id.value = _uuid_bytes(lease_id)
         self.ReleaseLease(request)
@@ -274,7 +275,20 @@ def _descriptor_length_bytes(descriptor: placement_pb2.PayloadDescriptor) -> int
     return 0
 
 
-def _uuid_bytes(value: UuidLike) -> bytes:
+def payload_id_from_uuid(value: PayloadIdLike) -> id_pb2.PayloadID:
+    payload_id = id_pb2.PayloadID(value=_uuid_bytes(value))
+    return validate_payload_id(payload_id)
+
+
+def validate_payload_id(payload_id: id_pb2.PayloadID) -> id_pb2.PayloadID:
+    if len(payload_id.value) != 16:
+        raise ValueError(f"payload_id.value must be 16 bytes, got {len(payload_id.value)}")
+    return payload_id
+
+
+def _uuid_bytes(value: PayloadIdLike) -> bytes:
+    if isinstance(value, id_pb2.PayloadID):
+        return value.value
     if isinstance(value, bytes):
         return value
     if isinstance(value, (bytearray, memoryview)):

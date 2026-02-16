@@ -48,22 +48,23 @@ int main(int argc, char** argv) {
     writable_payload.buffer->mutable_data()[i] = static_cast<uint8_t>(i & 0xFFu);
   }
 
-  const std::string uuid          = writable_payload.descriptor.id().value();
-  auto              commit_status = client.CommitPayload(UuidToHex(uuid));
+  const auto& payload_id   = writable_payload.descriptor.id();
+  const auto  uuid_text    = UuidToHex(payload_id.value());
+  auto        commit_status = client.CommitPayload(payload_id);
   if (!commit_status.ok()) {
     std::cerr << "CommitPayload failed: " << commit_status.ToString() << '\n';
     return 1;
   }
 
   // Acquire a read lease to validate what was committed.
-  auto readable = client.AcquireReadableBuffer(UuidToHex(uuid));
+  auto readable = client.AcquireReadableBuffer(payload_id);
   if (!readable.ok()) {
     std::cerr << "AcquireReadableBuffer failed: " << readable.status().ToString() << '\n';
     return 1;
   }
 
   auto readable_payload = readable.ValueOrDie();
-  std::cout << "Committed and acquired payload UUID=" << UuidToHex(uuid) << ", size=" << readable_payload.buffer->size() << " bytes\n";
+  std::cout << "Committed and acquired payload UUID=" << uuid_text << ", size=" << readable_payload.buffer->size() << " bytes\n";
 
   const int preview_len = static_cast<int>(std::min<int64_t>(8, readable_payload.buffer->size()));
   std::cout << "First " << preview_len << " bytes:";

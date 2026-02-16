@@ -44,9 +44,9 @@ int main(int argc, char** argv) {
   auto writable_payload                      = writable.ValueOrDie();
   writable_payload.buffer->mutable_data()[0] = 42;
 
-  const std::string uuid          = writable_payload.descriptor.id().value();
-  const std::string uuid_text     = UuidToHex(uuid);
-  auto              commit_status = client.CommitPayload(uuid_text);
+  const auto& payload_id   = writable_payload.descriptor.id();
+  const auto  uuid_text    = UuidToHex(payload_id.value());
+  auto        commit_status = client.CommitPayload(payload_id);
   if (!commit_status.ok()) {
     std::cerr << "CommitPayload failed: " << commit_status.ToString() << '\n';
     return 1;
@@ -55,9 +55,9 @@ int main(int argc, char** argv) {
   // UpdatePayloadMetadata writes the canonical metadata document for the
   // payload. Here we use REPLACE for full document semantics.
   payload::manager::v1::UpdatePayloadMetadataRequest update_request;
-  update_request.mutable_id()->set_value(uuid);
+  *update_request.mutable_id() = payload_id;
   update_request.set_mode(payload::manager::v1::METADATA_UPDATE_MODE_REPLACE);
-  update_request.mutable_metadata()->mutable_id()->set_value(uuid);
+  *update_request.mutable_metadata()->mutable_id() = payload_id;
   update_request.mutable_metadata()->set_schema("example.payload.v1");
   update_request.mutable_metadata()->set_data(R"({"producer":"metadata_example","notes":"hello payload manager"})");
   update_request.set_actor("examples/cpp/metadata_example");
@@ -71,8 +71,8 @@ int main(int argc, char** argv) {
 
   // AppendPayloadMetadataEvent records an immutable event for audit/history.
   payload::manager::v1::AppendPayloadMetadataEventRequest event_request;
-  event_request.mutable_id()->set_value(uuid);
-  event_request.mutable_metadata()->mutable_id()->set_value(uuid);
+  *event_request.mutable_id() = payload_id;
+  *event_request.mutable_metadata()->mutable_id() = payload_id;
   event_request.mutable_metadata()->set_schema("example.payload.v1");
   event_request.mutable_metadata()->set_data(R"({"event":"metadata_updated","component":"metadata_example"})");
   event_request.set_source("examples/cpp/metadata_example");
