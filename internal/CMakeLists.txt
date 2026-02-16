@@ -1,58 +1,6 @@
 cmake_minimum_required(VERSION 3.20)
 
-# ================================================================
-# Protobuf for internal config
-# ================================================================
-
-find_package(Protobuf CONFIG QUIET)
-if(NOT Protobuf_FOUND)
-    find_package(Protobuf REQUIRED)
-endif()
-
-# protoc executable
-if(TARGET protobuf::protoc)
-    set(PROTOC $<TARGET_FILE:protobuf::protoc>)
-else()
-    set(PROTOC ${Protobuf_PROTOC_EXECUTABLE})
-endif()
-
-set(INTERNAL_PROTO_DIR ${CMAKE_CURRENT_SOURCE_DIR})
-set(INTERNAL_GEN_DIR ${CMAKE_CURRENT_BINARY_DIR}/generated)
-file(MAKE_DIRECTORY ${INTERNAL_GEN_DIR})
-
-file(GLOB_RECURSE CONFIG_PROTO_FILES
-        RELATIVE ${INTERNAL_PROTO_DIR}
-        config/*.proto
-)
-list(SORT CONFIG_PROTO_FILES)
-
-set(CONFIG_PROTO_ABS)
-set(CONFIG_PROTO_SRCS)
-set(CONFIG_PROTO_HDRS)
-foreach(_proto_file IN LISTS CONFIG_PROTO_FILES)
-    list(APPEND CONFIG_PROTO_ABS ${INTERNAL_PROTO_DIR}/${_proto_file})
-
-    string(REPLACE ".proto" ".pb.cc" _proto_src ${_proto_file})
-    string(REPLACE ".proto" ".pb.h" _proto_hdr ${_proto_file})
-    list(APPEND CONFIG_PROTO_SRCS ${INTERNAL_GEN_DIR}/${_proto_src})
-    list(APPEND CONFIG_PROTO_HDRS ${INTERNAL_GEN_DIR}/${_proto_hdr})
-endforeach()
-
-add_custom_command(
-        OUTPUT ${CONFIG_PROTO_SRCS} ${CONFIG_PROTO_HDRS}
-        COMMAND ${PROTOC}
-        --proto_path=${INTERNAL_PROTO_DIR}
-        --cpp_out=${INTERNAL_GEN_DIR}
-        ${CONFIG_PROTO_FILES}
-        DEPENDS ${CONFIG_PROTO_ABS}
-        WORKING_DIRECTORY ${INTERNAL_PROTO_DIR}
-        COMMENT "Generating internal config protobufs"
-        VERBATIM
-)
-
-add_custom_target(internal_config_proto_gen
-        DEPENDS ${CONFIG_PROTO_SRCS} ${CONFIG_PROTO_HDRS}
-)
+add_subdirectory(config)
 
 # ================================================================
 # Sources
@@ -128,7 +76,7 @@ endif()
 add_library(payload_manager_internal STATIC ${INTERNAL_SRC})
 add_library(payload_manager::internal ALIAS payload_manager_internal)
 
-add_dependencies(payload_manager_internal internal_config_proto_gen)
+add_dependencies(payload_manager_internal payload_manager_internal_config_proto)
 
 target_include_directories(payload_manager_internal
         PUBLIC
