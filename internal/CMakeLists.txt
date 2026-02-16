@@ -51,7 +51,7 @@ set(INTERNAL_SRC
         storage/object/object_arrow_store.cpp
 
         # util
-        util/arrow.cpp
+        storage/common/arrow_utils.cpp
         util/time.cpp
         util/uuid.cpp
 
