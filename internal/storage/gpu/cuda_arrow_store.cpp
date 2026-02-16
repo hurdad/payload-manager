@@ -54,7 +54,7 @@ void CudaArrowStore::Write(const PayloadID& id, const std::shared_ptr<arrow::Buf
   if (!maybe_buf.ok()) throw std::runtime_error("GPU allocate failed: " + maybe_buf.status().ToString());
   std::shared_ptr<arrow::cuda::CudaBuffer> gpu_buf = std::move(*maybe_buf);
 
-  auto copy_status = ctx_->CopyHostToDevice(gpu_buf->mutable_data(), buffer->data(), buffer->size());
+  auto copy_status = gpu_buf->CopyFromHost(/*position=*/0, buffer->data(), buffer->size());
   if (!copy_status.ok()) throw std::runtime_error("GPU host-to-device copy failed: " + copy_status.ToString());
 
   std::unique_lock lock(mutex_);
