@@ -67,6 +67,7 @@ Optional CMake flags:
 - `-DPAYLOAD_MANAGER_ENABLE_SQLITE=ON`
 - `-DPAYLOAD_MANAGER_ENABLE_POSTGRES=ON`
 - `-DPAYLOAD_MANAGER_ENABLE_OTEL=ON` (builds OpenTelemetry support from `third_party/opentelemetry-cpp`)
+- `-DPAYLOAD_MANAGER_ENABLE_ARROW_CUDA=ON` (enables GPU tier runtime support in the service via Arrow CUDA)
 
 Client build switch:
 
@@ -150,9 +151,9 @@ pip install './client/python[cuda]'
 
 Current GPU client runtime status:
 
-- C++ client: CUDA-capable build option exists, but GPU buffer import/open at runtime is **not yet implemented**.
+- C++ client: GPU descriptor runtime handling is implemented when built with `-DPAYLOAD_MANAGER_CLIENT_ENABLE_CUDA=ON` and Arrow CUDA libraries are available.
 - Python client: GPU descriptor read/write path is **not yet implemented** (RAM/disk paths are implemented).
-- Result: treat current client-side GPU handling as not yet supported at runtime, even when using CUDA-oriented build/install switches.
+- Result: C++ can use GPU descriptors at runtime in CUDA-capable builds; Python remains RAM/disk-only today.
 
 ## Repository layout
 
