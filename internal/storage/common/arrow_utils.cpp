@@ -1,4 +1,4 @@
-#include "arrow.h"
+#include "arrow_utils.hpp"
 
 #include <arrow/filesystem/azurefs.h>
 #include <arrow/filesystem/gcsfs.h>
@@ -12,7 +12,7 @@
 #include <unordered_map>
 #include <vector>
 
-namespace payload::util {
+namespace payload::storage::common {
 
 namespace {
 
@@ -253,4 +253,4 @@ arrow::Result<arrow::Compression::type> ResolveCompression(const std::string& pa
   }
 }
 
-} // namespace payload::util
+} // namespace payload::storage::common
