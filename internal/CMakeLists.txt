@@ -198,7 +198,8 @@ option(PAYLOAD_MANAGER_ENABLE_ARROW_CUDA
 set(_payload_manager_arrow_cuda_targets)
 
 if(PAYLOAD_MANAGER_ENABLE_ARROW_CUDA)
-    list(APPEND INTERNAL_SRC
+    target_sources(payload_manager_internal
+            PRIVATE
             storage/gpu/cuda_context.cpp
             storage/gpu/cuda_arrow_store.cpp
     )

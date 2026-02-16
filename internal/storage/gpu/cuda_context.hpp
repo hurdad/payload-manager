@@ -1,6 +1,6 @@
 #pragma once
 
-#include <arrow/cuda/api.h>
+#include <arrow/gpu/cuda_api.h>
 
 #include <memory>
 #include <mutex>
