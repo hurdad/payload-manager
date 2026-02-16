@@ -73,9 +73,9 @@ Metrics use OTEL resource attribute `service.name`, sourced from OTEL config ser
 
 ### `payload.tier.occupancy_bytes`
 
-- **Type:** UpDownCounter (`int64`)
+- **Type:** Observable Gauge (`int64`)
 - **Unit:** `By`
-- **Meaning:** Tier occupancy updates in bytes.
+- **Meaning:** Current tier occupancy in bytes, sampled during collection.
 - **Attributes:**
   - Optional: `tier` (enabled by `tier_labels_enabled`)
 - **Enable controls:**
@@ -113,4 +113,4 @@ Export interval behavior:
 ## 6. Notes and caveats
 
 - Metrics code is compiled behind `ENABLE_OTEL` and is inactive in non-OTEL builds.
-- `payload.tier.occupancy_bytes` is emitted through an UpDownCounter; downstream backends may display this as cumulative deltas depending on aggregation settings.
+- `payload.tier.occupancy_bytes` is emitted through an observable gauge callback; downstream backends typically show point-in-time values based on collection cadence.
