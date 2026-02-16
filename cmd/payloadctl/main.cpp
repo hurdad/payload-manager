@@ -61,6 +61,30 @@ static PayloadID MakeID(const std::string& s) {
   return id;
 }
 
+static LeaseID MakeLeaseID(const std::string& s) {
+  auto id = MakeID(s);
+  LeaseID lease_id;
+  lease_id.set_value(id.value());
+  return lease_id;
+}
+
+static std::string ToUuidString(const std::string& bytes) {
+  if (bytes.size() != 16) {
+    return "<invalid lease id>";
+  }
+
+  static constexpr char kHex[] = "0123456789abcdef";
+  std::string out;
+  out.reserve(36);
+  for (size_t i = 0; i < bytes.size(); ++i) {
+    const auto b = static_cast<unsigned char>(bytes[i]);
+    if (i == 4 || i == 6 || i == 8 || i == 10) out.push_back('-');
+    out.push_back(kHex[b >> 4]);
+    out.push_back(kHex[b & 0x0F]);
+  }
+  return out;
+}
+
 static std::optional<Tier> ParseTier(const std::string& value) {
   if (value == "ram") {
     return TIER_RAM;
@@ -185,7 +209,7 @@ int main(int argc, char** argv) {
       return 2;
     }
 
-    std::cout << "lease=" << resp.lease_id() << "\n";
+    std::cout << "lease=" << ToUuidString(resp.lease_id().value()) << "\n";
     return 0;
   }
 
@@ -216,7 +240,7 @@ int main(int argc, char** argv) {
     if (argc < 4) return 1;
 
     ReleaseLeaseRequest req;
-    req.set_lease_id(argv[3]);
+    *req.mutable_lease_id() = MakeLeaseID(argv[3]);
 
     google::protobuf::Empty resp;
 

@@ -42,7 +42,7 @@ class PayloadManager {
 
   void HydrateCaches();
 
-  void                                    ReleaseLease(const std::string& lease_id);
+  void                                    ReleaseLease(const payload::manager::v1::LeaseID& lease_id);
   payload::manager::v1::PayloadDescriptor Promote(const payload::manager::v1::PayloadID& id, payload::manager::v1::Tier target);
   void                                    ExecuteSpill(const payload::manager::v1::PayloadID& id, payload::manager::v1::Tier target, bool fsync);
 

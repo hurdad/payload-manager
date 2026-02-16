@@ -24,6 +24,8 @@ UUID        FromString(const std::string& str);
 
 // protobuf helpers
 payload::manager::v1::PayloadID ToProto(const UUID& id);
+payload::manager::v1::LeaseID   ToLeaseProto(const UUID& id);
 UUID                            FromProto(const payload::manager::v1::PayloadID& id);
+UUID                            FromProto(const payload::manager::v1::LeaseID& id);
 
 } // namespace payload::util

@@ -87,6 +87,7 @@ arrow::Status SetPayloadIdFromUuid(std::string_view uuid, payload::manager::v1::
   return arrow::Status::OK();
 }
 
+
 class ReadOnlyMMapBuffer final : public arrow::Buffer {
  public:
   ReadOnlyMMapBuffer(const uint8_t* data, int64_t size, void* base_addr, size_t mapped_size, int fd)
@@ -275,9 +276,9 @@ arrow::Result<PayloadClient::ReadablePayload> PayloadClient::AcquireReadableBuff
   return ReadablePayload{resp.payload_descriptor(), resp.lease_id(), std::move(buffer)};
 }
 
-arrow::Status PayloadClient::Release(const std::string& lease_id) const {
+arrow::Status PayloadClient::Release(const payload::manager::v1::LeaseID& lease_id) const {
   payload::manager::v1::ReleaseLeaseRequest req;
-  req.set_lease_id(lease_id);
+  *req.mutable_lease_id() = lease_id;
 
   google::protobuf::Empty resp;
   grpc::ClientContext     ctx;

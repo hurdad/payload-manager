@@ -7,8 +7,8 @@ namespace payload::lease {
 
 LeaseManager::LeaseManager() = default;
 
-std::string LeaseManager::GenerateLeaseID() {
-  return payload::util::ToString(payload::util::GenerateUUID());
+payload::manager::v1::LeaseID LeaseManager::GenerateLeaseID() {
+  return payload::util::ToLeaseProto(payload::util::GenerateUUID());
 }
 
 Lease LeaseManager::Acquire(const payload::manager::v1::PayloadID& id, const payload::manager::v1::PayloadDescriptor& payload_descriptor,
@@ -22,7 +22,7 @@ Lease LeaseManager::Acquire(const payload::manager::v1::PayloadID& id, const pay
   return table_.Insert(lease);
 }
 
-void LeaseManager::Release(const std::string& lease_id) {
+void LeaseManager::Release(const payload::manager::v1::LeaseID& lease_id) {
   table_.Remove(lease_id);
 }
 

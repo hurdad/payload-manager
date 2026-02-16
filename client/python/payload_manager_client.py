@@ -39,7 +39,7 @@ class WritablePayload:
 @dataclass(frozen=True)
 class ReadablePayload:
     descriptor: placement_pb2.PayloadDescriptor
-    lease_id: str
+    lease_id: bytes
     mmap_obj: mmap.mmap
     buffer: pa.Buffer
 
@@ -185,13 +185,15 @@ class PayloadClient:
         mmap_obj, buffer = self._OpenReadableBuffer(response.payload_descriptor)
         return ReadablePayload(
             descriptor=response.payload_descriptor,
-            lease_id=response.lease_id,
+            lease_id=response.lease_id.value,
             mmap_obj=mmap_obj,
             buffer=buffer,
         )
 
-    def Release(self, lease_id: str) -> None:
-        self.ReleaseLease(lease_pb2.ReleaseLeaseRequest(lease_id=lease_id))
+    def Release(self, lease_id: UuidLike) -> None:
+        request = lease_pb2.ReleaseLeaseRequest()
+        request.lease_id.value = _uuid_bytes(lease_id)
+        self.ReleaseLease(request)
 
     def _OpenMutableBuffer(self, descriptor: placement_pb2.PayloadDescriptor) -> tuple[mmap.mmap, pa.Buffer]:
         length = _descriptor_length_bytes(descriptor)

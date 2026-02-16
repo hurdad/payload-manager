@@ -26,7 +26,7 @@ class PayloadClient {
 
   struct ReadablePayload {
     payload::manager::v1::PayloadDescriptor descriptor;
-    std::string                             lease_id;
+    payload::manager::v1::LeaseID           lease_id;
     std::shared_ptr<arrow::Buffer>          buffer;
   };
 
@@ -45,7 +45,7 @@ class PayloadClient {
       payload::manager::v1::PromotionPolicy promotion_policy      = payload::manager::v1::PROMOTION_POLICY_BEST_EFFORT,
       uint64_t                              min_lease_duration_ms = 0) const;
 
-  arrow::Status Release(const std::string& lease_id) const;
+  arrow::Status Release(const payload::manager::v1::LeaseID& lease_id) const;
 
   arrow::Result<payload::manager::v1::PromoteResponse> Promote(const payload::manager::v1::PromoteRequest& request) const;
 

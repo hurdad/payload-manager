@@ -13,7 +13,7 @@ class LeaseTable {
  public:
   Lease Insert(const Lease& lease);
 
-  void Remove(const std::string& lease_id);
+  void Remove(const payload::manager::v1::LeaseID& lease_id);
 
   bool HasActive(const payload::manager::v1::PayloadID& id);
 
@@ -28,6 +28,7 @@ class LeaseTable {
   std::unordered_multimap<std::string, std::string> by_payload_;
 
   static std::string Key(const payload::manager::v1::PayloadID& id);
+  static std::string Key(const payload::manager::v1::LeaseID& id);
   static bool        IsExpired(const Lease& lease, Clock::time_point now);
 };
 

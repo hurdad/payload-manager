@@ -28,7 +28,7 @@ void TestForceDeleteRemovesPayloadAndLeases() {
   assert(descriptor.state() == PAYLOAD_STATE_ACTIVE);
 
   auto lease = manager.AcquireReadLease(descriptor.id(), TIER_RAM, 60'000);
-  assert(!lease.lease_id().empty());
+  assert(!lease.lease_id().value().empty());
   assert(lease_mgr->HasActiveLeases(descriptor.id()));
 
   manager.Delete(descriptor.id(), /*force=*/true);
@@ -49,7 +49,7 @@ void TestNonForceDeleteRejectsWhenLeaseIsActive() {
 
   const auto descriptor = manager.Commit(manager.Allocate(1024, TIER_RAM).id());
   auto       lease      = manager.AcquireReadLease(descriptor.id(), TIER_RAM, 60'000);
-  assert(!lease.lease_id().empty());
+  assert(!lease.lease_id().value().empty());
 
   bool threw = false;
   try {

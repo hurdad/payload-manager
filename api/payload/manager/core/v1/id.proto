@@ -12,3 +12,15 @@ package payload.manager.core.v1;
 message PayloadID {
   bytes value = 1;
 }
+
+/*
+  Canonical lease identifier.
+
+  MUST contain exactly 16 bytes (binary RFC4122 UUID).
+  The server rejects any other length.
+
+  This is intentionally NOT a string to avoid formatting ambiguity.
+*/
+message LeaseID {
+  bytes value = 1;
+}

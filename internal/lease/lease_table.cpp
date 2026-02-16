@@ -8,6 +8,10 @@ std::string LeaseTable::Key(const payload::manager::v1::PayloadID& id) {
   return id.value();
 }
 
+std::string LeaseTable::Key(const payload::manager::v1::LeaseID& id) {
+  return id.value();
+}
+
 bool LeaseTable::IsExpired(const Lease& lease, Clock::time_point now) {
   return lease.expires_at <= now;
 }
@@ -15,10 +19,11 @@ bool LeaseTable::IsExpired(const Lease& lease, Clock::time_point now) {
 Lease LeaseTable::Insert(const Lease& lease) {
   std::lock_guard lock(mutex_);
 
-  if (auto existing = leases_.find(lease.lease_id); existing != leases_.end()) {
+  const auto lease_key = Key(lease.lease_id);
+  if (auto existing = leases_.find(lease_key); existing != leases_.end()) {
     auto old_range = by_payload_.equal_range(Key(existing->second.payload_id));
     for (auto it = old_range.first; it != old_range.second; ++it) {
-      if (it->second == lease.lease_id) {
+      if (it->second == lease_key) {
         by_payload_.erase(it);
         break;
       }
@@ -43,20 +48,21 @@ Lease LeaseTable::Insert(const Lease& lease) {
     ++it;
   }
 
-  leases_[lease.lease_id] = lease;
-  by_payload_.emplace(payload_key, lease.lease_id);
+  leases_[lease_key] = lease;
+  by_payload_.emplace(payload_key, lease_key);
   return lease;
 }
 
-void LeaseTable::Remove(const std::string& lease_id) {
+void LeaseTable::Remove(const payload::manager::v1::LeaseID& lease_id) {
   std::lock_guard lock(mutex_);
 
-  auto it = leases_.find(lease_id);
+  const auto lease_key = Key(lease_id);
+  auto it = leases_.find(lease_key);
   if (it == leases_.end()) return;
 
   auto range = by_payload_.equal_range(Key(it->second.payload_id));
   for (auto i = range.first; i != range.second; ++i) {
-    if (i->second == lease_id) {
+    if (i->second == lease_key) {
       by_payload_.erase(i);
       break;
     }
