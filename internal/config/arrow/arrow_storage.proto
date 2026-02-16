@@ -2,10 +2,10 @@ syntax = "proto3";
 
 package pb.arrow.storage;
 
-import "arrow/arrow_fs_azure.proto";
-import "arrow/arrow_fs_gcs.proto";
-import "arrow/arrow_fs_hdfs.proto";
-import "arrow/arrow_fs_s3.proto";
+import "config/arrow/arrow_fs_azure.proto";
+import "config/arrow/arrow_fs_gcs.proto";
+import "config/arrow/arrow_fs_hdfs.proto";
+import "config/arrow/arrow_fs_s3.proto";
 
 
 // Arrow Supported Filesystems

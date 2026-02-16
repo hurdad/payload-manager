@@ -3,8 +3,8 @@ syntax = "proto3";
 package payload.runtime.config;
 
 import "google/protobuf/duration.proto";
-import "arrow/arrow_storage.proto";
-import "observablity.proto";
+import "config/arrow/arrow_storage.proto";
+import "config/observablity.proto";
 
 /*
   Payload Manager Runtime Configuration
