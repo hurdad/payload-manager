@@ -1,0 +1,122 @@
+syntax = "proto3";
+
+package payload.runtime.config;
+
+// ------------------------------------------------------------
+// Observability
+// ------------------------------------------------------------
+
+// OTLP transport selection
+enum OtlpTransport {
+  OTLP_TRANSPORT_UNSPECIFIED = 0; // Runtime default (gRPC)
+  OTLP_TRANSPORT_GRPC = 1;        // OTLP over gRPC
+  OTLP_TRANSPORT_HTTP = 2;        // OTLP over HTTP
+}
+
+message ObservabilityConfig {
+
+  // Master enable switches
+  bool metrics_enabled = 1;
+  bool tracing_enabled = 2;
+  bool logs_enabled = 3;
+
+  // OTLP endpoint & transport selection
+  string otlp_endpoint = 4;
+  OtlpTransport transport = 5;
+
+  // Tracing configuration
+  message TracingConfig {
+
+    // Tracing sampling intent
+    enum TraceHint {
+      TRACE_HINT_UNSPECIFIED = 0;
+      TRACE_HINT_DEFAULT = 1;
+      TRACE_HINT_ALWAYS = 2;
+      TRACE_HINT_NEVER = 3;
+    }
+
+    TraceHint trace_hint = 1;
+
+    // Trace processing strategy
+    enum TraceProcessorType {
+      TRACE_PROCESSOR_UNSPECIFIED = 0;
+      TRACE_PROCESSOR_SIMPLE = 1;
+      TRACE_PROCESSOR_BATCH = 2;
+    }
+
+    TraceProcessorType processor = 2;
+
+    // Batch trace processor tuning
+    message BatchConfig {
+      uint32 max_queue_size = 1;
+      uint32 max_export_batch_size = 2;
+      uint32 schedule_delay_ms = 3;
+      uint32 export_timeout_ms = 4;
+    }
+
+    BatchConfig batch = 3;
+
+    // Span granularity controls
+    bool stage_spans_enabled = 4;
+    bool queue_spans_enabled = 5;
+    bool record_spans_enabled = 6;
+
+    // Trace attribute verbosity
+    enum AttributeLevel {
+      ATTRIBUTES_UNSPECIFIED = 0;
+      ATTRIBUTES_MINIMAL = 1;
+      ATTRIBUTES_STANDARD = 2;
+      ATTRIBUTES_VERBOSE = 3;
+    }
+
+    AttributeLevel attribute_level = 7;
+
+    uint32 latency_budget_ms = 8;
+  }
+
+  TracingConfig tracing = 6;
+
+  // Metrics configuration
+  message MetricsConfig {
+
+    // Instrument controls for metrics emitted by this runtime.
+    bool request_metrics_enabled = 1;
+    bool spill_metrics_enabled = 2;
+    bool tier_occupancy_metrics_enabled = 3;
+
+    // Cost / cardinality controls
+    bool request_latency_histograms_enabled = 4;
+    bool route_labels_enabled = 5;
+    bool tier_labels_enabled = 6;
+
+    // Collection / export timing hints
+    uint32 min_collection_interval_ms = 7;
+    uint32 collection_interval_ms = 8;
+    uint32 export_timeout_ms = 9;
+  }
+
+  MetricsConfig metrics = 7;
+
+  // Logging configuration
+  message LoggingConfig {
+
+    enum LogProcessorType {
+      LOG_PROCESSOR_UNSPECIFIED = 0;
+      LOG_PROCESSOR_SIMPLE = 1;
+      LOG_PROCESSOR_BATCH = 2;
+    }
+
+    LogProcessorType processor = 1;
+
+    message BatchConfig {
+      uint32 max_queue_size = 1;
+      uint32 max_export_batch_size = 2;
+      uint32 schedule_delay_ms = 3;
+      uint32 export_timeout_ms = 4;
+    }
+
+    BatchConfig batch = 2;
+  }
+
+  LoggingConfig logging = 8;
+}

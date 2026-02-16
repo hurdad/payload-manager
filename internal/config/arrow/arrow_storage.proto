@@ -1,0 +1,52 @@
+syntax = "proto3";
+
+package pb.arrow.storage;
+
+import "config/arrow/arrow_fs_azure.proto";
+import "config/arrow/arrow_fs_gcs.proto";
+import "config/arrow/arrow_fs_hdfs.proto";
+import "config/arrow/arrow_fs_s3.proto";
+
+
+// Arrow Supported Filesystems
+enum FileSystem {
+  FILE_SYSTEM_AUTO = 0;
+  FILE_SYSTEM_LOCAL = 1;
+  FILE_SYSTEM_S3 = 2;
+  FILE_SYSTEM_GCS = 3;
+  FILE_SYSTEM_HDFS = 4;
+}
+
+// Arrow Supported compressions
+enum Compression {
+  COMPRESSION_AUTO = 0;
+  COMPRESSION_UNCOMPRESSED = 1;
+  COMPRESSION_SNAPPY = 2;
+  COMPRESSION_GZIP = 3;
+  COMPRESSION_BROTLI = 4;
+  COMPRESSION_ZSTD = 5;
+  COMPRESSION_LZ4 = 6;
+  COMPRESSION_LZ4_FRAME = 7;
+  COMPRESSION_LZO = 8;
+  COMPRESSION_BZ2 = 9;
+}
+
+message ObjectStorageConfig {
+  // Filesystem selection
+  FileSystem filesystem = 4;
+
+  // Compression selection
+  Compression compression = 5;
+
+  // Filesystem-specific options (for S3, GCS, Azure, HDFS).
+  FileSystemOptions filesystem_options = 6;
+}
+
+message FileSystemOptions {
+  oneof options {
+    pb.arrow.fs.s3.S3Options s3 = 1;
+    pb.arrow.fs.gcs.GcsOptions gcs = 2;
+    pb.arrow.fs.azure.AzureOptions azure = 3;
+    pb.arrow.fs.hdfs.HdfsOptions hdfs = 4;
+  }
+}

@@ -1,0 +1,138 @@
+syntax = "proto3";
+
+package pb.arrow.fs.s3;
+
+// ----------------------------------------------------------------------
+// S3 proxy configuration
+// ----------------------------------------------------------------------
+
+/// Options for using a proxy for S3
+message S3ProxyOptions {
+  string scheme = 1;
+  string host = 2;
+  int32 port = 3;          // Defaults to -1 if unset
+  string username = 4;
+  string password = 5;
+
+  /// Initialize from URI such as:
+  ///   http://username:password@host:port
+  ///   http://host:port
+  ///
+  /// NOTE: URI parsing is handled outside protobuf.
+}
+
+// ----------------------------------------------------------------------
+// AWS credentials selection
+// ----------------------------------------------------------------------
+
+/// Type of credentials being used.
+enum S3CredentialsKind {
+  /// Anonymous access (no credentials used)
+  S3_CREDENTIALS_KIND_ANONYMOUS = 0;
+
+  /// Use default AWS credentials (environment, profile, metadata, etc.)
+  S3_CREDENTIALS_KIND_DEFAULT = 1;
+
+  /// Use explicitly-provided access key pair
+  S3_CREDENTIALS_KIND_EXPLICIT = 2;
+
+  /// Assume role through a role ARN
+  S3_CREDENTIALS_KIND_ROLE = 3;
+
+  /// Use web identity token to assume role
+  S3_CREDENTIALS_KIND_WEB_IDENTITY = 4;
+}
+
+// ----------------------------------------------------------------------
+// S3 filesystem options
+// ----------------------------------------------------------------------
+
+/// Options for the S3FileSystem implementation.
+message S3Options {
+  /// Smart defaults for option values
+  ///
+  /// Possible values explained in AWS docs:
+  /// https://docs.aws.amazon.com/sdkref/latest/guide/feature-smart-config-defaults.html
+  string smart_defaults = 1;
+
+  /// AWS region to connect to.
+  ///
+  /// If unset, the AWS SDK will choose a default value.
+  string region = 2;
+
+  /// Socket connection timeout, in seconds
+  ///
+  /// If negative, AWS SDK default is used (typically 1 second).
+  double connect_timeout = 3;
+
+  /// Socket read timeout on Windows and macOS, in seconds
+  ///
+  /// If negative, AWS SDK default is used (typically 3 seconds).
+  double request_timeout = 4;
+
+  /// Override region with a connect string such as "localhost:9000"
+  string endpoint_override = 5;
+
+  /// S3 connection transport scheme (default "https")
+  string scheme = 6;
+
+  /// ARN of role to assume
+  string role_arn = 7;
+
+  /// Optional identifier for an assumed role session
+  string session_name = 8;
+
+  /// Optional external identifier passed to STS when assuming a role
+  string external_id = 9;
+
+  /// Frequency (in seconds) to refresh assumed-role credentials
+  int32 load_frequency = 10;
+
+  /// Proxy configuration
+  S3ProxyOptions proxy_options = 11;
+
+  /// Type of credentials being used
+  S3CredentialsKind credentials_kind = 12;
+
+  /// Whether to use virtual addressing of buckets
+  ///
+  /// If true: always enabled
+  /// If false: enabled only if endpoint_override is empty
+  bool force_virtual_addressing = 13;
+
+  /// Whether OutputStream writes are issued in the background
+  bool background_writes = 14;
+
+  /// Whether to allow creation of buckets
+  bool allow_bucket_creation = 15;
+
+  /// Whether to allow deletion of buckets
+  bool allow_bucket_deletion = 16;
+
+  /// Whether to check directory existence before creation
+  bool check_directory_existence_before_creation = 17;
+
+  /// Whether file-open methods may return before the actual open
+  bool allow_delayed_open = 18;
+
+  /// Default metadata for OpenOutputStream
+  ///
+  /// Ignored if metadata is explicitly provided.
+  map<string, string> default_metadata = 19;
+
+  /// Optional customer-provided key for server-side encryption (SSE-C)
+  ///
+  /// This must be the raw 32-byte AES-256 key.
+  bytes sse_customer_key = 21;
+
+  /// Optional path to a PEM file holding all TLS CA certificates
+  string tls_ca_file_path = 22;
+
+  /// Optional path to a directory holding TLS CA certificates
+  string tls_ca_dir_path = 23;
+
+  /// Whether to verify the S3 endpoint's TLS certificate
+  ///
+  /// Applies when scheme is "https".
+  bool tls_verify_certificates = 24;
+}

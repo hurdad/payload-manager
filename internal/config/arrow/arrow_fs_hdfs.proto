@@ -1,0 +1,51 @@
+syntax = "proto3";
+
+package pb.arrow.fs.hdfs;
+
+// ----------------------------------------------------------------------
+// HDFS connection configuration
+// ----------------------------------------------------------------------
+
+/// HDFS connection configuration.
+///
+/// Contains host, port, authentication information,
+/// and additional Hadoop configuration options.
+message HdfsConnectionConfig {
+  /// HDFS namenode host
+  string host = 1;
+
+  /// HDFS namenode port
+  int32 port = 2;
+
+  /// HDFS user name
+  string user = 3;
+
+  /// Kerberos ticket or principal reference
+  string kerb_ticket = 4;
+
+  /// Additional Hadoop configuration entries
+  ///
+  /// These map directly to Hadoop configuration keys.
+  map<string, string> extra_conf = 5;
+}
+
+// ----------------------------------------------------------------------
+// HDFS filesystem options
+// ----------------------------------------------------------------------
+
+/// Options for the HDFS filesystem implementation.
+message HdfsOptions {
+  /// HDFS connection configuration
+  HdfsConnectionConfig connection_config = 1;
+
+  /// Buffer size used by HDFS OpenWritable interface
+  int32 buffer_size = 2;
+
+  /// Replication factor
+  ///
+  /// Default in Arrow: 3
+  int32 replication = 3;
+
+  /// Default HDFS block size
+  int64 default_block_size = 4;
+}

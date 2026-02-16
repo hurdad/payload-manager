@@ -1,0 +1,68 @@
+syntax = "proto3";
+
+package pb.arrow.fs.gcs;
+
+import "google/protobuf/timestamp.proto";
+
+// ----------------------------------------------------------------------
+// GCS credentials
+// ----------------------------------------------------------------------
+
+/// Container for GCS credentials and information necessary to recreate them.
+///
+/// NOTE:
+/// - This message represents credential *state*, not live credential objects.
+/// - Any SDK-specific holders or token refresh logic must be implemented
+///   outside protobuf.
+message GcsCredentials {
+  /// Whether the credentials represent anonymous access
+  bool anonymous = 1;
+
+  /// OAuth2 access token
+  string access_token = 2;
+
+  /// Expiration time of the access token
+  google.protobuf.Timestamp expiration = 3;
+
+  /// Target service account for impersonation
+  string target_service_account = 4;
+
+  /// JSON credentials (service account or ADC-style credentials)
+  ///
+  /// Typically the contents of a Google Cloud service account JSON file.
+  string json_credentials = 5;
+}
+
+// ----------------------------------------------------------------------
+// GCS filesystem options
+// ----------------------------------------------------------------------
+
+/// Options for the GcsFileSystem implementation.
+message GcsOptions {
+  /// GCS credentials configuration
+  GcsCredentials credentials = 1;
+
+  /// Optional endpoint override (e.g. emulator or custom endpoint)
+  string endpoint_override = 2;
+
+  /// Connection scheme (e.g. "https")
+  string scheme = 3;
+
+  /// Location used when creating new buckets
+  string default_bucket_location = 4;
+
+  /// Total time allowed for retrying underlying errors, in seconds
+  ///
+  /// If unset, the default retry policy is used (typically ~15 minutes).
+  optional double retry_limit_seconds = 5;
+
+  /// Default metadata for OpenOutputStream
+  ///
+  /// Ignored if metadata is explicitly provided.
+  map<string, string> default_metadata = 6;
+
+  /// Project ID used when creating buckets
+  ///
+  /// If unset, GOOGLE_CLOUD_PROJECT environment variable is used.
+  optional string project_id = 7;
+}

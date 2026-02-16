@@ -1,0 +1,112 @@
+syntax = "proto3";
+
+package pb.arrow.fs.azure;
+
+// ----------------------------------------------------------------------
+// Azure credentials
+// ----------------------------------------------------------------------
+
+/// Azure authentication methods
+enum AzureCredentialKind {
+  /// Use Azure SDK default credential chain
+  AZURE_CREDENTIAL_KIND_DEFAULT = 0;
+
+  /// Anonymous access
+  AZURE_CREDENTIAL_KIND_ANONYMOUS = 1;
+
+  /// Storage account shared key
+  AZURE_CREDENTIAL_KIND_STORAGE_SHARED_KEY = 2;
+
+  /// Shared Access Signature (SAS) token
+  AZURE_CREDENTIAL_KIND_SAS_TOKEN = 3;
+
+  /// Client secret (AAD application)
+  AZURE_CREDENTIAL_KIND_CLIENT_SECRET = 4;
+
+  /// Managed Identity
+  AZURE_CREDENTIAL_KIND_MANAGED_IDENTITY = 5;
+
+  /// Azure CLI credentials
+  AZURE_CREDENTIAL_KIND_CLI = 6;
+
+  /// Kubernetes / workload identity
+  AZURE_CREDENTIAL_KIND_WORKLOAD_IDENTITY = 7;
+
+  /// Environment-based credentials
+  AZURE_CREDENTIAL_KIND_ENVIRONMENT = 8;
+}
+
+/// Explicit credential configuration
+message AzureCredentials {
+  /// Which credential type to use
+  AzureCredentialKind kind = 1;
+
+  /// Storage account shared key (for STORAGE_SHARED_KEY)
+  string storage_shared_key = 2;
+
+  /// SAS token (for SAS_TOKEN)
+  string sas_token = 3;
+
+  /// Azure AD tenant ID (for CLIENT_SECRET)
+  string tenant_id = 4;
+
+  /// Azure AD client ID (for CLIENT_SECRET / WORKLOAD_IDENTITY)
+  string client_id = 5;
+
+  /// Azure AD client secret (for CLIENT_SECRET)
+  string client_secret = 6;
+}
+
+// ----------------------------------------------------------------------
+// Azure filesystem options
+// ----------------------------------------------------------------------
+
+/// Options for the Azure filesystem implementation.
+///
+/// Functions are provided for explicit configuration of credentials
+/// if that is preferred.
+message AzureOptions {
+  /// The name of the Azure Storage Account being accessed.
+  ///
+  /// All service URLs will be constructed using this account name.
+  string account_name = 1;
+
+  /// hostname[:port] of the Azure Blob Storage Service.
+  ///
+  /// If the hostname starts with '.', the account name is prepended.
+  /// Otherwise, the hostname is used as-is and the account name is
+  /// appended to the URL path.
+  ///
+  /// Default: ".blob.core.windows.net"
+  string blob_storage_authority = 2;
+
+  /// hostname[:port] of the Azure Data Lake Storage Gen 2 Service.
+  ///
+  /// If the hostname starts with '.', the account name is prepended.
+  /// Otherwise, the hostname is used as-is and the account name is
+  /// appended to the URL path.
+  ///
+  /// Default: ".dfs.core.windows.net"
+  string dfs_storage_authority = 3;
+
+  /// Azure Blob Storage connection scheme.
+  ///
+  /// Default: "https"
+  string blob_storage_scheme = 4;
+
+  /// Azure Data Lake Storage Gen 2 connection scheme.
+  ///
+  /// Default: "https"
+  string dfs_storage_scheme = 5;
+
+  /// Credential configuration
+  AzureCredentials credentials = 6;
+
+  /// Default metadata for OpenOutputStream.
+  ///
+  /// Ignored if metadata is explicitly provided.
+  map<string, string> default_metadata = 7;
+
+  /// Whether OutputStream writes are issued in the background.
+  bool background_writes = 8;
+}
