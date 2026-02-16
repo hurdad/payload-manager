@@ -15,6 +15,7 @@ enum FileSystem {
   FILE_SYSTEM_S3 = 2;
   FILE_SYSTEM_GCS = 3;
   FILE_SYSTEM_HDFS = 4;
+  FILE_SYSTEM_AZURE = 5;
 }
 
 // Arrow Supported compressions
@@ -32,6 +33,9 @@ enum Compression {
 }
 
 message ObjectStorageConfig {
+  // Object storage base URI/path (for example: s3://bucket/prefix).
+  string root_path = 1;
+
   // Filesystem selection
   FileSystem filesystem = 4;
 

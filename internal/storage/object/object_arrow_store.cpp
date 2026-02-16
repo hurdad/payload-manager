@@ -12,18 +12,21 @@ namespace payload::storage {
 using namespace payload::storage::common;
 using namespace payload::manager::v1;
 
-ObjectArrowStore::ObjectArrowStore(std::shared_ptr<arrow::fs::S3FileSystem> fs, std::string bucket, std::string prefix)
-    : fs_(std::move(fs)), bucket_(std::move(bucket)), prefix_(std::move(prefix)) {
+ObjectArrowStore::ObjectArrowStore(std::shared_ptr<arrow::fs::FileSystem> fs, std::string root_path)
+    : fs_(std::move(fs)), root_path_(std::move(root_path)) {
 }
 
 /*
   Object key layout:
 
-      s3://bucket/prefix/<uuid>.bin
+      <root_path>/<uuid>.bin
 */
 std::string ObjectArrowStore::ObjectPath(const PayloadID& id) const {
   common::ValidatePayloadId(id.value());
-  return bucket_ + "/" + prefix_ + "/" + id.value() + ".bin";
+  if (!root_path_.empty() && root_path_.back() == '/') {
+    return root_path_ + id.value() + ".bin";
+  }
+  return root_path_ + "/" + id.value() + ".bin";
 }
 
 /*

@@ -100,8 +100,10 @@ set(INTERNAL_SRC
         storage/storage_factory.cpp
         storage/ram/ram_arrow_store.cpp
         storage/disk/disk_arrow_store.cpp
+        storage/object/object_arrow_store.cpp
 
         # util
+        util/arrow.cpp
         util/time.cpp
         util/uuid.cpp
 
