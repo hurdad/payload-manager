@@ -24,7 +24,7 @@ std::shared_ptr<arrow::Buffer> CudaArrowStore::Allocate(const PayloadID& id, uin
   auto maybe = ctx_->Allocate(size_bytes);
   if (!maybe.ok()) throw std::runtime_error(maybe.status().ToString());
 
-  auto buf = *maybe;
+  std::shared_ptr<arrow::cuda::CudaBuffer> buf = std::move(*maybe);
 
   {
     std::unique_lock lock(mutex_);
@@ -52,9 +52,9 @@ std::shared_ptr<arrow::Buffer> CudaArrowStore::Read(const PayloadID& id) {
 void CudaArrowStore::Write(const PayloadID& id, const std::shared_ptr<arrow::Buffer>& buffer, bool /*fsync*/) {
   auto maybe_buf = ctx_->Allocate(buffer->size());
   if (!maybe_buf.ok()) throw std::runtime_error("GPU allocate failed: " + maybe_buf.status().ToString());
-  auto gpu_buf = *maybe_buf;
+  std::shared_ptr<arrow::cuda::CudaBuffer> gpu_buf = std::move(*maybe_buf);
 
-  auto copy_status = ctx_->CopyHostToDevice(buffer->data(), gpu_buf->mutable_data(), buffer->size());
+  auto copy_status = ctx_->CopyHostToDevice(gpu_buf->mutable_data(), buffer->data(), buffer->size());
   if (!copy_status.ok()) throw std::runtime_error("GPU host-to-device copy failed: " + copy_status.ToString());
 
   std::unique_lock lock(mutex_);
