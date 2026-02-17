@@ -41,7 +41,7 @@ message DiskLocation {
   Clients MUST invalidate cached descriptors when version changes.
 */
 message PayloadDescriptor {
-  PayloadID id = 1;
+  PayloadID payload_id = 1;
   Tier tier = 2;
   PayloadState state = 3;
 

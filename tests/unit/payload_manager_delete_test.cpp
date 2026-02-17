@@ -80,19 +80,19 @@ void TestForceDeleteRemovesPayloadAndLeases() {
   auto lease_mgr = std::make_shared<LeaseManager>();
   auto manager   = MakeManager(lease_mgr);
 
-  const auto descriptor = manager.Commit(manager.Allocate(1024, TIER_RAM).id());
+  const auto descriptor = manager.Commit(manager.Allocate(1024, TIER_RAM).payload_id());
   assert(descriptor.state() == PAYLOAD_STATE_ACTIVE);
 
-  auto lease = manager.AcquireReadLease(descriptor.id(), TIER_RAM, 60'000);
+  auto lease = manager.AcquireReadLease(descriptor.payload_id(), TIER_RAM, 60'000);
   assert(!lease.lease_id().value().empty());
-  assert(lease_mgr->HasActiveLeases(descriptor.id()));
+  assert(lease_mgr->HasActiveLeases(descriptor.payload_id()));
 
-  manager.Delete(descriptor.id(), /*force=*/true);
+  manager.Delete(descriptor.payload_id(), /*force=*/true);
 
-  assert(!lease_mgr->HasActiveLeases(descriptor.id()));
+  assert(!lease_mgr->HasActiveLeases(descriptor.payload_id()));
   bool threw = false;
   try {
-    (void)manager.ResolveSnapshot(descriptor.id());
+    (void)manager.ResolveSnapshot(descriptor.payload_id());
   } catch (const std::runtime_error&) {
     threw = true;
   }
@@ -103,20 +103,20 @@ void TestNonForceDeleteRejectsWhenLeaseIsActive() {
   auto lease_mgr = std::make_shared<LeaseManager>();
   auto manager   = MakeManager(lease_mgr);
 
-  const auto descriptor = manager.Commit(manager.Allocate(1024, TIER_RAM).id());
-  auto       lease      = manager.AcquireReadLease(descriptor.id(), TIER_RAM, 60'000);
+  const auto descriptor = manager.Commit(manager.Allocate(1024, TIER_RAM).payload_id());
+  auto       lease      = manager.AcquireReadLease(descriptor.payload_id(), TIER_RAM, 60'000);
   assert(!lease.lease_id().value().empty());
 
   bool threw = false;
   try {
-    manager.Delete(descriptor.id(), /*force=*/false);
+    manager.Delete(descriptor.payload_id(), /*force=*/false);
   } catch (const std::runtime_error& ex) {
     threw = std::string(ex.what()).find("active lease") != std::string::npos;
   }
 
   assert(threw);
-  assert(lease_mgr->HasActiveLeases(descriptor.id()));
-  assert(manager.ResolveSnapshot(descriptor.id()).id().value() == descriptor.id().value());
+  assert(lease_mgr->HasActiveLeases(descriptor.payload_id()));
+  assert(manager.ResolveSnapshot(descriptor.payload_id()).payload_id().value() == descriptor.payload_id().value());
 }
 
 
@@ -124,19 +124,19 @@ void TestPromoteRejectsWhenLeaseIsActive() {
   auto lease_mgr = std::make_shared<LeaseManager>();
   auto manager   = MakeManager(lease_mgr);
 
-  const auto descriptor = manager.Commit(manager.Allocate(1024, TIER_RAM).id());
-  auto       lease      = manager.AcquireReadLease(descriptor.id(), TIER_RAM, 60'000);
+  const auto descriptor = manager.Commit(manager.Allocate(1024, TIER_RAM).payload_id());
+  auto       lease      = manager.AcquireReadLease(descriptor.payload_id(), TIER_RAM, 60'000);
   assert(!lease.lease_id().value().empty());
 
   bool threw = false;
   try {
-    (void)manager.Promote(descriptor.id(), TIER_DISK);
+    (void)manager.Promote(descriptor.payload_id(), TIER_DISK);
   } catch (const std::runtime_error& ex) {
     threw = std::string(ex.what()).find("active lease") != std::string::npos;
   }
 
   assert(threw);
-  assert(manager.ResolveSnapshot(descriptor.id()).tier() == TIER_RAM);
+  assert(manager.ResolveSnapshot(descriptor.payload_id()).tier() == TIER_RAM);
 }
 
 void TestCacheCoherenceAcrossCommitPromoteAndDelete() {
@@ -144,26 +144,26 @@ void TestCacheCoherenceAcrossCommitPromoteAndDelete() {
   auto manager   = MakeManager(lease_mgr);
 
   const auto allocated = manager.Allocate(1024, TIER_RAM);
-  const auto committed = manager.Commit(allocated.id());
+  const auto committed = manager.Commit(allocated.payload_id());
   assert(committed.state() == PAYLOAD_STATE_ACTIVE);
   assert(committed.version() == 2);
 
-  const auto committed_snapshot = manager.ResolveSnapshot(allocated.id());
+  const auto committed_snapshot = manager.ResolveSnapshot(allocated.payload_id());
   assert(committed_snapshot.state() == PAYLOAD_STATE_ACTIVE);
   assert(committed_snapshot.version() == 2);
 
-  const auto promoted = manager.Promote(allocated.id(), TIER_DISK);
+  const auto promoted = manager.Promote(allocated.payload_id(), TIER_DISK);
   assert(promoted.tier() == TIER_DISK);
 
-  const auto promoted_snapshot = manager.ResolveSnapshot(allocated.id());
+  const auto promoted_snapshot = manager.ResolveSnapshot(allocated.payload_id());
   assert(promoted_snapshot.tier() == TIER_DISK);
   assert(promoted_snapshot.version() == promoted.version());
 
-  manager.Delete(allocated.id(), /*force=*/true);
+  manager.Delete(allocated.payload_id(), /*force=*/true);
 
   bool threw = false;
   try {
-    (void)manager.ResolveSnapshot(allocated.id());
+    (void)manager.ResolveSnapshot(allocated.payload_id());
   } catch (const std::runtime_error&) {
     threw = true;
   }
@@ -181,10 +181,10 @@ void TestDeleteRemovesStoragePayload() {
   PayloadManager manager(std::move(storage), lease_mgr, /*metadata=*/nullptr, /*lineage=*/nullptr,
                          std::make_shared<payload::db::memory::MemoryRepository>());
 
-  const auto descriptor = manager.Commit(manager.Allocate(128, TIER_RAM).id());
-  manager.Delete(descriptor.id(), /*force=*/true);
+  const auto descriptor = manager.Commit(manager.Allocate(128, TIER_RAM).payload_id());
+  manager.Delete(descriptor.payload_id(), /*force=*/true);
 
-  assert(ram_backend->WasRemoved(descriptor.id()));
+  assert(ram_backend->WasRemoved(descriptor.payload_id()));
 }
 
 } // namespace

@@ -35,9 +35,9 @@ payload::service::ServiceContext BuildServiceContext() {
 
 payload::manager::v1::PayloadID AllocateAndCommit(payload::service::ServiceContext& ctx) {
   const auto desc      = ctx.manager->Allocate(128, TIER_RAM);
-  const auto committed = ctx.manager->Commit(desc.id());
+  const auto committed = ctx.manager->Commit(desc.payload_id());
   (void)committed;
-  return desc.id();
+  return desc.payload_id();
 }
 
 void TestCommitMissingPayloadReturnsNotFound() {

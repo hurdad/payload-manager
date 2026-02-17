@@ -26,7 +26,7 @@ def main() -> int:
     writable = client.AllocateWritableBuffer(16, placement_pb2.TIER_RAM, ttl_ms=60_000, persist=False)
     writable.mmap_obj[:] = bytes(range(1, 17))
 
-    payload_id = writable.descriptor.id
+    payload_id = writable.descriptor.payload_id
     payload_uuid = uuid.UUID(bytes=bytes(payload_id.value))
     client.CommitPayload(payload_id)
     client.Resolve(payload_id)

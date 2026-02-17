@@ -27,7 +27,7 @@ def main() -> int:
 
     # Use the canonical PayloadID protobuf returned by AllocatePayload and
     # derive a printable UUID only for logging.
-    payload_id = writable.descriptor.id
+    payload_id = writable.descriptor.payload_id
     payload_uuid = uuid.UUID(bytes=bytes(payload_id.value))
     # Commit makes the payload visible/immutable for readers.
     client.CommitPayload(payload_id)

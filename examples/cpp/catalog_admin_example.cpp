@@ -47,7 +47,7 @@ int main(int argc, char** argv) {
     writable_payload.buffer->mutable_data()[i] = static_cast<uint8_t>(i + 1);
   }
 
-  const auto& payload_id = writable_payload.descriptor.id();
+  const auto& payload_id = writable_payload.descriptor.payload_id();
   const auto  uuid_text  = UuidToHex(payload_id.value());
 
   auto commit_status = client.CommitPayload(payload_id);
