@@ -74,6 +74,15 @@ class PayloadClient:
     def Spill(self, request: tiering_pb2.SpillRequest) -> tiering_pb2.SpillResponse:
         return self._catalog_stub.Spill(request)
 
+    def Prefetch(self, request: tiering_pb2.PrefetchRequest) -> empty_pb2.Empty:
+        return self._catalog_stub.Prefetch(request)
+
+    def Pin(self, request: tiering_pb2.PinRequest) -> empty_pb2.Empty:
+        return self._catalog_stub.Pin(request)
+
+    def Unpin(self, request: tiering_pb2.UnpinRequest) -> empty_pb2.Empty:
+        return self._catalog_stub.Unpin(request)
+
     def AddLineage(self, request: lineage_pb2.AddLineageRequest) -> empty_pb2.Empty:
         return self._catalog_stub.AddLineage(request)
 

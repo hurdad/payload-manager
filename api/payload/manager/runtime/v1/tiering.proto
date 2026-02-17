@@ -52,3 +52,7 @@ message PinRequest {
   payload.manager.core.v1.PayloadID id = 1;
   uint64 duration_ms = 2;
 }
+
+message UnpinRequest {
+  payload.manager.core.v1.PayloadID id = 1;
+}

@@ -2,6 +2,7 @@
 
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <shared_mutex>
 #include <string>
 #include <unordered_map>
@@ -45,6 +46,9 @@ class PayloadManager {
   void                                    ReleaseLease(const payload::manager::v1::LeaseID& lease_id);
   payload::manager::v1::PayloadDescriptor Promote(const payload::manager::v1::PayloadID& id, payload::manager::v1::Tier target);
   void                                    ExecuteSpill(const payload::manager::v1::PayloadID& id, payload::manager::v1::Tier target, bool fsync);
+  void                                    Prefetch(const payload::manager::v1::PayloadID& id, payload::manager::v1::Tier target);
+  void                                    Pin(const payload::manager::v1::PayloadID& id, uint64_t duration_ms);
+  void                                    Unpin(const payload::manager::v1::PayloadID& id);
 
  private:
   static std::string Key(const payload::manager::v1::PayloadID& id);
@@ -72,6 +76,15 @@ class PayloadManager {
 
   mutable std::mutex                                                          payload_mutexes_guard_;
   mutable std::unordered_map<std::string, std::shared_ptr<std::shared_mutex>> payload_mutexes_;
+
+  struct PinState {
+    std::optional<uint64_t> expires_at_ms;
+  };
+
+  mutable std::mutex                         pins_guard_;
+  std::unordered_map<std::string, PinState> pins_;
+
+  bool IsPinnedLocked(const std::string& key, uint64_t now_ms);
 };
 
 } // namespace payload::core

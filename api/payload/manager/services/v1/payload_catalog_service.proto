@@ -74,6 +74,30 @@ service PayloadCatalogService {
   rpc Spill(payload.manager.runtime.v1.SpillRequest)
       returns (payload.manager.runtime.v1.SpillResponse);
 
+  /*
+    Hint to move payload bytes to a faster tier.
+
+    Best-effort and idempotent.
+  */
+  rpc Prefetch(payload.manager.runtime.v1.PrefetchRequest)
+      returns (google.protobuf.Empty);
+
+  /*
+    Best-effort advisory that blocks spill while active.
+
+    Pin duration is in milliseconds. duration_ms=0 means indefinite pin until Unpin.
+  */
+  rpc Pin(payload.manager.runtime.v1.PinRequest)
+      returns (google.protobuf.Empty);
+
+  /*
+    Removes an existing pin.
+
+    Idempotent: unpinning an unpinned payload is a no-op.
+  */
+  rpc Unpin(payload.manager.runtime.v1.UnpinRequest)
+      returns (google.protobuf.Empty);
+
 
   // ---------------------------------------------------------------------------
   // Lineage

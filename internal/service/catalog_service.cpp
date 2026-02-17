@@ -135,6 +135,18 @@ SpillResponse CatalogService::Spill(const SpillRequest& req) {
   });
 }
 
+void CatalogService::Prefetch(const PrefetchRequest& req) {
+  ObserveRpc("CatalogService.Prefetch", &req.id(), [&] { ctx_.manager->Prefetch(req.id(), req.target_tier()); });
+}
+
+void CatalogService::Pin(const PinRequest& req) {
+  ObserveRpc("CatalogService.Pin", &req.id(), [&] { ctx_.manager->Pin(req.id(), req.duration_ms()); });
+}
+
+void CatalogService::Unpin(const UnpinRequest& req) {
+  ObserveRpc("CatalogService.Unpin", &req.id(), [&] { ctx_.manager->Unpin(req.id()); });
+}
+
 void CatalogService::AddLineage(const AddLineageRequest& req) {
   ObserveRpc("CatalogService.AddLineage", &req.child(), [&] {
     auto tx = ctx_.repository->Begin();
