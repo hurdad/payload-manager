@@ -261,9 +261,21 @@ void PayloadManager::Delete(const PayloadID& id, bool force) {
   if (!force && lease_mgr_->HasActiveLeases(id)) {
     throw payload::util::LeaseConflict("delete payload: active lease present; release leases or set force=true");
   }
+
+  Tier payload_tier = TIER_UNSPECIFIED;
+  {
+    auto existing = ResolveSnapshot(id);
+    payload_tier  = existing.tier();
+  }
+
   auto tx = repository_->Begin();
   ThrowIfDbError(repository_->DeletePayload(*tx, Key(id)), "delete payload");
   tx->Commit();
+
+  const auto storage_it = storage_.find(payload_tier);
+  if (storage_it != storage_.end() && storage_it->second) {
+    storage_it->second->Remove(id);
+  }
 
   std::unique_lock lock(snapshot_cache_mutex_);
   snapshot_cache_.erase(Key(id));
