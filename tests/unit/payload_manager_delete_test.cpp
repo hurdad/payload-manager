@@ -119,6 +119,26 @@ void TestNonForceDeleteRejectsWhenLeaseIsActive() {
   assert(manager.ResolveSnapshot(descriptor.id()).id().value() == descriptor.id().value());
 }
 
+
+void TestPromoteRejectsWhenLeaseIsActive() {
+  auto lease_mgr = std::make_shared<LeaseManager>();
+  auto manager   = MakeManager(lease_mgr);
+
+  const auto descriptor = manager.Commit(manager.Allocate(1024, TIER_RAM).id());
+  auto       lease      = manager.AcquireReadLease(descriptor.id(), TIER_RAM, 60'000);
+  assert(!lease.lease_id().value().empty());
+
+  bool threw = false;
+  try {
+    (void)manager.Promote(descriptor.id(), TIER_DISK);
+  } catch (const std::runtime_error& ex) {
+    threw = std::string(ex.what()).find("active lease") != std::string::npos;
+  }
+
+  assert(threw);
+  assert(manager.ResolveSnapshot(descriptor.id()).tier() == TIER_RAM);
+}
+
 void TestCacheCoherenceAcrossCommitPromoteAndDelete() {
   auto lease_mgr = std::make_shared<LeaseManager>();
   auto manager   = MakeManager(lease_mgr);
@@ -172,6 +192,7 @@ void TestDeleteRemovesStoragePayload() {
 int main() {
   TestForceDeleteRemovesPayloadAndLeases();
   TestNonForceDeleteRejectsWhenLeaseIsActive();
+  TestPromoteRejectsWhenLeaseIsActive();
   TestCacheCoherenceAcrossCommitPromoteAndDelete();
   TestDeleteRemovesStoragePayload();
 

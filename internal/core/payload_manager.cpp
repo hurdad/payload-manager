@@ -319,7 +319,7 @@ AcquireReadLeaseResponse PayloadManager::AcquireReadLease(const PayloadID& id, T
 
   auto desc = ResolveSnapshot(id);
   if (desc.tier() < min_tier) {
-    desc = Promote(id, min_tier);
+    desc = PromoteUnlocked(id, min_tier);
   }
   if (!IsReadableState(desc.state())) {
     throw payload::util::InvalidState("acquire lease: payload is not readable; commit or promote payload before leasing");
@@ -328,7 +328,7 @@ AcquireReadLeaseResponse PayloadManager::AcquireReadLease(const PayloadID& id, T
 
   AcquireReadLeaseResponse resp;
   *resp.mutable_payload_descriptor() = desc;
-*resp.mutable_lease_id() = lease.lease_id;
+  *resp.mutable_lease_id() = lease.lease_id;
   *resp.mutable_lease_expires_at() = payload::util::ToProto(lease.expires_at);
   return resp;
 }
@@ -338,6 +338,12 @@ void PayloadManager::ReleaseLease(const payload::manager::v1::LeaseID& lease_id)
 }
 
 PayloadDescriptor PayloadManager::Promote(const PayloadID& id, Tier target) {
+  std::lock_guard<std::mutex> delete_lock(delete_mutex_);
+
+  return PromoteUnlocked(id, target);
+}
+
+PayloadDescriptor PayloadManager::PromoteUnlocked(const PayloadID& id, Tier target) {
   std::unique_lock<std::shared_mutex> payload_lock(*PayloadMutex(id));
 
   auto tx     = repository_->Begin();
@@ -348,6 +354,10 @@ PayloadDescriptor PayloadManager::Promote(const PayloadID& id, Tier target) {
   }
 
   const Tier source_tier = record->tier;
+
+  if (source_tier != target && lease_mgr_->HasActiveLeases(id)) {
+    throw payload::util::LeaseConflict("promote payload: active lease present on source tier; release leases before promoting");
+  }
 
   // Move data between storage tiers when they differ.
   if (source_tier != target) {
