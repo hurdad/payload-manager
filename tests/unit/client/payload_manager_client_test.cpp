@@ -59,7 +59,7 @@ void TestValidatePayloadIdEnforcesSixteenBytes() {
 }
 
 void TestRpcHelpersRejectInvalidPayloadIdBeforeGrpcCall() {
-  auto channel = grpc::CreateChannel("dns:///127.0.0.1:1", grpc::InsecureChannelCredentials());
+  auto          channel = grpc::CreateChannel("dns:///127.0.0.1:1", grpc::InsecureChannelCredentials());
   PayloadClient client(channel);
 
   const auto invalid_id = MakePayloadIdOfSize(8);

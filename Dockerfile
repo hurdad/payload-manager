@@ -28,7 +28,6 @@ RUN apt-get update \
         libsqlite3-dev \
         libspdlog-dev \
         libcurl4-openssl-dev \
-        libgtest-dev \
         protobuf-compiler-grpc \
         python3 \
         python3-pip \
@@ -42,8 +41,8 @@ RUN cmake -S ./src -B /workspace/build -G Ninja -DCMAKE_BUILD_TYPE=Release \
     -DPAYLOAD_MANAGER_ENABLE_OTEL=ON \
     -DBUILD_TESTING=ON \
     -DPAYLOAD_MANAGER_BUILD_SERVICE=ON \
-    -DPAYLOAD_MANAGER_BUILD_CLIENT=ON \
-    -DPAYLOAD_MANAGER_BUILD_EXAMPLES=ON \
+    -DPAYLOAD_MANAGER_BUILD_CLIENT=OFF \
+    -DPAYLOAD_MANAGER_BUILD_EXAMPLES=OFF \
     -DPAYLOAD_MANAGER_BUILD_PAYLOADCTL=OFF \
     && cmake --build /workspace/build \
     && ctest --test-dir /workspace/build --output-on-failure \

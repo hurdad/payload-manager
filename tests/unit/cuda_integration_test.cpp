@@ -87,7 +87,7 @@ void TestWriteCopiesHostBufferToDeviceBuffer() {
   assert(device_buffer->size() == host_buffer->size());
 
   std::vector<uint8_t> round_trip(static_cast<size_t>(host_buffer->size()), 0);
-  const auto cuda_buffer = std::dynamic_pointer_cast<arrow::cuda::CudaBuffer>(device_buffer);
+  const auto           cuda_buffer = std::dynamic_pointer_cast<arrow::cuda::CudaBuffer>(device_buffer);
   assert(cuda_buffer);
   const auto copy_status = cuda_buffer->CopyToHost(/*position=*/0, cuda_buffer->size(), round_trip.data());
   assert(copy_status.ok());
