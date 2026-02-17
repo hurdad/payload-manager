@@ -20,6 +20,7 @@ class TieringManager {
  public:
   TieringManager(std::shared_ptr<TieringPolicy> policy, std::shared_ptr<spill::SpillScheduler> scheduler,
                  std::shared_ptr<payload::core::PayloadManager> manager, std::shared_ptr<PressureState> state);
+  ~TieringManager();
 
   void Start();
   void Stop();

@@ -10,6 +10,13 @@ SpillWorker::SpillWorker(std::shared_ptr<SpillScheduler> scheduler, std::shared_
     : scheduler_(std::move(scheduler)), manager_(std::move(manager)) {
 }
 
+SpillWorker::~SpillWorker() {
+  try {
+    Stop();
+  } catch (...) {
+  }
+}
+
 void SpillWorker::Start() {
   running_ = true;
   thread_  = std::thread(&SpillWorker::Run, this);

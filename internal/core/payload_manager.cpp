@@ -111,6 +111,15 @@ std::string PayloadManager::Key(const PayloadID& id) {
   return id.value();
 }
 
+std::shared_ptr<std::shared_mutex> PayloadManager::PayloadMutex(const PayloadID& id) {
+  std::lock_guard<std::mutex> lock(payload_mutexes_guard_);
+  auto&                       payload_mutex = payload_mutexes_[Key(id)];
+  if (!payload_mutex) {
+    payload_mutex = std::make_shared<std::shared_mutex>();
+  }
+  return payload_mutex;
+}
+
 void PayloadManager::CacheSnapshot(const PayloadDescriptor& descriptor) {
   std::unique_lock lock(snapshot_cache_mutex_);
   snapshot_cache_[descriptor.id().value()] = descriptor;
@@ -254,6 +263,7 @@ PayloadDescriptor PayloadManager::Commit(const PayloadID& id) {
 void PayloadManager::Delete(const PayloadID& id, bool force) {
   // Hold delete_mutex_ to prevent new leases from being acquired between the check and the DB mutation.
   std::lock_guard<std::mutex> delete_lock(delete_mutex_);
+  std::unique_lock<std::shared_mutex> payload_lock(*PayloadMutex(id));
 
   if (force) {
     lease_mgr_->InvalidateAll(id);
@@ -282,6 +292,8 @@ void PayloadManager::Delete(const PayloadID& id, bool force) {
 }
 
 PayloadDescriptor PayloadManager::ResolveSnapshot(const PayloadID& id) {
+  std::shared_lock<std::shared_mutex> payload_lock(*PayloadMutex(id));
+
   {
     std::shared_lock lock(snapshot_cache_mutex_);
     const auto       cached = snapshot_cache_.find(Key(id));
@@ -332,6 +344,8 @@ PayloadDescriptor PayloadManager::Promote(const PayloadID& id, Tier target) {
 }
 
 PayloadDescriptor PayloadManager::PromoteUnlocked(const PayloadID& id, Tier target) {
+  std::unique_lock<std::shared_mutex> payload_lock(*PayloadMutex(id));
+
   auto tx     = repository_->Begin();
   auto record = repository_->GetPayload(*tx, Key(id));
   if (!record.has_value()) throw payload::util::NotFound("promote payload: payload not found; verify payload id");
@@ -391,6 +405,8 @@ void PayloadManager::HydrateCaches() {
 }
 
 void PayloadManager::ExecuteSpill(const PayloadID& id, Tier target, bool fsync) {
+  std::unique_lock<std::shared_mutex> payload_lock(*PayloadMutex(id));
+
   auto tx     = repository_->Begin();
   auto record = repository_->GetPayload(*tx, Key(id));
   if (!record.has_value()) throw payload::util::NotFound("spill payload: payload not found; verify payload id");

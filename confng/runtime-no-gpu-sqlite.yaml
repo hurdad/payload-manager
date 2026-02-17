@@ -15,11 +15,15 @@ storage:
     capacity_bytes: 107374182400  # 100 GiB
     fsync: true
   object:
-    endpoint: "s3.us-east-1.amazonaws.com"
-    bucket: "payload-manager-prod"
-    access_key: "REPLACE_ME"
-    secret_key: "REPLACE_ME"
-    tls: true
+    root_path: "s3://payload-manager-prod"
+    filesystem: FILE_SYSTEM_S3
+    compression: COMPRESSION_UNCOMPRESSED
+    filesystem_options:
+      s3:
+        endpoint_override: "s3.us-east-1.amazonaws.com"
+        scheme: "https"
+        credentials_kind: S3_CREDENTIALS_KIND_DEFAULT
+        tls_verify_certificates: true
 
 spill_workers:
   threads: 4
