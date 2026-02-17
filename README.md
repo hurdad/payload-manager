@@ -115,6 +115,25 @@ Build the `payloadctl` image:
 docker build -f Dockerfile.payloadctl -t payloadctl:latest .
 ```
 
+`payloadctl` supports tiering advisory commands that are useful during placement tuning and spill control:
+
+```bash
+# Best-effort hint to stage a payload in a faster tier.
+payloadctl <addr> prefetch <uuid> <tier=ram|disk|gpu>
+
+# Best-effort advisory pin. duration_ms=0 means "stay pinned until explicit unpin".
+payloadctl <addr> pin <uuid> [duration_ms]
+
+# Removes an active pin (idempotent if the payload is already unpinned).
+payloadctl <addr> unpin <uuid>
+```
+
+Behavior notes:
+
+- `prefetch` is best-effort and idempotent; it does not guarantee immediate movement.
+- `pin` blocks spill while active. Use a finite `duration_ms` for bounded pinning windows.
+- `unpin` is safe to call repeatedly and is a no-op when no pin exists.
+
 Run the service with PostgreSQL using Docker Compose:
 
 ```bash
