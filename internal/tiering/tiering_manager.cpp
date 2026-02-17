@@ -13,6 +13,13 @@ TieringManager::TieringManager(std::shared_ptr<TieringPolicy> policy, std::share
     : policy_(std::move(policy)), scheduler_(std::move(scheduler)), manager_(std::move(manager)), state_(std::move(state)) {
 }
 
+TieringManager::~TieringManager() {
+  try {
+    Stop();
+  } catch (...) {
+  }
+}
+
 void TieringManager::Start() {
   running_ = true;
   thread_  = std::thread(&TieringManager::Loop, this);

@@ -21,6 +21,7 @@ namespace payload::spill {
 class SpillWorker {
  public:
   SpillWorker(std::shared_ptr<SpillScheduler> scheduler, std::shared_ptr<payload::core::PayloadManager> manager);
+  ~SpillWorker();
 
   void Start();
   void Stop();
