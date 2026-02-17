@@ -89,6 +89,22 @@ void TestDeleteWithActiveLeaseReturnsAborted() {
   assert(status.error_code() == ::grpc::StatusCode::ABORTED);
 }
 
+void TestPinMissingPayloadReturnsNotFound() {
+  auto                         ctx             = BuildServiceContext();
+  auto                         catalog_service = std::make_shared<payload::service::CatalogService>(ctx);
+  payload::grpc::CatalogServer server(catalog_service);
+
+  payload::manager::v1::PinRequest req;
+  req.mutable_id()->set_value("missing-payload");
+  req.set_duration_ms(1000);
+
+  google::protobuf::Empty resp;
+  ::grpc::ServerContext   grpc_ctx;
+
+  const auto status = server.Pin(&grpc_ctx, &req, &resp);
+  assert(status.error_code() == ::grpc::StatusCode::NOT_FOUND);
+}
+
 void TestCreateStreamMissingNameReturnsFailedPrecondition() {
   auto                        ctx            = BuildServiceContext();
   auto                        stream_service = std::make_shared<payload::service::StreamService>(ctx);
@@ -125,6 +141,7 @@ int main() {
   TestCommitMissingPayloadReturnsNotFound();
   TestAcquireUnsupportedLeaseModeReturnsFailedPrecondition();
   TestDeleteWithActiveLeaseReturnsAborted();
+  TestPinMissingPayloadReturnsNotFound();
   TestCreateStreamMissingNameReturnsFailedPrecondition();
   TestDeleteStreamMissingNameReturnsFailedPrecondition();
 

@@ -57,6 +57,33 @@ CatalogServer::CatalogServer(std::shared_ptr<payload::service::CatalogService> s
   }
 }
 
+::grpc::Status CatalogServer::Prefetch(::grpc::ServerContext*, const payload::manager::v1::PrefetchRequest* req, google::protobuf::Empty*) {
+  try {
+    service_->Prefetch(*req);
+    return ::grpc::Status::OK;
+  } catch (const std::exception& e) {
+    return ToStatus(e);
+  }
+}
+
+::grpc::Status CatalogServer::Pin(::grpc::ServerContext*, const payload::manager::v1::PinRequest* req, google::protobuf::Empty*) {
+  try {
+    service_->Pin(*req);
+    return ::grpc::Status::OK;
+  } catch (const std::exception& e) {
+    return ToStatus(e);
+  }
+}
+
+::grpc::Status CatalogServer::Unpin(::grpc::ServerContext*, const payload::manager::v1::UnpinRequest* req, google::protobuf::Empty*) {
+  try {
+    service_->Unpin(*req);
+    return ::grpc::Status::OK;
+  } catch (const std::exception& e) {
+    return ToStatus(e);
+  }
+}
+
 ::grpc::Status CatalogServer::AddLineage(::grpc::ServerContext*, const payload::manager::v1::AddLineageRequest* req, google::protobuf::Empty*) {
   try {
     service_->AddLineage(*req);

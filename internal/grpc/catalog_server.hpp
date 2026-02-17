@@ -26,6 +26,12 @@ class CatalogServer final : public payload::manager::v1::PayloadCatalogService::
 
   ::grpc::Status Spill(::grpc::ServerContext*, const payload::manager::v1::SpillRequest*, payload::manager::v1::SpillResponse*) override;
 
+  ::grpc::Status Prefetch(::grpc::ServerContext*, const payload::manager::v1::PrefetchRequest*, google::protobuf::Empty*) override;
+
+  ::grpc::Status Pin(::grpc::ServerContext*, const payload::manager::v1::PinRequest*, google::protobuf::Empty*) override;
+
+  ::grpc::Status Unpin(::grpc::ServerContext*, const payload::manager::v1::UnpinRequest*, google::protobuf::Empty*) override;
+
   ::grpc::Status AddLineage(::grpc::ServerContext*, const payload::manager::v1::AddLineageRequest*, google::protobuf::Empty*) override;
 
   ::grpc::Status GetLineage(::grpc::ServerContext*, const payload::manager::v1::GetLineageRequest*,

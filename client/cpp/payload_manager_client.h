@@ -55,6 +55,12 @@ class PayloadClient {
 
   arrow::Result<payload::manager::v1::SpillResponse> Spill(const payload::manager::v1::SpillRequest& request) const;
 
+  arrow::Status Prefetch(const payload::manager::v1::PrefetchRequest& request) const;
+
+  arrow::Status Pin(const payload::manager::v1::PinRequest& request) const;
+
+  arrow::Status Unpin(const payload::manager::v1::UnpinRequest& request) const;
+
   arrow::Status Delete(const payload::manager::v1::DeleteRequest& request) const;
 
   arrow::Status AddLineage(const payload::manager::v1::AddLineageRequest& request) const;

@@ -322,6 +322,27 @@ arrow::Result<payload::manager::v1::SpillResponse> PayloadClient::Spill(const pa
   return response;
 }
 
+arrow::Status PayloadClient::Prefetch(const payload::manager::v1::PrefetchRequest& request) const {
+  google::protobuf::Empty response;
+  grpc::ClientContext     ctx;
+
+  return GrpcToArrow(catalog_stub_->Prefetch(&ctx, request, &response), "Prefetch");
+}
+
+arrow::Status PayloadClient::Pin(const payload::manager::v1::PinRequest& request) const {
+  google::protobuf::Empty response;
+  grpc::ClientContext     ctx;
+
+  return GrpcToArrow(catalog_stub_->Pin(&ctx, request, &response), "Pin");
+}
+
+arrow::Status PayloadClient::Unpin(const payload::manager::v1::UnpinRequest& request) const {
+  google::protobuf::Empty response;
+  grpc::ClientContext     ctx;
+
+  return GrpcToArrow(catalog_stub_->Unpin(&ctx, request, &response), "Unpin");
+}
+
 arrow::Status PayloadClient::Delete(const payload::manager::v1::DeleteRequest& request) const {
   google::protobuf::Empty response;
   grpc::ClientContext     ctx;

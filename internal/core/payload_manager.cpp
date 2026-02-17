@@ -120,6 +120,24 @@ std::shared_ptr<std::shared_mutex> PayloadManager::PayloadMutex(const PayloadID&
   return payload_mutex;
 }
 
+bool PayloadManager::IsPinnedLocked(const std::string& key, uint64_t now_ms) {
+  const auto it = pins_.find(key);
+  if (it == pins_.end()) {
+    return false;
+  }
+
+  if (!it->second.expires_at_ms.has_value()) {
+    return true;
+  }
+
+  if (*it->second.expires_at_ms > now_ms) {
+    return true;
+  }
+
+  pins_.erase(it);
+  return false;
+}
+
 void PayloadManager::CacheSnapshot(const PayloadDescriptor& descriptor) {
   std::unique_lock lock(snapshot_cache_mutex_);
   snapshot_cache_[descriptor.payload_id().value()] = descriptor;
@@ -293,6 +311,11 @@ void PayloadManager::Delete(const PayloadID& id, bool force) {
       std::unique_lock lock(snapshot_cache_mutex_);
       snapshot_cache_.erase(Key(id));
     }
+
+    {
+      std::lock_guard<std::mutex> pins_lock(pins_guard_);
+      pins_.erase(Key(id));
+    }
   } // payload_lock released
 
   // Prune the per-payload mutex now that the payload is fully deleted.
@@ -352,6 +375,29 @@ PayloadDescriptor PayloadManager::Promote(const PayloadID& id, Tier target) {
   std::lock_guard<std::mutex> delete_lock(delete_mutex_);
 
   return PromoteUnlocked(id, target);
+}
+
+void PayloadManager::Prefetch(const PayloadID& id, Tier target) {
+  std::lock_guard<std::mutex> delete_lock(delete_mutex_);
+  (void)PromoteUnlocked(id, target);
+}
+
+void PayloadManager::Pin(const PayloadID& id, uint64_t duration_ms) {
+  std::lock_guard<std::mutex> delete_lock(delete_mutex_);
+
+  (void)ResolveSnapshot(id);
+
+  std::lock_guard<std::mutex> pins_lock(pins_guard_);
+  PinState                    state;
+  if (duration_ms > 0) {
+    state.expires_at_ms = payload::util::ToUnixMillis(payload::util::Now()) + duration_ms;
+  }
+  pins_[Key(id)] = state;
+}
+
+void PayloadManager::Unpin(const PayloadID& id) {
+  std::lock_guard<std::mutex> pins_lock(pins_guard_);
+  pins_.erase(Key(id));
 }
 
 PayloadDescriptor PayloadManager::PromoteUnlocked(const PayloadID& id, Tier target) {
@@ -433,6 +479,13 @@ void PayloadManager::ExecuteSpill(const PayloadID& id, Tier target, bool fsync) 
   }
 
   const Tier source_tier = record->tier;
+
+  {
+    std::lock_guard<std::mutex> pins_lock(pins_guard_);
+    if (source_tier != target && IsPinnedLocked(Key(id), payload::util::ToUnixMillis(payload::util::Now()))) {
+      throw payload::util::LeaseConflict("spill payload: payload is pinned; unpin or wait for pin expiry before spilling");
+    }
+  }
 
   if (source_tier != target) {
     auto src_it = storage_.find(source_tier);

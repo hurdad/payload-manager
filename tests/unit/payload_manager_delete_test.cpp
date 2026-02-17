@@ -186,6 +186,49 @@ void TestDeleteRemovesStoragePayload() {
   assert(ram_backend->WasRemoved(descriptor.payload_id()));
 }
 
+void TestPrefetchPromotesToRequestedTier() {
+  auto lease_mgr = std::make_shared<LeaseManager>();
+  auto manager   = MakeManager(lease_mgr);
+
+  const auto descriptor = manager.Commit(manager.Allocate(128, TIER_RAM).payload_id());
+  manager.Prefetch(descriptor.payload_id(), TIER_DISK);
+
+  const auto snapshot = manager.ResolveSnapshot(descriptor.payload_id());
+  assert(snapshot.tier() == TIER_DISK);
+}
+
+void TestPinnedPayloadBlocksSpillUntilUnpinned() {
+  auto lease_mgr = std::make_shared<LeaseManager>();
+  auto manager   = MakeManager(lease_mgr);
+
+  const auto descriptor = manager.Commit(manager.Allocate(128, TIER_RAM).payload_id());
+  manager.Pin(descriptor.payload_id(), /*duration_ms=*/0);
+
+  bool threw = false;
+  try {
+    manager.ExecuteSpill(descriptor.payload_id(), TIER_DISK, /*fsync=*/false);
+  } catch (const std::runtime_error& ex) {
+    threw = std::string(ex.what()).find("pinned") != std::string::npos;
+  }
+  assert(threw);
+  assert(manager.ResolveSnapshot(descriptor.payload_id()).tier() == TIER_RAM);
+
+  manager.Unpin(descriptor.payload_id());
+  manager.ExecuteSpill(descriptor.payload_id(), TIER_DISK, /*fsync=*/false);
+  assert(manager.ResolveSnapshot(descriptor.payload_id()).tier() == TIER_DISK);
+}
+
+void TestDeleteClearsPinState() {
+  auto lease_mgr = std::make_shared<LeaseManager>();
+  auto manager   = MakeManager(lease_mgr);
+
+  const auto descriptor = manager.Commit(manager.Allocate(128, TIER_RAM).payload_id());
+  manager.Pin(descriptor.payload_id(), /*duration_ms=*/0);
+  manager.Delete(descriptor.payload_id(), /*force=*/true);
+
+  manager.Unpin(descriptor.payload_id());
+}
+
 } // namespace
 
 int main() {
@@ -194,6 +237,9 @@ int main() {
   TestPromoteRejectsWhenLeaseIsActive();
   TestCacheCoherenceAcrossCommitPromoteAndDelete();
   TestDeleteRemovesStoragePayload();
+  TestPrefetchPromotesToRequestedTier();
+  TestPinnedPayloadBlocksSpillUntilUnpinned();
+  TestDeleteClearsPinState();
 
   std::cout << "payload_manager_unit_payload_delete: pass\n";
   return 0;

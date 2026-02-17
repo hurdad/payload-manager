@@ -20,6 +20,12 @@ class CatalogService {
 
   payload::manager::v1::SpillResponse Spill(const payload::manager::v1::SpillRequest& req);
 
+  void Prefetch(const payload::manager::v1::PrefetchRequest& req);
+
+  void Pin(const payload::manager::v1::PinRequest& req);
+
+  void Unpin(const payload::manager::v1::UnpinRequest& req);
+
   void AddLineage(const payload::manager::v1::AddLineageRequest& req);
 
   payload::manager::v1::GetLineageResponse GetLineage(const payload::manager::v1::GetLineageRequest& req);
