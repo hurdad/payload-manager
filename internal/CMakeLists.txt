@@ -203,6 +203,14 @@ if(PAYLOAD_MANAGER_ENABLE_ARROW_CUDA)
             PAYLOAD_MANAGER_ARROW_CUDA=1
     )
 
+    # Public headers in internal/storage/gpu include Arrow CUDA headers,
+    # which in turn include <cuda.h>. Propagate CUDA toolkit include paths
+    # to dependents that compile against those headers (e.g. unit tests).
+    target_include_directories(payload_manager_internal
+            PUBLIC
+            ${CUDAToolkit_INCLUDE_DIRS}
+    )
+
     # -------------------------------------------------------
     # Link libraries
     # PRIVATE because API surface should stay CPU-compatible
