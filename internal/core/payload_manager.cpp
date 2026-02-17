@@ -44,7 +44,7 @@ void ThrowIfDbError(const payload::db::Result& result, const std::string& contex
 
 db::model::PayloadRecord ToPayloadRecord(const PayloadDescriptor& descriptor) {
   db::model::PayloadRecord record;
-  record.id      = descriptor.id().value();
+  record.id      = descriptor.payload_id().value();
   record.tier    = descriptor.tier();
   record.state   = descriptor.state();
   record.version = descriptor.version();
@@ -62,7 +62,7 @@ db::model::PayloadRecord ToPayloadRecord(const PayloadDescriptor& descriptor) {
 
 PayloadDescriptor ToPayloadDescriptor(const db::model::PayloadRecord& record) {
   PayloadDescriptor descriptor;
-  descriptor.mutable_id()->set_value(record.id);
+  descriptor.mutable_payload_id()->set_value(record.id);
   descriptor.set_tier(record.tier);
   descriptor.set_state(record.state);
   descriptor.set_version(record.version);
@@ -122,7 +122,7 @@ std::shared_ptr<std::shared_mutex> PayloadManager::PayloadMutex(const PayloadID&
 
 void PayloadManager::CacheSnapshot(const PayloadDescriptor& descriptor) {
   std::unique_lock lock(snapshot_cache_mutex_);
-  snapshot_cache_[descriptor.id().value()] = descriptor;
+  snapshot_cache_[descriptor.payload_id().value()] = descriptor;
 }
 
 void PayloadManager::PopulateLocation(PayloadDescriptor* descriptor) {
@@ -136,7 +136,7 @@ void PayloadManager::PopulateLocation(PayloadDescriptor* descriptor) {
   }
 
   auto&       backend = storage_it->second;
-  const auto& id      = descriptor->id();
+  const auto& id      = descriptor->payload_id();
 
   switch (descriptor->tier()) {
     case TIER_RAM: {
@@ -197,7 +197,7 @@ void PayloadManager::PopulateLocation(PayloadDescriptor* descriptor) {
 
 PayloadDescriptor PayloadManager::Allocate(uint64_t size_bytes, Tier preferred) {
   PayloadDescriptor desc;
-  *desc.mutable_id() = payload::util::ToProto(payload::util::GenerateUUID());
+  *desc.mutable_payload_id() = payload::util::ToProto(payload::util::GenerateUUID());
   desc.set_tier(preferred);
   desc.set_state(PAYLOAD_STATE_ALLOCATED);
   desc.set_version(1);
@@ -205,7 +205,7 @@ PayloadDescriptor PayloadManager::Allocate(uint64_t size_bytes, Tier preferred) 
 
   const auto storage_it = storage_.find(preferred);
   if (storage_it != storage_.end() && storage_it->second) {
-    storage_it->second->Allocate(desc.id(), size_bytes);
+    storage_it->second->Allocate(desc.payload_id(), size_bytes);
     PopulateLocation(&desc);
   } else {
     switch (preferred) {
@@ -218,7 +218,7 @@ PayloadDescriptor PayloadManager::Allocate(uint64_t size_bytes, Tier preferred) 
       case TIER_DISK:
       case TIER_OBJECT: {
         auto* disk = desc.mutable_disk();
-        disk->set_path(desc.id().value() + ".bin");
+        disk->set_path(desc.payload_id().value() + ".bin");
         disk->set_offset_bytes(0);
         disk->set_length_bytes(size_bytes);
         break;
@@ -400,7 +400,7 @@ void PayloadManager::HydrateCaches() {
     } catch (const std::exception&) {
       // Ignore hydration failures for missing/evicted bytes; descriptor will be rebuilt on demand.
     }
-    snapshot_cache_[descriptor.id().value()] = descriptor;
+    snapshot_cache_[descriptor.payload_id().value()] = descriptor;
   }
 }
 
