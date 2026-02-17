@@ -45,6 +45,11 @@ std::shared_ptr<arrow::Buffer> ObjectArrowStore::Read(const PayloadID& id) {
   return Unwrap(input->Read(size));
 }
 
+uint64_t ObjectArrowStore::Size(const PayloadID& id) {
+  auto info = Unwrap(fs_->GetFileInfo(ObjectPath(id)));
+  return static_cast<uint64_t>(info.size());
+}
+
 /*
   Upload buffer as object.
 

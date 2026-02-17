@@ -26,6 +26,8 @@ class DiskArrowStore final : public StorageBackend {
 
   std::shared_ptr<arrow::Buffer> Read(const payload::manager::v1::PayloadID& id) override;
 
+  uint64_t Size(const payload::manager::v1::PayloadID& id) override;
+
   void Write(const payload::manager::v1::PayloadID& id, const std::shared_ptr<arrow::Buffer>& buffer, bool fsync) override;
 
   void Remove(const payload::manager::v1::PayloadID& id) override;
