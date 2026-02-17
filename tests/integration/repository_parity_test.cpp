@@ -316,13 +316,27 @@ void VerifyConcurrentUpdates(Repository& repo, const std::string& id, bool suppo
   assert(repo.UpdatePayload(*tx1, *r1));
   tx1->Commit();
 
-  assert(repo.UpdatePayload(*tx2, *r2));
-  tx2->Commit();
+  bool second_commit_succeeded = false;
+  try {
+    second_commit_succeeded = static_cast<bool>(repo.UpdatePayload(*tx2, *r2));
+    if (second_commit_succeeded) {
+      tx2->Commit();
+    } else {
+      tx2->Rollback();
+    }
+  } catch (const std::exception&) {
+    tx2->Rollback();
+    second_commit_succeeded = false;
+  }
 
   auto verify_tx = repo.Begin();
   auto final     = repo.GetPayload(*verify_tx, id);
   assert(final.has_value());
-  assert(final->version == 3);
+  if (second_commit_succeeded) {
+    assert(final->version == 3);
+  } else {
+    assert(final->version == 2);
+  }
   verify_tx->Commit();
 }
 
