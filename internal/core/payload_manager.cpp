@@ -272,13 +272,13 @@ void PayloadManager::Delete(const PayloadID& id, bool force) {
     throw payload::util::LeaseConflict("delete payload: active lease present; release leases or set force=true");
   }
 
-  Tier payload_tier = TIER_UNSPECIFIED;
-  {
-    auto existing = ResolveSnapshot(id);
-    payload_tier  = existing.tier();
+  auto tx = repository_->Begin();
+  auto record = repository_->GetPayload(*tx, Key(id));
+  if (!record.has_value()) {
+    throw payload::util::NotFound("delete payload: payload not found; verify payload id");
   }
 
-  auto tx = repository_->Begin();
+  const Tier payload_tier = record->tier;
   ThrowIfDbError(repository_->DeletePayload(*tx, Key(id)), "delete payload");
   tx->Commit();
 
