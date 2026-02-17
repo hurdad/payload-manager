@@ -116,7 +116,7 @@ std::shared_ptr<db::Repository> BuildRepository(const payload::runtime::config::
 
   if (database.has_postgres()) {
 #if PAYLOAD_DB_POSTGRES
-    auto pool = std::make_shared<db::postgres::PgPool>(database.postgres().connection_uri());
+    auto pool = std::make_shared<db::postgres::PgPool>(database.postgres().connection_uri(), database.postgres().max_connections());
     BootstrapPostgresSchema(pool);
     return std::make_shared<db::postgres::PgRepository>(std::move(pool));
 #else
