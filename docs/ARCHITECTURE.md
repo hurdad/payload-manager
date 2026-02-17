@@ -17,7 +17,7 @@ Payload Manager provides a control plane for binary payload lifecycle and placem
 Core domain services live in `internal/service`:
 
 - `data_service`: payload lifecycle operations and descriptor/lease-facing flows.
-- `catalog_service`: metadata and catalog retrieval semantics.
+- `catalog_service`: metadata/catalog retrieval plus tiering advisories (`Prefetch`, `Pin`, `Unpin`).
 - `admin_service`: administrative and operational actions.
 - `stream_service`: stream-oriented APIs and consumer offset behavior.
 
