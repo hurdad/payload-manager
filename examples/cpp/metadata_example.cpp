@@ -44,8 +44,8 @@ int main(int argc, char** argv) {
   auto writable_payload                      = writable.ValueOrDie();
   writable_payload.buffer->mutable_data()[0] = 42;
 
-  const auto& payload_id   = writable_payload.descriptor.payload_id();
-  const auto  uuid_text    = UuidToHex(payload_id.value());
+  const auto& payload_id    = writable_payload.descriptor.payload_id();
+  const auto  uuid_text     = UuidToHex(payload_id.value());
   auto        commit_status = client.CommitPayload(payload_id);
   if (!commit_status.ok()) {
     std::cerr << "CommitPayload failed: " << commit_status.ToString() << '\n';
@@ -71,7 +71,7 @@ int main(int argc, char** argv) {
 
   // AppendPayloadMetadataEvent records an immutable event for audit/history.
   payload::manager::v1::AppendPayloadMetadataEventRequest event_request;
-  *event_request.mutable_id() = payload_id;
+  *event_request.mutable_id()                     = payload_id;
   *event_request.mutable_metadata()->mutable_id() = payload_id;
   event_request.mutable_metadata()->set_schema("example.payload.v1");
   event_request.mutable_metadata()->set_data(R"({"event":"metadata_updated","component":"metadata_example"})");

@@ -70,11 +70,8 @@ arrow::Result<std::pair<std::shared_ptr<arrow::fs::FileSystem>, std::string>> Re
       options.external_id       = proto_options.external_id();
       options.load_frequency    = proto_options.load_frequency();
       options.proxy_options     = arrow::fs::S3ProxyOptions{
-          proto_options.proxy_options().scheme(),
-          proto_options.proxy_options().host(),
-          proto_options.proxy_options().port(),
-          proto_options.proxy_options().username(),
-          proto_options.proxy_options().password(),
+          proto_options.proxy_options().scheme(),   proto_options.proxy_options().host(),     proto_options.proxy_options().port(),
+          proto_options.proxy_options().username(), proto_options.proxy_options().password(),
       };
       options.credentials_kind                          = static_cast<arrow::fs::S3CredentialsKind>(proto_options.credentials_kind());
       options.force_virtual_addressing                  = proto_options.force_virtual_addressing();
@@ -84,10 +81,10 @@ arrow::Result<std::pair<std::shared_ptr<arrow::fs::FileSystem>, std::string>> Re
       options.check_directory_existence_before_creation = proto_options.check_directory_existence_before_creation();
       options.allow_delayed_open                        = proto_options.allow_delayed_open();
       options.default_metadata                          = ToKeyValueMetadata(proto_options.default_metadata());
-      options.sse_customer_key                          = std::string(proto_options.sse_customer_key().begin(), proto_options.sse_customer_key().end());
-      options.tls_ca_file_path                          = proto_options.tls_ca_file_path();
-      options.tls_ca_dir_path                           = proto_options.tls_ca_dir_path();
-      options.tls_verify_certificates                   = proto_options.tls_verify_certificates();
+      options.sse_customer_key        = std::string(proto_options.sse_customer_key().begin(), proto_options.sse_customer_key().end());
+      options.tls_ca_file_path        = proto_options.tls_ca_file_path();
+      options.tls_ca_dir_path         = proto_options.tls_ca_dir_path();
+      options.tls_verify_certificates = proto_options.tls_verify_certificates();
 
       ARROW_RETURN_NOT_OK(resolve_uri_path());
       ARROW_ASSIGN_OR_RAISE(auto fs, arrow::fs::S3FileSystem::Make(options));
@@ -113,8 +110,8 @@ arrow::Result<std::pair<std::shared_ptr<arrow::fs::FileSystem>, std::string>> Re
         options = arrow::fs::GcsOptions::FromAccessToken(proto_credentials.access_token(), expiration);
       }
 
-      options.endpoint_override      = proto_options.endpoint_override();
-      options.scheme                 = proto_options.scheme();
+      options.endpoint_override       = proto_options.endpoint_override();
+      options.scheme                  = proto_options.scheme();
       options.default_bucket_location = proto_options.default_bucket_location();
       if (proto_options.has_retry_limit_seconds()) {
         options.retry_limit_seconds = proto_options.retry_limit_seconds();
@@ -129,9 +126,9 @@ arrow::Result<std::pair<std::shared_ptr<arrow::fs::FileSystem>, std::string>> Re
       return std::make_pair(std::move(fs), resolved_path);
     }
     case pb::arrow::storage::FileSystemOptions::kAzure: {
-      const auto&                proto_options = filesystem_options.azure();
-      arrow::fs::AzureOptions    options;
-      options.account_name         = proto_options.account_name();
+      const auto&             proto_options = filesystem_options.azure();
+      arrow::fs::AzureOptions options;
+      options.account_name           = proto_options.account_name();
       options.blob_storage_authority = proto_options.blob_storage_authority();
       options.dfs_storage_authority  = proto_options.dfs_storage_authority();
       options.blob_storage_scheme    = proto_options.blob_storage_scheme();

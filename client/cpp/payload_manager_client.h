@@ -38,7 +38,7 @@ class PayloadClient {
                                                         uint64_t ttl_ms = 0, bool persist = false) const;
 
   static arrow::Result<payload::manager::v1::PayloadID> PayloadIdFromUuid(std::string_view uuid);
-  static arrow::Status                                   ValidatePayloadId(const payload::manager::v1::PayloadID& payload_id);
+  static arrow::Status                                  ValidatePayloadId(const payload::manager::v1::PayloadID& payload_id);
 
   arrow::Status CommitPayload(const payload::manager::v1::PayloadID& payload_id) const;
 

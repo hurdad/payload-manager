@@ -62,9 +62,9 @@ class TrackingStorageBackend final : public StorageBackend {
   }
 
  private:
-  payload::manager::v1::Tier                                   tier_;
+  payload::manager::v1::Tier                                      tier_;
   std::unordered_map<std::string, std::shared_ptr<arrow::Buffer>> buffers_;
-  std::vector<std::string>                                     removed_ids_;
+  std::vector<std::string>                                        removed_ids_;
 };
 
 PayloadManager MakeManager(const std::shared_ptr<LeaseManager>& lease_mgr) {
@@ -118,7 +118,6 @@ void TestNonForceDeleteRejectsWhenLeaseIsActive() {
   assert(lease_mgr->HasActiveLeases(descriptor.payload_id()));
   assert(manager.ResolveSnapshot(descriptor.payload_id()).payload_id().value() == descriptor.payload_id().value());
 }
-
 
 void TestPromoteRejectsWhenLeaseIsActive() {
   auto lease_mgr = std::make_shared<LeaseManager>();

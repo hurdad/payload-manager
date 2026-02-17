@@ -2,10 +2,10 @@
 
 #include <filesystem>
 
+#include "common/arrow_utils.hpp"
 #include "disk/disk_arrow_store.hpp"
 #include "object/object_arrow_store.hpp"
 #include "ram/ram_arrow_store.hpp"
-#include "common/arrow_utils.hpp"
 #if PAYLOAD_MANAGER_ARROW_CUDA
 #include "gpu/cuda_arrow_store.hpp"
 #endif

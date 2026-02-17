@@ -62,7 +62,7 @@ static PayloadID MakeID(const std::string& s) {
 }
 
 static LeaseID MakeLeaseID(const std::string& s) {
-  auto id = MakeID(s);
+  auto    id = MakeID(s);
   LeaseID lease_id;
   lease_id.set_value(id.value());
   return lease_id;
@@ -74,7 +74,7 @@ static std::string ToUuidString(const std::string& bytes) {
   }
 
   static constexpr char kHex[] = "0123456789abcdef";
-  std::string out;
+  std::string           out;
   out.reserve(36);
   for (size_t i = 0; i < bytes.size(); ++i) {
     const auto b = static_cast<unsigned char>(bytes[i]);

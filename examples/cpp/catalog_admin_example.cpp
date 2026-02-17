@@ -24,7 +24,6 @@ std::string UuidToHex(const std::string& uuid_bytes) {
   return os.str();
 }
 
-
 } // namespace
 
 int main(int argc, char** argv) {
@@ -122,6 +121,7 @@ int main(int argc, char** argv) {
     return 1;
   }
 
-  std::cout << "Catalog/Admin API calls completed for payload " << uuid_text << " (lineage edges returned=" << lineage.ValueOrDie().edges_size() << ")\n";
+  std::cout << "Catalog/Admin API calls completed for payload " << uuid_text << " (lineage edges returned=" << lineage.ValueOrDie().edges_size()
+            << ")\n";
   return 0;
 }

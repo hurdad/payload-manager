@@ -3,8 +3,7 @@
 namespace payload::db::postgres {
 
 PgPool::PgPool(std::string conninfo, std::size_t max_connections)
-    : conninfo_(std::move(conninfo)),
-      max_connections_(max_connections == 0 ? 1 : max_connections) {
+    : conninfo_(std::move(conninfo)), max_connections_(max_connections == 0 ? 1 : max_connections) {
 }
 
 std::shared_ptr<pqxx::connection> PgPool::Acquire() {
@@ -34,9 +33,7 @@ std::shared_ptr<pqxx::connection> PgPool::Acquire() {
         }
       }
 
-      cv_.wait(lock, [this] {
-        return !idle_.empty() || live_connections_ < max_connections_;
-      });
+      cv_.wait(lock, [this] { return !idle_.empty() || live_connections_ < max_connections_; });
     }
   }
 }

@@ -25,7 +25,6 @@ std::string UuidToHex(const std::string& uuid_bytes) {
   return os.str();
 }
 
-
 payload::manager::v1::StreamID MakeStreamId() {
   payload::manager::v1::StreamID stream;
   stream.set_name("cpp-client-demo");

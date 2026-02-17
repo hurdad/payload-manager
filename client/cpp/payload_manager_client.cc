@@ -94,7 +94,6 @@ arrow::Status ValidatePayloadIdValue(const payload::manager::v1::PayloadID& id) 
   return arrow::Status::OK();
 }
 
-
 class ReadOnlyMMapBuffer final : public arrow::Buffer {
  public:
   ReadOnlyMMapBuffer(const uint8_t* data, int64_t size, void* base_addr, size_t mapped_size, int fd)
@@ -276,8 +275,8 @@ arrow::Result<payload::manager::v1::ResolveSnapshotResponse> PayloadClient::Reso
 }
 
 arrow::Result<PayloadClient::ReadablePayload> PayloadClient::AcquireReadableBuffer(const payload::manager::v1::PayloadID& payload_id,
-                                                                                   payload::manager::v1::Tier min_tier,
-                                                                                   payload::manager::v1::PromotionPolicy promotion_policy,
+                                                                                   payload::manager::v1::Tier             min_tier,
+                                                                                   payload::manager::v1::PromotionPolicy  promotion_policy,
                                                                                    uint64_t min_lease_duration_ms) const {
   payload::manager::v1::AcquireReadLeaseRequest req;
   ARROW_RETURN_NOT_OK(ValidatePayloadIdValue(payload_id));

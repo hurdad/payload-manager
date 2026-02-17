@@ -57,7 +57,7 @@ void LeaseTable::Remove(const payload::manager::v1::LeaseID& lease_id) {
   std::lock_guard lock(mutex_);
 
   const auto lease_key = Key(lease_id);
-  auto it = leases_.find(lease_key);
+  auto       it        = leases_.find(lease_key);
   if (it == leases_.end()) return;
 
   auto range = by_payload_.equal_range(Key(it->second.payload_id));

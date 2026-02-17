@@ -48,8 +48,8 @@ int main(int argc, char** argv) {
     writable_payload.buffer->mutable_data()[i] = static_cast<uint8_t>(i & 0xFFu);
   }
 
-  const auto& payload_id   = writable_payload.descriptor.payload_id();
-  const auto  uuid_text    = UuidToHex(payload_id.value());
+  const auto& payload_id    = writable_payload.descriptor.payload_id();
+  const auto  uuid_text     = UuidToHex(payload_id.value());
   auto        commit_status = client.CommitPayload(payload_id);
   if (!commit_status.ok()) {
     std::cerr << "CommitPayload failed: " << commit_status.ToString() << '\n';

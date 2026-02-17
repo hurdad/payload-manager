@@ -262,7 +262,7 @@ PayloadDescriptor PayloadManager::Commit(const PayloadID& id) {
 
 void PayloadManager::Delete(const PayloadID& id, bool force) {
   // Hold delete_mutex_ to prevent new leases from being acquired between the check and the DB mutation.
-  std::lock_guard<std::mutex> delete_lock(delete_mutex_);
+  std::lock_guard<std::mutex>         delete_lock(delete_mutex_);
   std::unique_lock<std::shared_mutex> payload_lock(*PayloadMutex(id));
 
   if (force) {
@@ -328,8 +328,8 @@ AcquireReadLeaseResponse PayloadManager::AcquireReadLease(const PayloadID& id, T
 
   AcquireReadLeaseResponse resp;
   *resp.mutable_payload_descriptor() = desc;
-  *resp.mutable_lease_id() = lease.lease_id;
-  *resp.mutable_lease_expires_at() = payload::util::ToProto(lease.expires_at);
+  *resp.mutable_lease_id()           = lease.lease_id;
+  *resp.mutable_lease_expires_at()   = payload::util::ToProto(lease.expires_at);
   return resp;
 }
 

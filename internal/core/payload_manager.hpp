@@ -49,11 +49,10 @@ class PayloadManager {
  private:
   static std::string Key(const payload::manager::v1::PayloadID& id);
 
-  void CacheSnapshot(const payload::manager::v1::PayloadDescriptor& descriptor);
-  void PopulateLocation(payload::manager::v1::PayloadDescriptor* descriptor);
-  payload::manager::v1::PayloadDescriptor PromoteUnlocked(const payload::manager::v1::PayloadID& id,
-                                                          payload::manager::v1::Tier            target);
-  std::shared_ptr<std::shared_mutex> PayloadMutex(const payload::manager::v1::PayloadID& id);
+  void                                    CacheSnapshot(const payload::manager::v1::PayloadDescriptor& descriptor);
+  void                                    PopulateLocation(payload::manager::v1::PayloadDescriptor* descriptor);
+  payload::manager::v1::PayloadDescriptor PromoteUnlocked(const payload::manager::v1::PayloadID& id, payload::manager::v1::Tier target);
+  std::shared_ptr<std::shared_mutex>      PayloadMutex(const payload::manager::v1::PayloadID& id);
 
   payload::storage::StorageFactory::TierMap     storage_;
   std::shared_ptr<payload::lease::LeaseManager> lease_mgr_;
@@ -71,7 +70,7 @@ class PayloadManager {
   mutable std::shared_mutex                                                snapshot_cache_mutex_;
   std::unordered_map<std::string, payload::manager::v1::PayloadDescriptor> snapshot_cache_;
 
-  mutable std::mutex                                                           payload_mutexes_guard_;
+  mutable std::mutex                                                          payload_mutexes_guard_;
   mutable std::unordered_map<std::string, std::shared_ptr<std::shared_mutex>> payload_mutexes_;
 };
 
