@@ -23,6 +23,9 @@ static void Usage() {
             << "  payloadctl <addr> delete <uuid>\n"
             << "  payloadctl <addr> promote <uuid> <tier=ram|disk|gpu>\n"
             << "  payloadctl <addr> spill <uuid>\n"
+            << "  payloadctl <addr> prefetch <uuid> <tier=ram|disk|gpu>\n"
+            << "  payloadctl <addr> pin <uuid> [duration_ms]\n"
+            << "  payloadctl <addr> unpin <uuid>\n"
             << "  payloadctl <addr> stats\n";
 }
 
@@ -303,6 +306,77 @@ int main(int argc, char** argv) {
     }
 
     std::cout << "results=" << resp.results_size() << "\n";
+    return 0;
+  }
+
+  // ------------------------------------------------------------
+
+  if (cmd == "prefetch") {
+    if (argc < 5) return 1;
+
+    auto parsed = ParseTier(argv[4]);
+    if (!parsed.has_value()) {
+      std::cerr << "unsupported tier: " << argv[4] << "\n";
+      return 1;
+    }
+
+    PrefetchRequest req;
+    *req.mutable_id() = MakeID(argv[3]);
+    req.set_target_tier(parsed.value());
+
+    google::protobuf::Empty resp;
+
+    auto status = catalog_stub->Prefetch(&ctx, req, &resp);
+
+    if (!status.ok()) {
+      std::cerr << status.error_message() << "\n";
+      return 2;
+    }
+
+    std::cout << "prefetched\n";
+    return 0;
+  }
+
+  // ------------------------------------------------------------
+
+  if (cmd == "pin") {
+    if (argc < 4) return 1;
+
+    PinRequest req;
+    *req.mutable_id() = MakeID(argv[3]);
+    req.set_duration_ms(argc >= 5 ? std::stoull(argv[4]) : 0);
+
+    google::protobuf::Empty resp;
+
+    auto status = catalog_stub->Pin(&ctx, req, &resp);
+
+    if (!status.ok()) {
+      std::cerr << status.error_message() << "\n";
+      return 2;
+    }
+
+    std::cout << "pinned\n";
+    return 0;
+  }
+
+  // ------------------------------------------------------------
+
+  if (cmd == "unpin") {
+    if (argc < 4) return 1;
+
+    UnpinRequest req;
+    *req.mutable_id() = MakeID(argv[3]);
+
+    google::protobuf::Empty resp;
+
+    auto status = catalog_stub->Unpin(&ctx, req, &resp);
+
+    if (!status.ok()) {
+      std::cerr << status.error_message() << "\n";
+      return 2;
+    }
+
+    std::cout << "unpinned\n";
     return 0;
   }
 
