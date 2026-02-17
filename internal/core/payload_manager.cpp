@@ -140,9 +140,9 @@ void PayloadManager::PopulateLocation(PayloadDescriptor* descriptor) {
 
   switch (descriptor->tier()) {
     case TIER_RAM: {
-      const auto  buffer = backend->Read(id);
+      const auto  size = backend->Size(id);
       RamLocation ram;
-      ram.set_length_bytes(static_cast<uint64_t>(buffer->size()));
+      ram.set_length_bytes(size);
       ram.set_slab_id(0);
       ram.set_block_index(0);
       ram.set_shm_name("payload");
@@ -150,18 +150,18 @@ void PayloadManager::PopulateLocation(PayloadDescriptor* descriptor) {
       return;
     }
     case TIER_DISK: {
-      const auto   buffer = backend->Read(id);
+      const auto   size = backend->Size(id);
       DiskLocation disk;
-      disk.set_length_bytes(static_cast<uint64_t>(buffer->size()));
+      disk.set_length_bytes(size);
       disk.set_offset_bytes(0);
       disk.set_path(id.value() + ".bin");
       *descriptor->mutable_disk() = disk;
       return;
     }
     case TIER_OBJECT: {
-      const auto   buffer = backend->Read(id);
+      const auto   size = backend->Size(id);
       DiskLocation object;
-      object.set_length_bytes(static_cast<uint64_t>(buffer->size()));
+      object.set_length_bytes(size);
       object.set_offset_bytes(0);
       object.set_path(id.value() + ".bin");
       *descriptor->mutable_disk() = object;

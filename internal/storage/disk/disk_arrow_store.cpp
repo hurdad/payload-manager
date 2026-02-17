@@ -35,6 +35,10 @@ std::shared_ptr<arrow::Buffer> DiskArrowStore::Read(const PayloadID& id) {
   return ReadAll(file);
 }
 
+uint64_t DiskArrowStore::Size(const PayloadID& id) {
+  return static_cast<uint64_t>(std::filesystem::file_size(PayloadPath(root_, id.value())));
+}
+
 /*
   Atomic write:
       write tmp → flush → rename
