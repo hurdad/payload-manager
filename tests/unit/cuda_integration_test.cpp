@@ -73,7 +73,9 @@ void TestWriteCopiesHostBufferToDeviceBuffer() {
   CudaArrowStore store(0);
   const auto     id = MakePayloadID("cuda-write");
 
-  auto host_buffer               = arrow::AllocateBuffer(4).ValueOrDie();
+  auto maybe_host_buffer = arrow::AllocateBuffer(4);
+  assert(maybe_host_buffer.ok());
+  std::shared_ptr<arrow::Buffer> host_buffer(std::move(*maybe_host_buffer));
   host_buffer->mutable_data()[0] = static_cast<uint8_t>(1);
   host_buffer->mutable_data()[1] = static_cast<uint8_t>(2);
   host_buffer->mutable_data()[2] = static_cast<uint8_t>(3);
@@ -85,8 +87,10 @@ void TestWriteCopiesHostBufferToDeviceBuffer() {
   assert(device_buffer->size() == host_buffer->size());
 
   std::vector<uint8_t> round_trip(static_cast<size_t>(host_buffer->size()), 0);
-  auto                 ctx = CudaContextManager::Get(0);
-  ctx->CopyDeviceToHost(device_buffer->data(), round_trip.data(), device_buffer->size()).ValueOrDie();
+  const auto cuda_buffer = std::dynamic_pointer_cast<arrow::cuda::CudaBuffer>(device_buffer);
+  assert(cuda_buffer);
+  const auto copy_status = cuda_buffer->CopyToHost(/*position=*/0, cuda_buffer->size(), round_trip.data());
+  assert(copy_status.ok());
 
   assert(round_trip[0] == 1);
   assert(round_trip[1] == 2);
