@@ -50,6 +50,19 @@ class StorageBackend {
   virtual std::shared_ptr<arrow::Buffer> Read(const payload::manager::v1::PayloadID& id) = 0;
 
   // ------------------------------------------------------------------
+  // Size
+  // ------------------------------------------------------------------
+  /*
+    Return payload size in bytes.
+
+    Backends with cheap metadata lookups (disk/object) should override this.
+    The default implementation falls back to Read() and inspects buffer size.
+  */
+  virtual uint64_t Size(const payload::manager::v1::PayloadID& id) {
+    return static_cast<uint64_t>(Read(id)->size());
+  }
+
+  // ------------------------------------------------------------------
   // Write
   // ------------------------------------------------------------------
   /*
