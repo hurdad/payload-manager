@@ -81,7 +81,7 @@ class PayloadManager {
     std::optional<uint64_t> expires_at_ms;
   };
 
-  mutable std::mutex                         pins_guard_;
+  mutable std::mutex                        pins_guard_;
   std::unordered_map<std::string, PinState> pins_;
 
   bool IsPinnedLocked(const std::string& key, uint64_t now_ms);
