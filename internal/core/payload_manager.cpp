@@ -262,33 +262,44 @@ PayloadDescriptor PayloadManager::Commit(const PayloadID& id) {
 
 void PayloadManager::Delete(const PayloadID& id, bool force) {
   // Hold delete_mutex_ to prevent new leases from being acquired between the check and the DB mutation.
-  std::lock_guard<std::mutex>         delete_lock(delete_mutex_);
-  std::unique_lock<std::shared_mutex> payload_lock(*PayloadMutex(id));
+  std::lock_guard<std::mutex> delete_lock(delete_mutex_);
 
-  if (force) {
-    lease_mgr_->InvalidateAll(id);
+  {
+    std::unique_lock<std::shared_mutex> payload_lock(*PayloadMutex(id));
+
+    if (force) {
+      lease_mgr_->InvalidateAll(id);
+    }
+    if (!force && lease_mgr_->HasActiveLeases(id)) {
+      throw payload::util::LeaseConflict("delete payload: active lease present; release leases or set force=true");
+    }
+
+    auto tx     = repository_->Begin();
+    auto record = repository_->GetPayload(*tx, Key(id));
+    if (!record.has_value()) {
+      throw payload::util::NotFound("delete payload: payload not found; verify payload id");
+    }
+
+    const Tier payload_tier = record->tier;
+    ThrowIfDbError(repository_->DeletePayload(*tx, Key(id)), "delete payload");
+    tx->Commit();
+
+    const auto storage_it = storage_.find(payload_tier);
+    if (storage_it != storage_.end() && storage_it->second) {
+      storage_it->second->Remove(id);
+    }
+
+    {
+      std::unique_lock lock(snapshot_cache_mutex_);
+      snapshot_cache_.erase(Key(id));
+    }
+  } // payload_lock released
+
+  // Prune the per-payload mutex now that the payload is fully deleted.
+  {
+    std::lock_guard<std::mutex> guard(payload_mutexes_guard_);
+    payload_mutexes_.erase(Key(id));
   }
-  if (!force && lease_mgr_->HasActiveLeases(id)) {
-    throw payload::util::LeaseConflict("delete payload: active lease present; release leases or set force=true");
-  }
-
-  auto tx     = repository_->Begin();
-  auto record = repository_->GetPayload(*tx, Key(id));
-  if (!record.has_value()) {
-    throw payload::util::NotFound("delete payload: payload not found; verify payload id");
-  }
-
-  const Tier payload_tier = record->tier;
-  ThrowIfDbError(repository_->DeletePayload(*tx, Key(id)), "delete payload");
-  tx->Commit();
-
-  const auto storage_it = storage_.find(payload_tier);
-  if (storage_it != storage_.end() && storage_it->second) {
-    storage_it->second->Remove(id);
-  }
-
-  std::unique_lock lock(snapshot_cache_mutex_);
-  snapshot_cache_.erase(Key(id));
 }
 
 PayloadDescriptor PayloadManager::ResolveSnapshot(const PayloadID& id) {
@@ -372,13 +383,20 @@ PayloadDescriptor PayloadManager::PromoteUnlocked(const PayloadID& id, Tier targ
 
     auto buffer = src_it->second->Read(id);
     dst_it->second->Write(id, buffer, /*fsync=*/false);
-    src_it->second->Remove(id);
   }
 
   record->tier = target;
   record->version++;
   ThrowIfDbError(repository_->UpdatePayload(*tx, *record), "promote payload");
   tx->Commit();
+
+  // Remove source data only after DB commit so a crash cannot lose bytes.
+  if (source_tier != target) {
+    auto src_it = storage_.find(source_tier);
+    if (src_it != storage_.end() && src_it->second) {
+      src_it->second->Remove(id);
+    }
+  }
 
   auto descriptor = ToPayloadDescriptor(*record);
   PopulateLocation(&descriptor);
@@ -428,13 +446,20 @@ void PayloadManager::ExecuteSpill(const PayloadID& id, Tier target, bool fsync) 
 
     auto buffer = src_it->second->Read(id);
     dst_it->second->Write(id, buffer, fsync);
-    src_it->second->Remove(id);
   }
 
   record->tier = target;
   record->version++;
   ThrowIfDbError(repository_->UpdatePayload(*tx, *record), "spill payload");
   tx->Commit();
+
+  // Remove source data only after DB commit so a crash cannot lose bytes.
+  if (source_tier != target) {
+    auto src_it = storage_.find(source_tier);
+    if (src_it != storage_.end() && src_it->second) {
+      src_it->second->Remove(id);
+    }
+  }
 
   auto descriptor = ToPayloadDescriptor(*record);
   PopulateLocation(&descriptor);
