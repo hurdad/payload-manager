@@ -51,6 +51,8 @@ class PayloadManager {
 
   void CacheSnapshot(const payload::manager::v1::PayloadDescriptor& descriptor);
   void PopulateLocation(payload::manager::v1::PayloadDescriptor* descriptor);
+  payload::manager::v1::PayloadDescriptor PromoteUnlocked(const payload::manager::v1::PayloadID& id,
+                                                          payload::manager::v1::Tier            target);
 
   payload::storage::StorageFactory::TierMap     storage_;
   std::shared_ptr<payload::lease::LeaseManager> lease_mgr_;
