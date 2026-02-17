@@ -4,7 +4,7 @@ package payload.runtime.config;
 
 import "google/protobuf/duration.proto";
 import "config/arrow/arrow_storage.proto";
-import "config/observablity.proto";
+import "config/observability.proto";
 
 /*
   Payload Manager Runtime Configuration
