@@ -44,6 +44,8 @@ set(INTERNAL_SRC
         # spill + tiering
         spill/spill_scheduler.cpp
         spill/spill_worker.cpp
+        tiering/tiering_manager.cpp
+        tiering/tiering_policy.cpp
         # storage
         storage/storage_factory.cpp
         storage/ram/ram_arrow_store.cpp
