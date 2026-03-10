@@ -1,10 +1,11 @@
-#include "internal/metadata/metadata_cache.hpp"
-#include "internal/tiering/pressure_state.hpp"
 #include "internal/tiering/tiering_policy.hpp"
 
 #include <cassert>
 #include <iostream>
 #include <memory>
+
+#include "internal/metadata/metadata_cache.hpp"
+#include "internal/tiering/pressure_state.hpp"
 
 namespace {
 

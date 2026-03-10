@@ -78,7 +78,7 @@ void TestListIdsReturnsAllCachedPayloadIds() {
   cache.Put(id1, first);
 
   PayloadMetadata second;
-  auto            id2 = MakePayloadID("payload-ids-2");
+  auto            id2  = MakePayloadID("payload-ids-2");
   *second.mutable_id() = id2;
   cache.Put(id2, second);
 
@@ -105,7 +105,7 @@ void TestLeastRecentlyUsedTracksAccessOrder() {
   cache.Put(id1, first);
 
   PayloadMetadata second;
-  auto            id2 = MakePayloadID("payload-lru-2");
+  auto            id2  = MakePayloadID("payload-lru-2");
   *second.mutable_id() = id2;
   cache.Put(id2, second);
 
@@ -143,7 +143,7 @@ void TestRemoveUpdatesLeastRecentlyUsed() {
   cache.Put(id1, first);
 
   PayloadMetadata second;
-  auto            id2 = MakePayloadID("payload-remove-lru-2");
+  auto            id2  = MakePayloadID("payload-remove-lru-2");
   *second.mutable_id() = id2;
   cache.Put(id2, second);
 

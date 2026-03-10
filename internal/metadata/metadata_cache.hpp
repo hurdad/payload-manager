@@ -31,9 +31,9 @@ class MetadataCache {
 
   void TouchLocked(const std::string& key) const;
 
-  mutable std::shared_mutex                                              mutex_;
-  std::unordered_map<std::string, payload::manager::v1::PayloadMetadata> cache_;
-  mutable std::list<std::string>                                          recency_;
+  mutable std::shared_mutex                                                 mutex_;
+  std::unordered_map<std::string, payload::manager::v1::PayloadMetadata>    cache_;
+  mutable std::list<std::string>                                            recency_;
   mutable std::unordered_map<std::string, std::list<std::string>::iterator> recency_index_;
 };
 
