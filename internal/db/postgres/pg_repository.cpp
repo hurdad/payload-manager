@@ -151,6 +151,17 @@ std::optional<model::MetadataRecord> PgRepository::GetMetadata(Transaction& t, c
   }
 }
 
+Result PgRepository::InsertMetadataEvent(Transaction& t, const model::MetadataEventRecord& r) {
+  try {
+    TX(t).Work().exec_params(
+        "INSERT INTO payload_metadata_events(id,data,schema,source,version,ts_ms) VALUES($1,$2,$3,$4,$5,$6);",
+        r.id, r.data, r.schema, r.source, r.version, r.ts_ms);
+    return Result::Ok();
+  } catch (const std::exception& e) {
+    return Translate(e);
+  }
+}
+
 Result PgRepository::InsertLineage(Transaction& t, const model::LineageRecord& r) {
   try {
     TX(t).Work().exec_params("INSERT INTO payload_lineage(parent_id,child_id,operation,role,parameters,created_at_ms) VALUES($1,$2,$3,$4,$5,$6);",

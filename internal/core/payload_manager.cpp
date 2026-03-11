@@ -3,6 +3,7 @@
 #include <mutex>
 #include <stdexcept>
 
+#include "internal/core/placement_engine.hpp"
 #include "internal/db/model/payload_record.hpp"
 #include "internal/lease/lease_manager.hpp"
 #include "internal/storage/storage_backend.hpp"
@@ -411,7 +412,7 @@ AcquireReadLeaseResponse PayloadManager::AcquireReadLease(const PayloadID& id, T
   std::lock_guard<std::mutex> delete_lock(delete_mutex_);
 
   auto desc = ResolveSnapshot(id);
-  if (desc.tier() < min_tier) {
+  if (PlacementEngine::IsHigherTier(min_tier, desc.tier())) {
     desc = PromoteUnlocked(id, min_tier);
   }
   if (!IsReadableState(desc.state())) {

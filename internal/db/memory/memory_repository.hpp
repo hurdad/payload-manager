@@ -25,6 +25,7 @@ class MemoryRepository final : public db::Repository {
 
   Result                               UpsertMetadata(Transaction&, const model::MetadataRecord&) override;
   std::optional<model::MetadataRecord> GetMetadata(Transaction&, const std::string&) override;
+  Result                               InsertMetadataEvent(Transaction&, const model::MetadataEventRecord&) override;
 
   Result                            InsertLineage(Transaction&, const model::LineageRecord&) override;
   std::vector<model::LineageRecord> GetParents(Transaction&, const std::string&) override;
@@ -51,6 +52,7 @@ class MemoryRepository final : public db::Repository {
   struct State {
     std::unordered_map<std::string, model::PayloadRecord>  payloads;
     std::unordered_map<std::string, model::MetadataRecord> metadata;
+    std::vector<model::MetadataEventRecord>                metadata_events;
     std::vector<model::LineageRecord>                      lineage;
 
     std::unordered_map<uint64_t, model::StreamRecord>                   streams;

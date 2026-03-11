@@ -403,7 +403,8 @@ BackendFactory MakeSqliteFactory() {
     auto db = std::make_shared<payload::db::sqlite::SqliteDB>(db_path);
     db->Exec(
         "CREATE TABLE IF NOT EXISTS payload (id TEXT PRIMARY KEY, tier INTEGER NOT NULL, state INTEGER NOT NULL, size_bytes INTEGER NOT NULL, "
-        "version INTEGER NOT NULL, expires_at_ms INTEGER);");
+        "version INTEGER NOT NULL, expires_at_ms INTEGER, persist INTEGER NOT NULL DEFAULT 0, eviction_priority INTEGER NOT NULL DEFAULT 0, "
+        "spill_target INTEGER NOT NULL DEFAULT 0);");
     db->Exec(
         "CREATE TABLE IF NOT EXISTS payload_metadata (id TEXT PRIMARY KEY, json TEXT NOT NULL, schema TEXT, updated_at_ms INTEGER NOT NULL, FOREIGN "
         "KEY(id) REFERENCES payload(id) ON DELETE CASCADE);");
@@ -411,6 +412,9 @@ BackendFactory MakeSqliteFactory() {
         "CREATE TABLE IF NOT EXISTS payload_lineage (parent_id TEXT NOT NULL, child_id TEXT NOT NULL, operation TEXT, role TEXT, parameters TEXT, "
         "created_at_ms INTEGER NOT NULL, FOREIGN KEY(parent_id) REFERENCES payload(id) ON DELETE CASCADE, FOREIGN KEY(child_id) REFERENCES "
         "payload(id) ON DELETE CASCADE);");
+    db->Exec(
+        "CREATE TABLE IF NOT EXISTS payload_metadata_events (rowid INTEGER PRIMARY KEY AUTOINCREMENT, id TEXT NOT NULL, data BLOB, schema TEXT, "
+        "source TEXT, version TEXT, ts_ms INTEGER NOT NULL);");
     db->Exec(
         "CREATE TABLE IF NOT EXISTS streams (stream_id INTEGER PRIMARY KEY AUTOINCREMENT, namespace TEXT NOT NULL, name TEXT NOT NULL, created_at "
         "INTEGER NOT NULL DEFAULT (unixepoch() * 1000), retention_max_entries INTEGER, retention_max_age_sec INTEGER, UNIQUE(namespace, name));");
@@ -450,13 +454,15 @@ BackendFactory MakePostgresFactory() {
     pqxx::work tx(*conn);
     tx.exec(
         "CREATE TABLE IF NOT EXISTS payload (id TEXT PRIMARY KEY, tier SMALLINT NOT NULL, state SMALLINT NOT NULL, size_bytes BIGINT NOT NULL, "
-        "version BIGINT NOT NULL, expires_at_ms BIGINT);");
+        "version BIGINT NOT NULL, expires_at_ms BIGINT, persist SMALLINT NOT NULL DEFAULT 0, eviction_priority SMALLINT NOT NULL DEFAULT 0, "
+        "spill_target SMALLINT NOT NULL DEFAULT 0);");
     tx.exec(
         "CREATE TABLE IF NOT EXISTS payload_metadata (id TEXT PRIMARY KEY REFERENCES payload(id) ON DELETE CASCADE, json JSONB NOT NULL, schema "
         "TEXT, updated_at_ms BIGINT NOT NULL);");
     tx.exec(
         "CREATE TABLE IF NOT EXISTS payload_lineage (parent_id TEXT NOT NULL REFERENCES payload(id) ON DELETE CASCADE, child_id TEXT NOT NULL "
         "REFERENCES payload(id) ON DELETE CASCADE, operation TEXT, role TEXT, parameters TEXT, created_at_ms BIGINT NOT NULL);");
+    tx.exec("CREATE TABLE IF NOT EXISTS payload_metadata_events (id TEXT NOT NULL, data BYTEA, schema TEXT, source TEXT, version TEXT, ts_ms BIGINT NOT NULL);");
     tx.exec(
         "CREATE TABLE IF NOT EXISTS streams (stream_id BIGSERIAL PRIMARY KEY, namespace TEXT NOT NULL, name TEXT NOT NULL, created_at TIMESTAMPTZ "
         "NOT NULL DEFAULT now(), retention_max_entries BIGINT, retention_max_age_sec BIGINT, UNIQUE(namespace, name));");

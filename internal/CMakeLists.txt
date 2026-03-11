@@ -19,6 +19,7 @@ set(INTERNAL_SRC
 
         # core
         core/payload_manager.cpp
+        core/placement_engine.cpp
 
         # lease
         lease/lease_manager.cpp

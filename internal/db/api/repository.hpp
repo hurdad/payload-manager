@@ -7,6 +7,7 @@
 #include "internal/db/api/result.hpp"
 #include "internal/db/api/transaction.hpp"
 #include "internal/db/model/lineage_record.hpp"
+#include "internal/db/model/metadata_event_record.hpp"
 #include "internal/db/model/metadata_record.hpp"
 #include "internal/db/model/payload_record.hpp"
 #include "internal/db/model/stream_consumer_offset_record.hpp"
@@ -64,6 +65,8 @@ class Repository {
   virtual Result UpsertMetadata(Transaction&, const model::MetadataRecord&) = 0;
 
   virtual std::optional<model::MetadataRecord> GetMetadata(Transaction&, const std::string& id) = 0;
+
+  virtual Result InsertMetadataEvent(Transaction&, const model::MetadataEventRecord&) = 0;
 
   // ---------------------------------------------------------------------
   // Lineage

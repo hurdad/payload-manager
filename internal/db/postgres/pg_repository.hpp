@@ -21,6 +21,7 @@ class PgRepository final : public db::Repository {
 
   Result                               UpsertMetadata(Transaction&, const model::MetadataRecord&) override;
   std::optional<model::MetadataRecord> GetMetadata(Transaction&, const std::string&) override;
+  Result                               InsertMetadataEvent(Transaction&, const model::MetadataEventRecord&) override;
 
   Result                            InsertLineage(Transaction&, const model::LineageRecord&) override;
   std::vector<model::LineageRecord> GetParents(Transaction&, const std::string&) override;

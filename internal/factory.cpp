@@ -56,6 +56,8 @@ void BootstrapSqliteSchema(const std::shared_ptr<db::sqlite::SqliteDB>& sqlite_d
       "CREATE TABLE IF NOT EXISTS payload_lineage (parent_id TEXT NOT NULL, child_id TEXT NOT NULL, operation TEXT, role TEXT, parameters TEXT, "
       "created_at_ms INTEGER NOT NULL, FOREIGN KEY(parent_id) REFERENCES payload(id) ON DELETE CASCADE, FOREIGN KEY(child_id) REFERENCES payload(id) "
       "ON DELETE CASCADE);",
+      "CREATE TABLE IF NOT EXISTS payload_metadata_events (rowid INTEGER PRIMARY KEY AUTOINCREMENT, id TEXT NOT NULL, data BLOB, schema TEXT, source "
+      "TEXT, version TEXT, ts_ms INTEGER NOT NULL);",
       "CREATE TABLE IF NOT EXISTS payload_schema_migrations (version INTEGER PRIMARY KEY, applied_at_ms INTEGER NOT NULL);",
       "CREATE TABLE IF NOT EXISTS streams (stream_id INTEGER PRIMARY KEY AUTOINCREMENT, namespace TEXT NOT NULL, name TEXT NOT NULL, created_at "
       "INTEGER NOT NULL DEFAULT (unixepoch() * 1000), retention_max_entries INTEGER, retention_max_age_sec INTEGER, UNIQUE(namespace, name));",
@@ -76,6 +78,7 @@ void BootstrapSqliteSchema(const std::shared_ptr<db::sqlite::SqliteDB>& sqlite_d
 
   sqlite_db->Exec("SELECT id,tier,state,size_bytes,version FROM payload LIMIT 1;");
   sqlite_db->Exec("SELECT id,json,schema,updated_at_ms FROM payload_metadata LIMIT 1;");
+  sqlite_db->Exec("SELECT id,data,schema,source,version,ts_ms FROM payload_metadata_events LIMIT 1;");
   sqlite_db->Exec("SELECT parent_id,child_id,operation,role,parameters,created_at_ms FROM payload_lineage LIMIT 1;");
   sqlite_db->Exec("SELECT version FROM payload_schema_migrations LIMIT 1;");
 }
@@ -100,6 +103,9 @@ void BootstrapPostgresSchema(const std::shared_ptr<db::postgres::PgPool>& pool) 
   tx.exec(
       "CREATE TABLE IF NOT EXISTS payload_lineage (parent_id TEXT NOT NULL REFERENCES payload(id) ON DELETE CASCADE, child_id TEXT NOT NULL "
       "REFERENCES payload(id) ON DELETE CASCADE, operation TEXT, role TEXT, parameters TEXT, created_at_ms BIGINT NOT NULL);");
+  tx.exec(
+      "CREATE TABLE IF NOT EXISTS payload_metadata_events (id TEXT NOT NULL, data BYTEA, schema TEXT, source TEXT, version TEXT, ts_ms BIGINT NOT "
+      "NULL);");
   tx.exec("CREATE TABLE IF NOT EXISTS payload_schema_migrations (version INTEGER PRIMARY KEY, applied_at TIMESTAMPTZ DEFAULT NOW());");
   tx.exec(
       "CREATE TABLE IF NOT EXISTS streams (stream_id BIGSERIAL PRIMARY KEY, namespace TEXT NOT NULL, name TEXT NOT NULL, created_at TIMESTAMPTZ NOT "
@@ -114,6 +120,7 @@ void BootstrapPostgresSchema(const std::shared_ptr<db::postgres::PgPool>& pool) 
 
   tx.exec("SELECT id,tier,state,size_bytes,version FROM payload LIMIT 1;");
   tx.exec("SELECT id,json,schema,updated_at_ms FROM payload_metadata LIMIT 1;");
+  tx.exec("SELECT id,data,schema,source,version,ts_ms FROM payload_metadata_events LIMIT 1;");
   tx.exec("SELECT parent_id,child_id,operation,role,parameters,created_at_ms FROM payload_lineage LIMIT 1;");
   tx.exec("SELECT version FROM payload_schema_migrations LIMIT 1;");
   tx.commit();

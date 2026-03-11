@@ -109,6 +109,9 @@ class LoggingRepository final : public payload::db::Repository {
   std::optional<payload::db::model::MetadataRecord> GetMetadata(payload::db::Transaction& t, const std::string& id) override {
     return inner_->GetMetadata(Unwrap(t), id);
   }
+  payload::db::Result InsertMetadataEvent(payload::db::Transaction& t, const payload::db::model::MetadataEventRecord& r) override {
+    return inner_->InsertMetadataEvent(Unwrap(t), r);
+  }
   payload::db::Result InsertLineage(payload::db::Transaction& t, const payload::db::model::LineageRecord& r) override {
     return inner_->InsertLineage(Unwrap(t), r);
   }

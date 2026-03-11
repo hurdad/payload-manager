@@ -275,6 +275,28 @@ std::optional<model::MetadataRecord> SqliteRepository::GetMetadata(Transaction& 
   return r;
 }
 
+Result SqliteRepository::InsertMetadataEvent(Transaction& t, const model::MetadataEventRecord& r) {
+  auto* db = TX(t).Handle();
+
+  const char* sql =
+      "INSERT INTO payload_metadata_events(id,data,schema,source,version,ts_ms) VALUES(?,?,?,?,?,?);";
+
+  sqlite3_stmt* st = nullptr;
+  if (sqlite3_prepare_v2(db, sql, -1, &st, nullptr) != SQLITE_OK) return Result::Err(ErrorCode::InternalError, sqlite3_errmsg(db));
+
+  BindText(st, 1, r.id);
+  BindText(st, 2, r.data);
+  BindText(st, 3, r.schema);
+  BindText(st, 4, r.source);
+  BindText(st, 5, r.version);
+  BindU64(st, 6, r.ts_ms);
+
+  int rc = sqlite3_step(st);
+  sqlite3_finalize(st);
+
+  return Translate(db, rc);
+}
+
 // ------------------------------------------------------------------
 // Lineage
 // ------------------------------------------------------------------

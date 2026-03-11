@@ -3,6 +3,7 @@
 #include <chrono>
 
 #include "internal/core/payload_manager.hpp"
+#include "internal/observability/logging.hpp"
 #include "payload/manager/v1.hpp"
 
 namespace payload::tiering {
@@ -49,7 +50,8 @@ void TieringManager::Loop() {
 
     try {
       manager_->ExpireStale();
-    } catch (const std::exception&) {
+    } catch (const std::exception& e) {
+      PAYLOAD_LOG_ERROR("ExpireStale failed", {payload::observability::StringField("error", e.what())});
     }
 
     std::this_thread::sleep_for(100ms);

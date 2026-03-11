@@ -5,6 +5,7 @@
 #include <type_traits>
 
 #include "internal/core/payload_manager.hpp"
+#include "internal/core/placement_engine.hpp"
 #include "internal/observability/logging.hpp"
 #include "internal/observability/spans.hpp"
 #include "internal/util/errors.hpp"
@@ -71,7 +72,7 @@ AcquireReadLeaseResponse DataService::AcquireReadLease(const AcquireReadLeaseReq
 
     if (req.promotion_policy() == PROMOTION_POLICY_BEST_EFFORT) {
       const auto snapshot = ctx_.manager->ResolveSnapshot(req.id());
-      if (snapshot.tier() < req.min_tier()) {
+      if (payload::core::PlacementEngine::IsHigherTier(req.min_tier(), snapshot.tier())) {
         throw payload::util::InvalidState("acquire lease: best-effort promotion cannot satisfy min_tier; lower min_tier or change promotion policy");
       }
     }

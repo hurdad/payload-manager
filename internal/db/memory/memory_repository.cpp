@@ -93,6 +93,11 @@ std::optional<model::MetadataRecord> MemoryRepository::GetMetadata(Transaction& 
   return it->second;
 }
 
+Result MemoryRepository::InsertMetadataEvent(Transaction& t, const model::MetadataEventRecord& r) {
+  TX(t).Mutable().metadata_events.push_back(r);
+  return Result::Ok();
+}
+
 Result MemoryRepository::InsertLineage(Transaction& t, const model::LineageRecord& r) {
   TX(t).Mutable().lineage.push_back(r);
   return Result::Ok();

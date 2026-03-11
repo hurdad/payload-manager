@@ -9,6 +9,7 @@
 #include "internal/core/payload_manager.hpp"
 #include "internal/db/api/repository.hpp"
 #include "internal/db/model/lineage_record.hpp"
+#include "internal/db/model/metadata_event_record.hpp"
 #include "internal/db/model/metadata_record.hpp"
 #include "internal/lineage/lineage_graph.hpp"
 #include "internal/metadata/metadata_cache.hpp"
@@ -254,9 +255,23 @@ UpdatePayloadMetadataResponse CatalogService::UpdateMetadata(const UpdatePayload
 
 AppendPayloadMetadataEventResponse CatalogService::AppendMetadataEvent(const AppendPayloadMetadataEventRequest& req) {
   return ObserveRpc("CatalogService.AppendMetadataEvent", &req.id(), [&] {
+    const auto now = payload::util::Now();
+
+    payload::db::model::MetadataEventRecord record;
+    record.id      = req.id().value();
+    record.data    = req.metadata().data();
+    record.schema  = req.metadata().schema();
+    record.source  = req.source();
+    record.version = req.version();
+    record.ts_ms   = payload::util::ToUnixMillis(now);
+
+    auto tx = ctx_.repository->Begin();
+    ThrowIfDbError(ctx_.repository->InsertMetadataEvent(*tx, record), "insert metadata event");
+    tx->Commit();
+
     AppendPayloadMetadataEventResponse resp;
     *resp.mutable_id()         = req.id();
-    *resp.mutable_event_time() = payload::util::ToProto(payload::util::Now());
+    *resp.mutable_event_time() = payload::util::ToProto(now);
     return resp;
   });
 }

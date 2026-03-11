@@ -73,6 +73,10 @@ class HookedRepository : public Repository {
     return inner_.GetMetadata(tx, id);
   }
 
+  Result InsertMetadataEvent(Transaction& tx, const payload::db::model::MetadataEventRecord& record) override {
+    return inner_.InsertMetadataEvent(tx, record);
+  }
+
   Result InsertLineage(Transaction& tx, const payload::db::model::LineageRecord& record) override {
     return inner_.InsertLineage(tx, record);
   }
