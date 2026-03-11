@@ -462,7 +462,9 @@ BackendFactory MakePostgresFactory() {
     tx.exec(
         "CREATE TABLE IF NOT EXISTS payload_lineage (parent_id TEXT NOT NULL REFERENCES payload(id) ON DELETE CASCADE, child_id TEXT NOT NULL "
         "REFERENCES payload(id) ON DELETE CASCADE, operation TEXT, role TEXT, parameters TEXT, created_at_ms BIGINT NOT NULL);");
-    tx.exec("CREATE TABLE IF NOT EXISTS payload_metadata_events (id TEXT NOT NULL, data BYTEA, schema TEXT, source TEXT, version TEXT, ts_ms BIGINT NOT NULL);");
+    tx.exec(
+        "CREATE TABLE IF NOT EXISTS payload_metadata_events (id TEXT NOT NULL, data BYTEA, schema TEXT, source TEXT, version TEXT, ts_ms BIGINT NOT "
+        "NULL);");
     tx.exec(
         "CREATE TABLE IF NOT EXISTS streams (stream_id BIGSERIAL PRIMARY KEY, namespace TEXT NOT NULL, name TEXT NOT NULL, created_at TIMESTAMPTZ "
         "NOT NULL DEFAULT now(), retention_max_entries BIGINT, retention_max_age_sec BIGINT, UNIQUE(namespace, name));");

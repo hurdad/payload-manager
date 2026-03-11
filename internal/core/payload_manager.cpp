@@ -260,14 +260,13 @@ PayloadDescriptor PayloadManager::Allocate(uint64_t size_bytes, Tier preferred, 
   using payload::manager::core::v1::EVICTION_PRIORITY_NEVER;
   const bool never_evict = persist || eviction_policy.priority() == EVICTION_PRIORITY_NEVER;
 
-  auto record             = ToPayloadRecord(desc);
-  record.persist          = persist;
+  auto record              = ToPayloadRecord(desc);
+  record.persist           = persist;
   record.eviction_priority = static_cast<int>(eviction_policy.priority());
 
   // Determine spill target: use policy hint if set, otherwise fall back to TIER_DISK.
-  const Tier spill_tier =
-      (eviction_policy.spill_target() != TIER_UNSPECIFIED) ? eviction_policy.spill_target() : TIER_DISK;
-  record.spill_target = static_cast<int>(spill_tier);
+  const Tier spill_tier = (eviction_policy.spill_target() != TIER_UNSPECIFIED) ? eviction_policy.spill_target() : TIER_DISK;
+  record.spill_target   = static_cast<int>(spill_tier);
 
   // persist overrides TTL: a persisted payload never auto-expires.
   if (!never_evict && ttl_ms > 0) {
@@ -517,9 +516,9 @@ void PayloadManager::HydrateCaches() {
 
   using payload::manager::core::v1::EVICTION_PRIORITY_NEVER;
 
-  std::unordered_set<std::string>                      new_no_evict;
-  std::unordered_map<std::string, Tier>                new_spill_targets;
-  std::unordered_map<std::string, PayloadDescriptor>   new_snapshot_cache;
+  std::unordered_set<std::string>                    new_no_evict;
+  std::unordered_map<std::string, Tier>              new_spill_targets;
+  std::unordered_map<std::string, PayloadDescriptor> new_snapshot_cache;
 
   for (const auto& record : records) {
     auto descriptor = ToPayloadDescriptor(record);
@@ -534,8 +533,7 @@ void PayloadManager::HydrateCaches() {
       new_no_evict.insert(record.id);
     }
 
-    new_spill_targets[record.id] =
-        (record.spill_target != 0) ? static_cast<Tier>(record.spill_target) : TIER_DISK;
+    new_spill_targets[record.id] = (record.spill_target != 0) ? static_cast<Tier>(record.spill_target) : TIER_DISK;
   }
 
   {

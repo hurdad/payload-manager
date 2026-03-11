@@ -7,14 +7,14 @@ namespace payload::tiering {
 
 using namespace payload::manager::v1;
 
-TieringPolicy::TieringPolicy(std::shared_ptr<payload::metadata::MetadataCache>          cache,
+TieringPolicy::TieringPolicy(std::shared_ptr<payload::metadata::MetadataCache>           cache,
                              std::function<bool(const payload::manager::v1::PayloadID&)> is_evictable)
     : cache_(std::move(cache)), is_evictable_(std::move(is_evictable)) {
 }
 
 namespace {
 
-std::optional<PayloadID> ChooseVictimFromMetadataCache(const std::shared_ptr<payload::metadata::MetadataCache>&        cache,
+std::optional<PayloadID> ChooseVictimFromMetadataCache(const std::shared_ptr<payload::metadata::MetadataCache>&           cache,
                                                        const std::function<bool(const payload::manager::v1::PayloadID&)>& is_evictable) {
   if (!cache) {
     return std::nullopt;

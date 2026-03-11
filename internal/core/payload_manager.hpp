@@ -36,14 +36,13 @@ class PayloadManager {
                  std::shared_ptr<payload::db::Repository> repository);
 
   payload::manager::v1::PayloadDescriptor Allocate(uint64_t size_bytes, payload::manager::v1::Tier preferred, uint64_t ttl_ms = 0,
-                                                   bool persist = false,
-                                                   const payload::manager::core::v1::EvictionPolicy& eviction_policy = {});
+                                                   bool persist = false, const payload::manager::core::v1::EvictionPolicy& eviction_policy = {});
   void                                    ExpireStale();
   payload::manager::v1::PayloadDescriptor Commit(const payload::manager::v1::PayloadID& id);
   void                                    Delete(const payload::manager::v1::PayloadID& id, bool force);
 
-  bool                         IsEvictionExempt(const payload::manager::v1::PayloadID& id) const;
-  payload::manager::v1::Tier   GetSpillTarget(const payload::manager::v1::PayloadID& id) const;
+  bool                       IsEvictionExempt(const payload::manager::v1::PayloadID& id) const;
+  payload::manager::v1::Tier GetSpillTarget(const payload::manager::v1::PayloadID& id) const;
 
   payload::manager::v1::PayloadDescriptor        ResolveSnapshot(const payload::manager::v1::PayloadID& id);
   payload::manager::v1::AcquireReadLeaseResponse AcquireReadLease(const payload::manager::v1::PayloadID& id, payload::manager::v1::Tier min_tier,
@@ -95,11 +94,11 @@ class PayloadManager {
   bool IsPinnedLocked(const std::string& key, uint64_t now_ms);
 
   // IDs that must never be automatically evicted (persist=true or EVICTION_PRIORITY_NEVER).
-  mutable std::mutex                        no_evict_guard_;
-  std::unordered_set<std::string>           no_evict_ids_;
+  mutable std::mutex              no_evict_guard_;
+  std::unordered_set<std::string> no_evict_ids_;
 
   // Preferred spill tier per payload (default TIER_DISK when absent).
-  mutable std::mutex                              spill_targets_guard_;
+  mutable std::mutex                                          spill_targets_guard_;
   std::unordered_map<std::string, payload::manager::v1::Tier> spill_targets_;
 };
 

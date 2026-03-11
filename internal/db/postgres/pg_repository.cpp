@@ -153,9 +153,8 @@ std::optional<model::MetadataRecord> PgRepository::GetMetadata(Transaction& t, c
 
 Result PgRepository::InsertMetadataEvent(Transaction& t, const model::MetadataEventRecord& r) {
   try {
-    TX(t).Work().exec_params(
-        "INSERT INTO payload_metadata_events(id,data,schema,source,version,ts_ms) VALUES($1,$2,$3,$4,$5,$6);",
-        r.id, r.data, r.schema, r.source, r.version, r.ts_ms);
+    TX(t).Work().exec_params("INSERT INTO payload_metadata_events(id,data,schema,source,version,ts_ms) VALUES($1,$2,$3,$4,$5,$6);", r.id, r.data,
+                             r.schema, r.source, r.version, r.ts_ms);
     return Result::Ok();
   } catch (const std::exception& e) {
     return Translate(e);

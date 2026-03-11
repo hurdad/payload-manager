@@ -58,16 +58,17 @@ class SimpleStorageBackend final : public payload::storage::StorageBackend {
 };
 
 struct Fixture {
-  std::shared_ptr<LeaseManager>          lease_mgr = std::make_shared<LeaseManager>();
-  std::shared_ptr<SimpleStorageBackend>  ram       = std::make_shared<SimpleStorageBackend>(TIER_RAM);
-  std::shared_ptr<SimpleStorageBackend>  disk      = std::make_shared<SimpleStorageBackend>(TIER_DISK);
-  std::shared_ptr<payload::db::memory::MemoryRepository> repo = std::make_shared<payload::db::memory::MemoryRepository>();
-  PayloadManager manager{[&] {
-    payload::storage::StorageFactory::TierMap storage;
-    storage[TIER_RAM]  = ram;
-    storage[TIER_DISK] = disk;
-    return storage;
-  }(), lease_mgr, nullptr, nullptr, repo};
+  std::shared_ptr<LeaseManager>                          lease_mgr = std::make_shared<LeaseManager>();
+  std::shared_ptr<SimpleStorageBackend>                  ram       = std::make_shared<SimpleStorageBackend>(TIER_RAM);
+  std::shared_ptr<SimpleStorageBackend>                  disk      = std::make_shared<SimpleStorageBackend>(TIER_DISK);
+  std::shared_ptr<payload::db::memory::MemoryRepository> repo      = std::make_shared<payload::db::memory::MemoryRepository>();
+  PayloadManager                                         manager{[&] {
+                           payload::storage::StorageFactory::TierMap storage;
+                           storage[TIER_RAM]  = ram;
+                           storage[TIER_DISK] = disk;
+                           return storage;
+                         }(),
+                         lease_mgr, nullptr, nullptr, repo};
 };
 
 // Allocate with TTL=1ms, sleep past expiry, call ExpireStale —

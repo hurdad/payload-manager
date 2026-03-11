@@ -19,7 +19,7 @@ namespace payload::tiering {
 class TieringPolicy {
  public:
   // is_evictable: returns true if the given payload may be chosen as a victim.
-  TieringPolicy(std::shared_ptr<payload::metadata::MetadataCache>                        cache,
+  TieringPolicy(std::shared_ptr<payload::metadata::MetadataCache>           cache,
                 std::function<bool(const payload::manager::v1::PayloadID&)> is_evictable = {});
 
   std::optional<payload::manager::v1::PayloadID> ChooseRamEviction(const PressureState& state);
@@ -27,7 +27,7 @@ class TieringPolicy {
   std::optional<payload::manager::v1::PayloadID> ChooseGpuEviction(const PressureState& state);
 
  private:
-  std::shared_ptr<payload::metadata::MetadataCache>              cache_;
+  std::shared_ptr<payload::metadata::MetadataCache>           cache_;
   std::function<bool(const payload::manager::v1::PayloadID&)> is_evictable_;
 };
 

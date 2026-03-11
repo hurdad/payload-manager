@@ -278,8 +278,7 @@ std::optional<model::MetadataRecord> SqliteRepository::GetMetadata(Transaction& 
 Result SqliteRepository::InsertMetadataEvent(Transaction& t, const model::MetadataEventRecord& r) {
   auto* db = TX(t).Handle();
 
-  const char* sql =
-      "INSERT INTO payload_metadata_events(id,data,schema,source,version,ts_ms) VALUES(?,?,?,?,?,?);";
+  const char* sql = "INSERT INTO payload_metadata_events(id,data,schema,source,version,ts_ms) VALUES(?,?,?,?,?,?);";
 
   sqlite3_stmt* st = nullptr;
   if (sqlite3_prepare_v2(db, sql, -1, &st, nullptr) != SQLITE_OK) return Result::Err(ErrorCode::InternalError, sqlite3_errmsg(db));

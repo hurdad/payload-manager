@@ -33,10 +33,10 @@ namespace {
 
 using payload::core::PayloadManager;
 using payload::lease::LeaseManager;
-using payload::manager::core::v1::EvictionPolicy;
 using payload::manager::core::v1::EVICTION_PRIORITY_HIGH;
 using payload::manager::core::v1::EVICTION_PRIORITY_NEVER;
 using payload::manager::core::v1::EVICTION_PRIORITY_UNSPECIFIED;
+using payload::manager::core::v1::EvictionPolicy;
 using payload::manager::v1::PayloadID;
 using payload::manager::v1::PayloadMetadata;
 using payload::manager::v1::TIER_DISK;
@@ -94,17 +94,17 @@ class SimpleStorageBackend final : public payload::storage::StorageBackend {
 // ---------------------------------------------------------------------------
 
 struct Fixture {
-  std::shared_ptr<LeaseManager>                           lease_mgr = std::make_shared<LeaseManager>();
-  std::shared_ptr<SimpleStorageBackend>                   ram       = std::make_shared<SimpleStorageBackend>(TIER_RAM);
-  std::shared_ptr<SimpleStorageBackend>                   disk      = std::make_shared<SimpleStorageBackend>(TIER_DISK);
+  std::shared_ptr<LeaseManager>                          lease_mgr = std::make_shared<LeaseManager>();
+  std::shared_ptr<SimpleStorageBackend>                  ram       = std::make_shared<SimpleStorageBackend>(TIER_RAM);
+  std::shared_ptr<SimpleStorageBackend>                  disk      = std::make_shared<SimpleStorageBackend>(TIER_DISK);
   std::shared_ptr<payload::db::memory::MemoryRepository> repo      = std::make_shared<payload::db::memory::MemoryRepository>();
-  PayloadManager                                          manager{[&] {
-    payload::storage::StorageFactory::TierMap storage;
-    storage[TIER_RAM]  = ram;
-    storage[TIER_DISK] = disk;
-    return storage;
-  }(),
-                                                                  lease_mgr, nullptr, nullptr, repo};
+  PayloadManager                                         manager{[&] {
+                           payload::storage::StorageFactory::TierMap storage;
+                           storage[TIER_RAM]  = ram;
+                           storage[TIER_DISK] = disk;
+                           return storage;
+                         }(),
+                         lease_mgr, nullptr, nullptr, repo};
 };
 
 // ---------------------------------------------------------------------------
@@ -139,8 +139,7 @@ void SetPressure(PressureState& s) {
 void TestPersistSuppressesTTL() {
   Fixture f;
 
-  const auto desc =
-      f.manager.Commit(f.manager.Allocate(128, TIER_RAM, /*ttl_ms=*/1, /*persist=*/true).payload_id());
+  const auto desc = f.manager.Commit(f.manager.Allocate(128, TIER_RAM, /*ttl_ms=*/1, /*persist=*/true).payload_id());
   assert(f.ram->Has(desc.payload_id()));
 
   std::this_thread::sleep_for(std::chrono::milliseconds(5));
@@ -271,12 +270,11 @@ void TestTieringPolicySkipsExemptPayloads() {
   PutCacheEntry(*cache, "exempt-b");
 
   // Both IDs are exempt; policy must return no victim.
-  auto is_evictable = [](const PayloadID& id) -> bool {
-    return id.value() != "exempt-a" && id.value() != "exempt-b";
-  };
+  auto is_evictable = [](const PayloadID& id) -> bool { return id.value() != "exempt-a" && id.value() != "exempt-b"; };
 
-  auto    policy = TieringPolicy(cache, is_evictable);
-  PressureState state; SetPressure(state);
+  auto          policy = TieringPolicy(cache, is_evictable);
+  PressureState state;
+  SetPressure(state);
   const auto victim = policy.ChooseRamEviction(state);
 
   assert(!victim.has_value());
@@ -286,9 +284,9 @@ void TestTieringPolicySkipsExemptPayloads() {
 void TestTieringPolicySelectsNonExemptLRUVictim() {
   auto cache = std::make_shared<MetadataCache>();
 
-  PutCacheEntry(*cache, "oldest");    // LRU
-  PutCacheEntry(*cache, "exempt");    // should be skipped
-  PutCacheEntry(*cache, "newest");    // most recently used
+  PutCacheEntry(*cache, "oldest"); // LRU
+  PutCacheEntry(*cache, "exempt"); // should be skipped
+  PutCacheEntry(*cache, "newest"); // most recently used
 
   // Touch newest to move it to MRU position.
   (void)cache->Get(MakeID("newest"));
@@ -296,8 +294,9 @@ void TestTieringPolicySelectsNonExemptLRUVictim() {
   // Mark "exempt" as not evictable.
   auto is_evictable = [](const PayloadID& id) -> bool { return id.value() != "exempt"; };
 
-  auto    policy = TieringPolicy(cache, is_evictable);
-  PressureState state; SetPressure(state);
+  auto          policy = TieringPolicy(cache, is_evictable);
+  PressureState state;
+  SetPressure(state);
   const auto victim = policy.ChooseRamEviction(state);
 
   assert(victim.has_value());
@@ -309,8 +308,9 @@ void TestTieringPolicyNoFilterStillWorks() {
   auto cache = std::make_shared<MetadataCache>();
   PutCacheEntry(*cache, "only");
 
-  auto    policy = TieringPolicy(cache);
-  PressureState state; SetPressure(state);
+  auto          policy = TieringPolicy(cache);
+  PressureState state;
+  SetPressure(state);
   const auto victim = policy.ChooseRamEviction(state);
 
   assert(victim.has_value());

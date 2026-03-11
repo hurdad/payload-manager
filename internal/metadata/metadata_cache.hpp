@@ -26,8 +26,8 @@ class MetadataCache {
   std::optional<payload::manager::v1::PayloadID> GetLeastRecentlyUsedId() const;
 
   // Returns the LRU id for which include(id) returns true, skipping exempt entries.
-  std::optional<payload::manager::v1::PayloadID>
-  GetLeastRecentlyUsedId(const std::function<bool(const payload::manager::v1::PayloadID&)>& include) const;
+  std::optional<payload::manager::v1::PayloadID> GetLeastRecentlyUsedId(
+      const std::function<bool(const payload::manager::v1::PayloadID&)>& include) const;
 
   void Remove(const payload::manager::v1::PayloadID& id);
 
