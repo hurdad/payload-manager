@@ -24,6 +24,10 @@ static constexpr const char* UPDATE_PAYLOAD =
 
 static constexpr const char* DELETE_PAYLOAD = "DELETE FROM payload WHERE id=?;";
 
+static constexpr const char* LIST_EXPIRED_PAYLOADS =
+    "SELECT id,tier,state,size_bytes,version,expires_at_ms"
+    " FROM payload WHERE expires_at_ms > 0 AND expires_at_ms <= ?;";
+
 // metadata
 
 static constexpr const char* UPSERT_METADATA =

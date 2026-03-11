@@ -213,7 +213,7 @@ void PayloadManager::PopulateLocation(PayloadDescriptor* descriptor) {
   }
 }
 
-PayloadDescriptor PayloadManager::Allocate(uint64_t size_bytes, Tier preferred) {
+PayloadDescriptor PayloadManager::Allocate(uint64_t size_bytes, Tier preferred, uint64_t ttl_ms) {
   PayloadDescriptor desc;
   *desc.mutable_payload_id() = payload::util::ToProto(payload::util::GenerateUUID());
   desc.set_tier(preferred);
@@ -253,11 +253,33 @@ PayloadDescriptor PayloadManager::Allocate(uint64_t size_bytes, Tier preferred) 
     }
   }
 
+  auto record = ToPayloadRecord(desc);
+  if (ttl_ms > 0) {
+    record.expires_at_ms = payload::util::ToUnixMillis(payload::util::Now()) + ttl_ms;
+  }
   auto tx = repository_->Begin();
-  ThrowIfDbError(repository_->InsertPayload(*tx, ToPayloadRecord(desc)), "allocate payload");
+  ThrowIfDbError(repository_->InsertPayload(*tx, record), "allocate payload");
   tx->Commit();
   CacheSnapshot(desc);
   return desc;
+}
+
+void PayloadManager::ExpireStale() {
+  const uint64_t now_ms = payload::util::ToUnixMillis(payload::util::Now());
+
+  auto       tx      = repository_->Begin();
+  const auto expired = repository_->ListExpiredPayloads(*tx, now_ms);
+  tx->Commit();
+
+  for (const auto& record : expired) {
+    PayloadID id;
+    id.set_value(record.id);
+    try {
+      Delete(id, /*force=*/true);
+    } catch (const std::exception&) {
+      // Best effort; move on to next expired payload.
+    }
+  }
 }
 
 PayloadDescriptor PayloadManager::Commit(const PayloadID& id) {

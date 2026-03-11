@@ -22,6 +22,7 @@ payload_manager_add_unit_test(payload_manager_unit_metadata_cache metadata_cache
 payload_manager_add_unit_test(payload_manager_unit_tiering_policy tiering_policy_test.cpp "tiering")
 payload_manager_add_unit_test(payload_manager_unit_stream_service_concurrency stream_service_concurrency_test.cpp "stream")
 payload_manager_add_unit_test(payload_manager_unit_critical_fixes payload_manager_critical_fixes_test.cpp "payload")
+payload_manager_add_unit_test(payload_manager_unit_ttl payload_manager_ttl_test.cpp "payload;ttl")
 
 if(TARGET payload_manager::client)
   payload_manager_add_unit_test(payload_manager_unit_client_payload_manager_client client/payload_manager_client_test.cpp "client")

@@ -100,6 +100,9 @@ class LoggingRepository final : public payload::db::Repository {
   payload::db::Result DeletePayload(payload::db::Transaction& t, const std::string& id) override {
     return inner_->DeletePayload(Unwrap(t), id);
   }
+  std::vector<payload::db::model::PayloadRecord> ListExpiredPayloads(payload::db::Transaction& t, uint64_t now_ms) override {
+    return inner_->ListExpiredPayloads(Unwrap(t), now_ms);
+  }
   payload::db::Result UpsertMetadata(payload::db::Transaction& t, const payload::db::model::MetadataRecord& r) override {
     return inner_->UpsertMetadata(Unwrap(t), r);
   }

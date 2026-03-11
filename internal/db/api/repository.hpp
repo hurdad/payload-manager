@@ -55,6 +55,8 @@ class Repository {
 
   virtual Result DeletePayload(Transaction&, const std::string& id) = 0;
 
+  virtual std::vector<model::PayloadRecord> ListExpiredPayloads(Transaction&, uint64_t now_ms) = 0;
+
   // ---------------------------------------------------------------------
   // Metadata (current snapshot)
   // ---------------------------------------------------------------------

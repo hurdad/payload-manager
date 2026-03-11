@@ -2,6 +2,7 @@
 
 #include <chrono>
 
+#include "internal/core/payload_manager.hpp"
 #include "payload/manager/v1.hpp"
 
 namespace payload::tiering {
@@ -44,6 +45,11 @@ void TieringManager::Loop() {
       task.id          = *victim;
       task.target_tier = payload::manager::v1::TIER_RAM;
       scheduler_->Enqueue(task);
+    }
+
+    try {
+      manager_->ExpireStale();
+    } catch (const std::exception&) {
     }
 
     std::this_thread::sleep_for(100ms);

@@ -33,7 +33,8 @@ class PayloadManager {
                  std::shared_ptr<payload::metadata::MetadataCache> metadata, std::shared_ptr<payload::lineage::LineageGraph> lineage,
                  std::shared_ptr<payload::db::Repository> repository);
 
-  payload::manager::v1::PayloadDescriptor Allocate(uint64_t size_bytes, payload::manager::v1::Tier preferred);
+  payload::manager::v1::PayloadDescriptor Allocate(uint64_t size_bytes, payload::manager::v1::Tier preferred, uint64_t ttl_ms = 0);
+  void                                    ExpireStale();
   payload::manager::v1::PayloadDescriptor Commit(const payload::manager::v1::PayloadID& id);
   void                                    Delete(const payload::manager::v1::PayloadID& id, bool force);
 

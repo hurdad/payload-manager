@@ -21,6 +21,7 @@ class MemoryRepository final : public db::Repository {
   std::vector<model::PayloadRecord>   ListPayloads(Transaction&) override;
   Result                              UpdatePayload(Transaction&, const model::PayloadRecord&) override;
   Result                              DeletePayload(Transaction&, const std::string&) override;
+  std::vector<model::PayloadRecord>   ListExpiredPayloads(Transaction&, uint64_t now_ms) override;
 
   Result                               UpsertMetadata(Transaction&, const model::MetadataRecord&) override;
   std::optional<model::MetadataRecord> GetMetadata(Transaction&, const std::string&) override;

@@ -61,6 +61,10 @@ class HookedRepository : public Repository {
     return inner_.DeletePayload(tx, id);
   }
 
+  std::vector<payload::db::model::PayloadRecord> ListExpiredPayloads(Transaction& tx, uint64_t now_ms) override {
+    return inner_.ListExpiredPayloads(tx, now_ms);
+  }
+
   Result UpsertMetadata(Transaction& tx, const payload::db::model::MetadataRecord& record) override {
     return inner_.UpsertMetadata(tx, record);
   }

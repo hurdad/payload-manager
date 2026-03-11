@@ -71,6 +71,16 @@ Result MemoryRepository::DeletePayload(Transaction& t, const std::string& id) {
   return Result::Ok();
 }
 
+std::vector<model::PayloadRecord> MemoryRepository::ListExpiredPayloads(Transaction& t, uint64_t now_ms) {
+  std::vector<model::PayloadRecord> out;
+  for (const auto& [_, record] : TX(t).View().payloads) {
+    if (record.expires_at_ms > 0 && record.expires_at_ms <= now_ms) {
+      out.push_back(record);
+    }
+  }
+  return out;
+}
+
 Result MemoryRepository::UpsertMetadata(Transaction& t, const model::MetadataRecord& r) {
   TX(t).Mutable().metadata[r.id] = r;
   return Result::Ok();
