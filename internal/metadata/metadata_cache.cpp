@@ -100,6 +100,20 @@ std::optional<PayloadID> MetadataCache::GetLeastRecentlyUsedId() const {
   return id;
 }
 
+std::optional<PayloadID> MetadataCache::GetLeastRecentlyUsedId(const std::function<bool(const PayloadID&)>& include) const {
+  std::shared_lock lock(mutex_);
+
+  for (const auto& key : recency_) {
+    PayloadID id;
+    id.set_value(key);
+    if (include(id)) {
+      return id;
+    }
+  }
+
+  return std::nullopt;
+}
+
 // ------------------------------------------------------------
 // Remove
 // ------------------------------------------------------------

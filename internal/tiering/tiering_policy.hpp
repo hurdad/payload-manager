@@ -1,5 +1,6 @@
 #pragma once
 
+#include <functional>
 #include <optional>
 
 #include "payload/manager/core/v1/id.pb.h"
@@ -17,14 +18,17 @@ namespace payload::tiering {
 */
 class TieringPolicy {
  public:
-  explicit TieringPolicy(std::shared_ptr<payload::metadata::MetadataCache> cache);
+  // is_evictable: returns true if the given payload may be chosen as a victim.
+  TieringPolicy(std::shared_ptr<payload::metadata::MetadataCache>                        cache,
+                std::function<bool(const payload::manager::v1::PayloadID&)> is_evictable = {});
 
   std::optional<payload::manager::v1::PayloadID> ChooseRamEviction(const PressureState& state);
 
   std::optional<payload::manager::v1::PayloadID> ChooseGpuEviction(const PressureState& state);
 
  private:
-  std::shared_ptr<payload::metadata::MetadataCache> cache_;
+  std::shared_ptr<payload::metadata::MetadataCache>              cache_;
+  std::function<bool(const payload::manager::v1::PayloadID&)> is_evictable_;
 };
 
 } // namespace payload::tiering

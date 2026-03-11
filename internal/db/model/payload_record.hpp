@@ -31,6 +31,15 @@ struct PayloadRecord {
 
   // Optional expiration (0 = none)
   uint64_t expires_at_ms = 0;
+
+  // If true, payload is never automatically evicted or expired.
+  bool persist = false;
+
+  // Advisory eviction priority (EvictionPriority enum; 0 = UNSPECIFIED = NORMAL).
+  int eviction_priority = 0;
+
+  // Preferred tier to spill into when evicted (Tier enum; 0 = UNSPECIFIED → TIER_DISK).
+  int spill_target = 0;
 };
 
 } // namespace payload::db::model

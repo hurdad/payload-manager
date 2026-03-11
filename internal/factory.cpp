@@ -39,10 +39,18 @@ using namespace payload;
 namespace {
 
 #if PAYLOAD_DB_SQLITE
+static void TryExecSqlite(const std::shared_ptr<db::sqlite::SqliteDB>& db, const std::string& sql) {
+  try {
+    db->Exec(sql);
+  } catch (...) {
+  }
+}
+
 void BootstrapSqliteSchema(const std::shared_ptr<db::sqlite::SqliteDB>& sqlite_db) {
   static const std::vector<std::string> kBootstrapSql = {
       "CREATE TABLE IF NOT EXISTS payload (id TEXT PRIMARY KEY, tier INTEGER NOT NULL, state INTEGER NOT NULL, size_bytes INTEGER NOT NULL, version "
-      "INTEGER NOT NULL, expires_at_ms INTEGER);",
+      "INTEGER NOT NULL, expires_at_ms INTEGER, persist INTEGER NOT NULL DEFAULT 0, eviction_priority INTEGER NOT NULL DEFAULT 0, spill_target "
+      "INTEGER NOT NULL DEFAULT 0);",
       "CREATE TABLE IF NOT EXISTS payload_metadata (id TEXT PRIMARY KEY, json TEXT NOT NULL, schema TEXT, updated_at_ms INTEGER NOT NULL, FOREIGN "
       "KEY(id) REFERENCES payload(id) ON DELETE CASCADE);",
       "CREATE TABLE IF NOT EXISTS payload_lineage (parent_id TEXT NOT NULL, child_id TEXT NOT NULL, operation TEXT, role TEXT, parameters TEXT, "
@@ -61,6 +69,11 @@ void BootstrapSqliteSchema(const std::shared_ptr<db::sqlite::SqliteDB>& sqlite_d
     sqlite_db->Exec(sql);
   }
 
+  // Migrate existing databases that predate the eviction policy columns.
+  TryExecSqlite(sqlite_db, "ALTER TABLE payload ADD COLUMN persist INTEGER NOT NULL DEFAULT 0;");
+  TryExecSqlite(sqlite_db, "ALTER TABLE payload ADD COLUMN eviction_priority INTEGER NOT NULL DEFAULT 0;");
+  TryExecSqlite(sqlite_db, "ALTER TABLE payload ADD COLUMN spill_target INTEGER NOT NULL DEFAULT 0;");
+
   sqlite_db->Exec("SELECT id,tier,state,size_bytes,version FROM payload LIMIT 1;");
   sqlite_db->Exec("SELECT id,json,schema,updated_at_ms FROM payload_metadata LIMIT 1;");
   sqlite_db->Exec("SELECT parent_id,child_id,operation,role,parameters,created_at_ms FROM payload_lineage LIMIT 1;");
@@ -75,7 +88,12 @@ void BootstrapPostgresSchema(const std::shared_ptr<db::postgres::PgPool>& pool) 
 
   tx.exec(
       "CREATE TABLE IF NOT EXISTS payload (id TEXT PRIMARY KEY, tier SMALLINT NOT NULL, state SMALLINT NOT NULL, size_bytes BIGINT NOT NULL, version "
-      "BIGINT NOT NULL, expires_at_ms BIGINT);");
+      "BIGINT NOT NULL, expires_at_ms BIGINT, persist SMALLINT NOT NULL DEFAULT 0, eviction_priority SMALLINT NOT NULL DEFAULT 0, spill_target "
+      "SMALLINT NOT NULL DEFAULT 0);");
+  // Migrate existing databases that predate the eviction policy columns.
+  tx.exec("ALTER TABLE payload ADD COLUMN IF NOT EXISTS persist SMALLINT NOT NULL DEFAULT 0;");
+  tx.exec("ALTER TABLE payload ADD COLUMN IF NOT EXISTS eviction_priority SMALLINT NOT NULL DEFAULT 0;");
+  tx.exec("ALTER TABLE payload ADD COLUMN IF NOT EXISTS spill_target SMALLINT NOT NULL DEFAULT 0;");
   tx.exec(
       "CREATE TABLE IF NOT EXISTS payload_metadata (id TEXT PRIMARY KEY REFERENCES payload(id) ON DELETE CASCADE, json JSONB NOT NULL, schema TEXT, "
       "updated_at_ms BIGINT NOT NULL);");

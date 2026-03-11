@@ -36,7 +36,7 @@ void TieringManager::Loop() {
     if (auto victim = policy_->ChooseRamEviction(*state_)) {
       spill::SpillTask task;
       task.id          = *victim;
-      task.target_tier = payload::manager::v1::TIER_DISK;
+      task.target_tier = manager_->GetSpillTarget(*victim);
       scheduler_->Enqueue(task);
     }
 

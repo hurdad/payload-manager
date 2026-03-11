@@ -70,8 +70,10 @@ Result SqliteRepository::Translate(sqlite3* db, int rc) {
 Result SqliteRepository::InsertPayload(Transaction& t, const model::PayloadRecord& r) {
   auto* db = TX(t).Handle();
 
-  const char*   sql = "INSERT INTO payload(id,tier,state,size_bytes,version,expires_at_ms) VALUES(?,?,?,?,?,?);";
-  sqlite3_stmt* st  = nullptr;
+  const char* sql =
+      "INSERT INTO payload(id,tier,state,size_bytes,version,expires_at_ms,persist,eviction_priority,spill_target)"
+      " VALUES(?,?,?,?,?,?,?,?,?);";
+  sqlite3_stmt* st = nullptr;
   if (sqlite3_prepare_v2(db, sql, -1, &st, nullptr) != SQLITE_OK) return Result::Err(ErrorCode::InternalError, sqlite3_errmsg(db));
 
   BindText(st, 1, r.id);
@@ -84,6 +86,9 @@ Result SqliteRepository::InsertPayload(Transaction& t, const model::PayloadRecor
   } else {
     sqlite3_bind_null(st, 6);
   }
+  BindI32(st, 7, r.persist ? 1 : 0);
+  BindI32(st, 8, r.eviction_priority);
+  BindI32(st, 9, r.spill_target);
 
   int rc = sqlite3_step(st);
   sqlite3_finalize(st);
@@ -94,7 +99,7 @@ Result SqliteRepository::InsertPayload(Transaction& t, const model::PayloadRecor
 std::optional<model::PayloadRecord> SqliteRepository::GetPayload(Transaction& t, const std::string& id) {
   auto* db = TX(t).Handle();
 
-  const char*   sql = "SELECT id,tier,state,size_bytes,version,expires_at_ms FROM payload WHERE id=?;";
+  const char*   sql = "SELECT id,tier,state,size_bytes,version,expires_at_ms,persist,eviction_priority,spill_target FROM payload WHERE id=?;";
   sqlite3_stmt* st  = nullptr;
   if (sqlite3_prepare_v2(db, sql, -1, &st, nullptr) != SQLITE_OK) return std::nullopt;
 
@@ -107,12 +112,15 @@ std::optional<model::PayloadRecord> SqliteRepository::GetPayload(Transaction& t,
   }
 
   model::PayloadRecord r;
-  r.id            = ColText(st, 0);
-  r.tier          = static_cast<payload::manager::v1::Tier>(ColI32(st, 1));
-  r.state         = static_cast<payload::manager::v1::PayloadState>(ColI32(st, 2));
-  r.size_bytes    = ColU64(st, 3);
-  r.version       = ColU64(st, 4);
-  r.expires_at_ms = sqlite3_column_type(st, 5) != SQLITE_NULL ? ColU64(st, 5) : 0;
+  r.id                = ColText(st, 0);
+  r.tier              = static_cast<payload::manager::v1::Tier>(ColI32(st, 1));
+  r.state             = static_cast<payload::manager::v1::PayloadState>(ColI32(st, 2));
+  r.size_bytes        = ColU64(st, 3);
+  r.version           = ColU64(st, 4);
+  r.expires_at_ms     = sqlite3_column_type(st, 5) != SQLITE_NULL ? ColU64(st, 5) : 0;
+  r.persist           = ColI32(st, 6) != 0;
+  r.eviction_priority = ColI32(st, 7);
+  r.spill_target      = ColI32(st, 8);
 
   sqlite3_finalize(st);
   return r;
@@ -121,19 +129,22 @@ std::optional<model::PayloadRecord> SqliteRepository::GetPayload(Transaction& t,
 std::vector<model::PayloadRecord> SqliteRepository::ListPayloads(Transaction& t) {
   auto* db = TX(t).Handle();
 
-  const char*   sql = "SELECT id,tier,state,size_bytes,version,expires_at_ms FROM payload;";
+  const char*   sql = "SELECT id,tier,state,size_bytes,version,expires_at_ms,persist,eviction_priority,spill_target FROM payload;";
   sqlite3_stmt* st  = nullptr;
   if (sqlite3_prepare_v2(db, sql, -1, &st, nullptr) != SQLITE_OK) return {};
 
   std::vector<model::PayloadRecord> records;
   while (sqlite3_step(st) == SQLITE_ROW) {
     model::PayloadRecord r;
-    r.id            = ColText(st, 0);
-    r.tier          = static_cast<payload::manager::v1::Tier>(ColI32(st, 1));
-    r.state         = static_cast<payload::manager::v1::PayloadState>(ColI32(st, 2));
-    r.size_bytes    = ColU64(st, 3);
-    r.version       = ColU64(st, 4);
-    r.expires_at_ms = sqlite3_column_type(st, 5) != SQLITE_NULL ? ColU64(st, 5) : 0;
+    r.id                = ColText(st, 0);
+    r.tier              = static_cast<payload::manager::v1::Tier>(ColI32(st, 1));
+    r.state             = static_cast<payload::manager::v1::PayloadState>(ColI32(st, 2));
+    r.size_bytes        = ColU64(st, 3);
+    r.version           = ColU64(st, 4);
+    r.expires_at_ms     = sqlite3_column_type(st, 5) != SQLITE_NULL ? ColU64(st, 5) : 0;
+    r.persist           = ColI32(st, 6) != 0;
+    r.eviction_priority = ColI32(st, 7);
+    r.spill_target      = ColI32(st, 8);
     records.push_back(std::move(r));
   }
 
@@ -144,8 +155,9 @@ std::vector<model::PayloadRecord> SqliteRepository::ListPayloads(Transaction& t)
 Result SqliteRepository::UpdatePayload(Transaction& t, const model::PayloadRecord& r) {
   auto* db = TX(t).Handle();
 
-  const char*   sql = "UPDATE payload SET tier=?,state=?,size_bytes=?,version=?,expires_at_ms=? WHERE id=?;";
-  sqlite3_stmt* st  = nullptr;
+  const char* sql =
+      "UPDATE payload SET tier=?,state=?,size_bytes=?,version=?,expires_at_ms=?,persist=?,eviction_priority=?,spill_target=? WHERE id=?;";
+  sqlite3_stmt* st = nullptr;
   if (sqlite3_prepare_v2(db, sql, -1, &st, nullptr) != SQLITE_OK) return Result::Err(ErrorCode::InternalError, sqlite3_errmsg(db));
 
   BindI32(st, 1, static_cast<int>(r.tier));
@@ -157,7 +169,10 @@ Result SqliteRepository::UpdatePayload(Transaction& t, const model::PayloadRecor
   } else {
     sqlite3_bind_null(st, 5);
   }
-  BindText(st, 6, r.id);
+  BindI32(st, 6, r.persist ? 1 : 0);
+  BindI32(st, 7, r.eviction_priority);
+  BindI32(st, 8, r.spill_target);
+  BindText(st, 9, r.id);
 
   int rc = sqlite3_step(st);
   sqlite3_finalize(st);
@@ -168,8 +183,10 @@ Result SqliteRepository::UpdatePayload(Transaction& t, const model::PayloadRecor
 std::vector<model::PayloadRecord> SqliteRepository::ListExpiredPayloads(Transaction& t, uint64_t now_ms) {
   auto* db = TX(t).Handle();
 
-  const char*   sql = "SELECT id,tier,state,size_bytes,version,expires_at_ms FROM payload WHERE expires_at_ms > 0 AND expires_at_ms <= ?;";
-  sqlite3_stmt* st  = nullptr;
+  const char* sql =
+      "SELECT id,tier,state,size_bytes,version,expires_at_ms,persist,eviction_priority,spill_target"
+      " FROM payload WHERE expires_at_ms > 0 AND expires_at_ms <= ?;";
+  sqlite3_stmt* st = nullptr;
   if (sqlite3_prepare_v2(db, sql, -1, &st, nullptr) != SQLITE_OK) return {};
 
   BindU64(st, 1, now_ms);
@@ -177,12 +194,15 @@ std::vector<model::PayloadRecord> SqliteRepository::ListExpiredPayloads(Transact
   std::vector<model::PayloadRecord> records;
   while (sqlite3_step(st) == SQLITE_ROW) {
     model::PayloadRecord r;
-    r.id            = ColText(st, 0);
-    r.tier          = static_cast<payload::manager::v1::Tier>(ColI32(st, 1));
-    r.state         = static_cast<payload::manager::v1::PayloadState>(ColI32(st, 2));
-    r.size_bytes    = ColU64(st, 3);
-    r.version       = ColU64(st, 4);
-    r.expires_at_ms = ColU64(st, 5);
+    r.id                = ColText(st, 0);
+    r.tier              = static_cast<payload::manager::v1::Tier>(ColI32(st, 1));
+    r.state             = static_cast<payload::manager::v1::PayloadState>(ColI32(st, 2));
+    r.size_bytes        = ColU64(st, 3);
+    r.version           = ColU64(st, 4);
+    r.expires_at_ms     = ColU64(st, 5);
+    r.persist           = ColI32(st, 6) != 0;
+    r.eviction_priority = ColI32(st, 7);
+    r.spill_target      = ColI32(st, 8);
     records.push_back(std::move(r));
   }
 

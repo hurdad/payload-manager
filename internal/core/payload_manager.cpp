@@ -6,6 +6,7 @@
 #include "internal/db/model/payload_record.hpp"
 #include "internal/lease/lease_manager.hpp"
 #include "internal/storage/storage_backend.hpp"
+#include "payload/manager/core/v1/policy.pb.h"
 #if PAYLOAD_MANAGER_ARROW_CUDA
 #include "internal/storage/gpu/cuda_arrow_store.hpp"
 #endif
@@ -213,7 +214,8 @@ void PayloadManager::PopulateLocation(PayloadDescriptor* descriptor) {
   }
 }
 
-PayloadDescriptor PayloadManager::Allocate(uint64_t size_bytes, Tier preferred, uint64_t ttl_ms) {
+PayloadDescriptor PayloadManager::Allocate(uint64_t size_bytes, Tier preferred, uint64_t ttl_ms, bool persist,
+                                           const payload::manager::core::v1::EvictionPolicy& eviction_policy) {
   PayloadDescriptor desc;
   *desc.mutable_payload_id() = payload::util::ToProto(payload::util::GenerateUUID());
   desc.set_tier(preferred);
@@ -253,13 +255,38 @@ PayloadDescriptor PayloadManager::Allocate(uint64_t size_bytes, Tier preferred, 
     }
   }
 
-  auto record = ToPayloadRecord(desc);
-  if (ttl_ms > 0) {
+  // Determine effective eviction policy.
+  using payload::manager::core::v1::EVICTION_PRIORITY_NEVER;
+  const bool never_evict = persist || eviction_policy.priority() == EVICTION_PRIORITY_NEVER;
+
+  auto record             = ToPayloadRecord(desc);
+  record.persist          = persist;
+  record.eviction_priority = static_cast<int>(eviction_policy.priority());
+
+  // Determine spill target: use policy hint if set, otherwise fall back to TIER_DISK.
+  const Tier spill_tier =
+      (eviction_policy.spill_target() != TIER_UNSPECIFIED) ? eviction_policy.spill_target() : TIER_DISK;
+  record.spill_target = static_cast<int>(spill_tier);
+
+  // persist overrides TTL: a persisted payload never auto-expires.
+  if (!never_evict && ttl_ms > 0) {
     record.expires_at_ms = payload::util::ToUnixMillis(payload::util::Now()) + ttl_ms;
   }
+
   auto tx = repository_->Begin();
   ThrowIfDbError(repository_->InsertPayload(*tx, record), "allocate payload");
   tx->Commit();
+
+  const auto key = Key(desc.payload_id());
+  if (never_evict) {
+    std::lock_guard<std::mutex> lock(no_evict_guard_);
+    no_evict_ids_.insert(key);
+  }
+  {
+    std::lock_guard<std::mutex> lock(spill_targets_guard_);
+    spill_targets_[key] = spill_tier;
+  }
+
   CacheSnapshot(desc);
   return desc;
 }
@@ -337,6 +364,16 @@ void PayloadManager::Delete(const PayloadID& id, bool force) {
     {
       std::lock_guard<std::mutex> pins_lock(pins_guard_);
       pins_.erase(Key(id));
+    }
+
+    {
+      std::lock_guard<std::mutex> lock(no_evict_guard_);
+      no_evict_ids_.erase(Key(id));
+    }
+
+    {
+      std::lock_guard<std::mutex> lock(spill_targets_guard_);
+      spill_targets_.erase(Key(id));
     }
   } // payload_lock released
 
@@ -477,8 +514,12 @@ void PayloadManager::HydrateCaches() {
   const auto records = repository_->ListPayloads(*tx);
   tx->Commit();
 
-  std::unique_lock lock(snapshot_cache_mutex_);
-  snapshot_cache_.clear();
+  using payload::manager::core::v1::EVICTION_PRIORITY_NEVER;
+
+  std::unordered_set<std::string>                      new_no_evict;
+  std::unordered_map<std::string, Tier>                new_spill_targets;
+  std::unordered_map<std::string, PayloadDescriptor>   new_snapshot_cache;
+
   for (const auto& record : records) {
     auto descriptor = ToPayloadDescriptor(record);
     try {
@@ -486,7 +527,27 @@ void PayloadManager::HydrateCaches() {
     } catch (const std::exception&) {
       // Ignore hydration failures for missing/evicted bytes; descriptor will be rebuilt on demand.
     }
-    snapshot_cache_[descriptor.payload_id().value()] = descriptor;
+    new_snapshot_cache[descriptor.payload_id().value()] = descriptor;
+
+    if (record.persist || record.eviction_priority == static_cast<int>(EVICTION_PRIORITY_NEVER)) {
+      new_no_evict.insert(record.id);
+    }
+
+    new_spill_targets[record.id] =
+        (record.spill_target != 0) ? static_cast<Tier>(record.spill_target) : TIER_DISK;
+  }
+
+  {
+    std::unique_lock lock(snapshot_cache_mutex_);
+    snapshot_cache_ = std::move(new_snapshot_cache);
+  }
+  {
+    std::lock_guard<std::mutex> lock(no_evict_guard_);
+    no_evict_ids_ = std::move(new_no_evict);
+  }
+  {
+    std::lock_guard<std::mutex> lock(spill_targets_guard_);
+    spill_targets_ = std::move(new_spill_targets);
   }
 }
 
@@ -539,6 +600,17 @@ void PayloadManager::ExecuteSpill(const PayloadID& id, Tier target, bool fsync) 
   auto descriptor = ToPayloadDescriptor(*record);
   PopulateLocation(&descriptor);
   CacheSnapshot(descriptor);
+}
+
+bool PayloadManager::IsEvictionExempt(const PayloadID& id) const {
+  std::lock_guard<std::mutex> lock(no_evict_guard_);
+  return no_evict_ids_.count(Key(id)) > 0;
+}
+
+Tier PayloadManager::GetSpillTarget(const PayloadID& id) const {
+  std::lock_guard<std::mutex> lock(spill_targets_guard_);
+  const auto                  it = spill_targets_.find(Key(id));
+  return (it != spill_targets_.end()) ? it->second : TIER_DISK;
 }
 
 } // namespace payload::core

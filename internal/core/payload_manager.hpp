@@ -6,11 +6,13 @@
 #include <shared_mutex>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 
 #include "internal/db/api/repository.hpp"
 #include "internal/storage/storage_factory.hpp"
 #include "payload/manager/core/v1/id.pb.h"
 #include "payload/manager/core/v1/placement.pb.h"
+#include "payload/manager/core/v1/policy.pb.h"
 #include "payload/manager/core/v1/types.pb.h"
 #include "payload/manager/runtime/v1/lease.pb.h"
 #include "payload/manager/v1.hpp"
@@ -33,10 +35,15 @@ class PayloadManager {
                  std::shared_ptr<payload::metadata::MetadataCache> metadata, std::shared_ptr<payload::lineage::LineageGraph> lineage,
                  std::shared_ptr<payload::db::Repository> repository);
 
-  payload::manager::v1::PayloadDescriptor Allocate(uint64_t size_bytes, payload::manager::v1::Tier preferred, uint64_t ttl_ms = 0);
+  payload::manager::v1::PayloadDescriptor Allocate(uint64_t size_bytes, payload::manager::v1::Tier preferred, uint64_t ttl_ms = 0,
+                                                   bool persist = false,
+                                                   const payload::manager::core::v1::EvictionPolicy& eviction_policy = {});
   void                                    ExpireStale();
   payload::manager::v1::PayloadDescriptor Commit(const payload::manager::v1::PayloadID& id);
   void                                    Delete(const payload::manager::v1::PayloadID& id, bool force);
+
+  bool                         IsEvictionExempt(const payload::manager::v1::PayloadID& id) const;
+  payload::manager::v1::Tier   GetSpillTarget(const payload::manager::v1::PayloadID& id) const;
 
   payload::manager::v1::PayloadDescriptor        ResolveSnapshot(const payload::manager::v1::PayloadID& id);
   payload::manager::v1::AcquireReadLeaseResponse AcquireReadLease(const payload::manager::v1::PayloadID& id, payload::manager::v1::Tier min_tier,
@@ -86,6 +93,14 @@ class PayloadManager {
   std::unordered_map<std::string, PinState> pins_;
 
   bool IsPinnedLocked(const std::string& key, uint64_t now_ms);
+
+  // IDs that must never be automatically evicted (persist=true or EVICTION_PRIORITY_NEVER).
+  mutable std::mutex                        no_evict_guard_;
+  std::unordered_set<std::string>           no_evict_ids_;
+
+  // Preferred spill tier per payload (default TIER_DISK when absent).
+  mutable std::mutex                              spill_targets_guard_;
+  std::unordered_map<std::string, payload::manager::v1::Tier> spill_targets_;
 };
 
 } // namespace payload::core

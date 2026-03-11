@@ -81,12 +81,9 @@ CatalogService::CatalogService(ServiceContext ctx) : ctx_(std::move(ctx)) {
 
 AllocatePayloadResponse CatalogService::Allocate(const AllocatePayloadRequest& req) {
   return ObserveRpc("CatalogService.Allocate", nullptr, [&] {
-    if (req.persist() || req.has_eviction_policy()) {
-      throw payload::util::InvalidState("allocate payload: persist and eviction_policy are not implemented; omit these fields and retry");
-    }
-
     AllocatePayloadResponse resp;
-    *resp.mutable_payload_descriptor() = ctx_.manager->Allocate(req.size_bytes(), req.preferred_tier(), req.ttl_ms());
+    *resp.mutable_payload_descriptor() =
+        ctx_.manager->Allocate(req.size_bytes(), req.preferred_tier(), req.ttl_ms(), req.persist(), req.eviction_policy());
     return resp;
   });
 }
