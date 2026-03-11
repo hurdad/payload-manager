@@ -14,23 +14,6 @@ services:
     volumes:
       - postgres-data:/var/lib/postgresql/data
 
-  alloy:
-    image: grafana/alloy:latest
-    restart: unless-stopped
-    command:
-      - run
-      - /etc/alloy/config.alloy
-      - --server.http.listen-addr=0.0.0.0:12345
-      - --storage.path=/var/lib/alloy/data
-    environment:
-      ALLOY_METRICS_BACKEND_OTLP_ENDPOINT: ${ALLOY_METRICS_BACKEND_OTLP_ENDPOINT:-http://metrics-backend:4318/v1/metrics}
-      ALLOY_METRICS_BACKEND_AUTH_HEADER: ${ALLOY_METRICS_BACKEND_AUTH_HEADER:-}
-    volumes:
-      - ./confng/alloy/config.alloy:/etc/alloy/config.alloy:ro
-      - alloy-data:/var/lib/alloy/data
-    ports:
-      - "12345:12345"
-
   payload-manager:
     build:
       context: .
@@ -39,8 +22,6 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-      alloy:
-        condition: service_started
     command: ["./payload-manager", "--config", "/app/conf/runtime-docker-postgres.yaml"]
     ports:
       - "50051:50051"
@@ -51,4 +32,3 @@ services:
 volumes:
   postgres-data:
   payload-data:
-  alloy-data:
