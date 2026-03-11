@@ -40,16 +40,12 @@ static void BenchSpillPipeline(size_t payload_bytes, bool fsync) {
 
   std::vector<payload::manager::v1::PayloadID> ids;
   ids.reserve(total);
-  for (int i = 0; i < total; ++i)
-    ids.push_back(fix.MakeRamPayload(payload_bytes).payload_id());
+  for (int i = 0; i < total; ++i) ids.push_back(fix.MakeRamPayload(payload_bytes).payload_id());
 
-  int idx = 0;
+  int  idx    = 0;
   auto result = TimedRun(
-      std::string("ExecuteSpill (pipeline) fsync=") + (fsync ? "y" : "n"),
-      payload_bytes,
-      iterations,
-      [&] { fix.manager->ExecuteSpill(ids[idx++], TIER_DISK, fsync); },
-      warmup);
+      std::string("ExecuteSpill (pipeline) fsync=") + (fsync ? "y" : "n"), payload_bytes, iterations,
+      [&] { fix.manager->ExecuteSpill(ids[idx++], TIER_DISK, fsync); }, warmup);
 
   PrintResult(result);
 }
@@ -76,11 +72,8 @@ static void BenchRawDiskWrite(size_t payload_bytes, bool fsync) {
   payload::manager::v1::PayloadID id;
   id.set_value("bench0000000000000000");
 
-  auto result = TimedRun(
-      std::string("DiskArrowStore::Write fsync=") + (fsync ? "y" : "n"),
-      payload_bytes,
-      iterations,
-      [&] { store.Write(id, src, fsync); });
+  auto result =
+      TimedRun(std::string("DiskArrowStore::Write fsync=") + (fsync ? "y" : "n"), payload_bytes, iterations, [&] { store.Write(id, src, fsync); });
 
   PrintResult(result);
 
@@ -108,11 +101,10 @@ static void BenchRawDiskRead(size_t payload_bytes) {
 
   const int iterations = IterationsFor(payload_bytes, 128ULL * 1024 * 1024, 500);
 
-  auto result = TimedRun(
-      "DiskArrowStore::Read",
-      payload_bytes,
-      iterations,
-      [&] { auto buf = store.Read(id); (void)buf; });
+  auto result = TimedRun("DiskArrowStore::Read", payload_bytes, iterations, [&] {
+    auto buf = store.Read(id);
+    (void)buf;
+  });
 
   PrintResult(result);
 
@@ -138,13 +130,8 @@ static void BenchPromotePipeline(size_t payload_bytes) {
     ids.push_back(id);
   }
 
-  int idx = 0;
-  auto result = TimedRun(
-      "Promote DISK->RAM (pipeline)",
-      payload_bytes,
-      iterations,
-      [&] { fix.manager->Promote(ids[idx++], TIER_RAM); },
-      warmup);
+  int  idx    = 0;
+  auto result = TimedRun("Promote DISK->RAM (pipeline)", payload_bytes, iterations, [&] { fix.manager->Promote(ids[idx++], TIER_RAM); }, warmup);
 
   PrintResult(result);
 }
@@ -153,24 +140,19 @@ int main() {
   PrintHeader();
 
   std::cout << "\n-- Spill pipeline (application overhead, in-memory copy backend)\n";
-  for (size_t size : {4096UL, 65536UL, 1048576UL, 16777216UL})
-    BenchSpillPipeline(size, false);
+  for (size_t size : {4096UL, 65536UL, 1048576UL, 16777216UL}) BenchSpillPipeline(size, false);
 
   std::cout << "\n-- Promote pipeline (application overhead, in-memory copy backend)\n";
-  for (size_t size : {4096UL, 65536UL, 1048576UL})
-    BenchPromotePipeline(size);
+  for (size_t size : {4096UL, 65536UL, 1048576UL}) BenchPromotePipeline(size);
 
   std::cout << "\n-- Raw DiskArrowStore::Write fsync=n (filesystem throughput)\n";
-  for (size_t size : {4096UL, 65536UL, 1048576UL, 16777216UL})
-    BenchRawDiskWrite(size, false);
+  for (size_t size : {4096UL, 65536UL, 1048576UL, 16777216UL}) BenchRawDiskWrite(size, false);
 
   std::cout << "\n-- Raw DiskArrowStore::Write fsync=y (durable write throughput)\n";
-  for (size_t size : {4096UL, 65536UL, 1048576UL})
-    BenchRawDiskWrite(size, true);
+  for (size_t size : {4096UL, 65536UL, 1048576UL}) BenchRawDiskWrite(size, true);
 
   std::cout << "\n-- Raw DiskArrowStore::Read (filesystem read throughput)\n";
-  for (size_t size : {4096UL, 65536UL, 1048576UL, 16777216UL})
-    BenchRawDiskRead(size);
+  for (size_t size : {4096UL, 65536UL, 1048576UL, 16777216UL}) BenchRawDiskRead(size);
 
   return 0;
 }

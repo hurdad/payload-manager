@@ -25,14 +25,10 @@ static void BenchAllocateCommit(size_t payload_bytes) {
   const int    iterations = IterationsFor(payload_bytes, 64ULL * 1024 * 1024, 5000);
   BenchFixture fix{};
 
-  auto result = TimedRun(
-      "allocate+commit RAM",
-      payload_bytes,
-      iterations,
-      [&] {
-        auto desc = fix.manager->Allocate(payload_bytes, TIER_RAM);
-        fix.manager->Commit(desc.payload_id());
-      });
+  auto result = TimedRun("allocate+commit RAM", payload_bytes, iterations, [&] {
+    auto desc = fix.manager->Allocate(payload_bytes, TIER_RAM);
+    fix.manager->Commit(desc.payload_id());
+  });
 
   PrintResult(result);
 }
@@ -44,11 +40,7 @@ static void BenchAllocateOnly(size_t payload_bytes) {
   const int    iterations = IterationsFor(payload_bytes, 64ULL * 1024 * 1024, 5000);
   BenchFixture fix{};
 
-  auto result = TimedRun(
-      "allocate only RAM (no commit)",
-      payload_bytes,
-      iterations,
-      [&] { fix.manager->Allocate(payload_bytes, TIER_RAM); });
+  auto result = TimedRun("allocate only RAM (no commit)", payload_bytes, iterations, [&] { fix.manager->Allocate(payload_bytes, TIER_RAM); });
 
   PrintResult(result);
 }
@@ -63,15 +55,11 @@ static void BenchAllocateCommitDelete(size_t payload_bytes) {
   const int    iterations = IterationsFor(payload_bytes, 64ULL * 1024 * 1024, 5000);
   BenchFixture fix{};
 
-  auto result = TimedRun(
-      "allocate+commit+delete RAM",
-      payload_bytes,
-      iterations,
-      [&] {
-        auto desc = fix.manager->Allocate(payload_bytes, TIER_RAM);
-        auto committed = fix.manager->Commit(desc.payload_id());
-        fix.manager->Delete(committed.payload_id(), /*force=*/true);
-      });
+  auto result = TimedRun("allocate+commit+delete RAM", payload_bytes, iterations, [&] {
+    auto desc      = fix.manager->Allocate(payload_bytes, TIER_RAM);
+    auto committed = fix.manager->Commit(desc.payload_id());
+    fix.manager->Delete(committed.payload_id(), /*force=*/true);
+  });
 
   PrintResult(result);
 }
@@ -79,18 +67,15 @@ static void BenchAllocateCommitDelete(size_t payload_bytes) {
 int main() {
   PrintHeader();
 
-  for (size_t size : {256UL, 4096UL, 65536UL, 1048576UL, 16777216UL})
-    BenchAllocateCommit(size);
+  for (size_t size : {256UL, 4096UL, 65536UL, 1048576UL, 16777216UL}) BenchAllocateCommit(size);
 
   std::cout << "\n";
 
-  for (size_t size : {256UL, 4096UL, 65536UL, 1048576UL})
-    BenchAllocateOnly(size);
+  for (size_t size : {256UL, 4096UL, 65536UL, 1048576UL}) BenchAllocateOnly(size);
 
   std::cout << "\n";
 
-  for (size_t size : {256UL, 4096UL, 65536UL})
-    BenchAllocateCommitDelete(size);
+  for (size_t size : {256UL, 4096UL, 65536UL}) BenchAllocateCommitDelete(size);
 
   return 0;
 }

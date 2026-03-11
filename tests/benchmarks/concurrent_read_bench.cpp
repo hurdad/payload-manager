@@ -16,13 +16,13 @@
      - Models: concurrent GPU/CPU consumers reading the same payload buffer
 */
 
+#include <arrow/buffer.h>
+
 #include <atomic>
 #include <iostream>
 #include <memory>
 #include <thread>
 #include <vector>
-
-#include <arrow/buffer.h>
 
 #include "common/bench_fixture.hpp"
 #include "internal/storage/ram/ram_arrow_store.hpp"
@@ -51,8 +51,7 @@ static void BenchConcurrentSnapshotResolve(size_t payload_bytes, int n_threads) 
   threads.reserve(n_threads);
   for (int t = 0; t < n_threads; ++t) {
     threads.emplace_back([&] {
-      for (int i = 0; i < reads_per_thread; ++i)
-        fix.manager->ResolveSnapshot(id);
+      for (int i = 0; i < reads_per_thread; ++i) fix.manager->ResolveSnapshot(id);
     });
   }
   for (auto& th : threads) th.join();
@@ -60,8 +59,7 @@ static void BenchConcurrentSnapshotResolve(size_t payload_bytes, int n_threads) 
   auto t1 = std::chrono::steady_clock::now();
 
   int    total_ops = n_threads * reads_per_thread;
-  double total_ns  = static_cast<double>(
-      std::chrono::duration_cast<std::chrono::nanoseconds>(t1 - t0).count());
+  double total_ns  = static_cast<double>(std::chrono::duration_cast<std::chrono::nanoseconds>(t1 - t0).count());
 
   BenchResult r;
   r.name          = "ResolveSnapshot threads=" + std::to_string(n_threads);
@@ -102,8 +100,7 @@ static void BenchConcurrentRamRead(size_t payload_bytes, int n_threads) {
   auto t1 = std::chrono::steady_clock::now();
 
   int    total_ops = n_threads * reads_per_thread;
-  double total_ns  = static_cast<double>(
-      std::chrono::duration_cast<std::chrono::nanoseconds>(t1 - t0).count());
+  double total_ns  = static_cast<double>(std::chrono::duration_cast<std::chrono::nanoseconds>(t1 - t0).count());
 
   BenchResult r;
   r.name          = "RamStore::Read threads=" + std::to_string(n_threads);
@@ -119,12 +116,10 @@ int main() {
   const size_t payload_bytes = 1048576; // 1 MB — large enough that lock overhead is visible
 
   std::cout << "-- ResolveSnapshot (snapshot_cache_mutex shared lock)\n";
-  for (int threads : {1, 2, 4, 8, 16})
-    BenchConcurrentSnapshotResolve(payload_bytes, threads);
+  for (int threads : {1, 2, 4, 8, 16}) BenchConcurrentSnapshotResolve(payload_bytes, threads);
 
   std::cout << "\n-- RamArrowStore::Read (ram store shared_mutex)\n";
-  for (int threads : {1, 2, 4, 8, 16})
-    BenchConcurrentRamRead(payload_bytes, threads);
+  for (int threads : {1, 2, 4, 8, 16}) BenchConcurrentRamRead(payload_bytes, threads);
 
   return 0;
 }
