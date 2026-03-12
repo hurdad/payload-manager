@@ -364,8 +364,7 @@ void PayloadManager::Delete(const PayloadID& id, bool force) {
         storage_it->second->Remove(id);
       } catch (const std::exception& e) {
         PAYLOAD_LOG_WARN("delete payload: storage removal failed after DB commit (orphaned storage bytes)",
-                         {payload::observability::StringField("payload_id", Key(id)),
-                          payload::observability::StringField("error", e.what())});
+                         {payload::observability::StringField("payload_id", Key(id)), payload::observability::StringField("error", e.what())});
       }
     }
 

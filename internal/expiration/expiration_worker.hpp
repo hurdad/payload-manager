@@ -21,8 +21,7 @@ namespace payload::expiration {
 */
 class ExpirationWorker {
  public:
-  explicit ExpirationWorker(std::shared_ptr<payload::core::PayloadManager> manager,
-                            std::chrono::milliseconds                      interval = std::chrono::seconds{30});
+  explicit ExpirationWorker(std::shared_ptr<payload::core::PayloadManager> manager, std::chrono::milliseconds interval = std::chrono::seconds{30});
   ~ExpirationWorker();
 
   void Start();

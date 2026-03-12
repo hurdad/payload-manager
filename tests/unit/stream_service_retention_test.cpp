@@ -50,10 +50,10 @@ void TestRetentionMaxAgeSecOverflowSafe() {
 
   // Create stream with maximum possible retention_max_age_sec to trigger the
   // overflow path. Any value where value * 1000 > UINT64_MAX would overflow.
-  constexpr uint64_t kHugeAge = std::numeric_limits<uint64_t>::max() / 500;  // * 1000 overflows
+  constexpr uint64_t kHugeAge = std::numeric_limits<uint64_t>::max() / 500; // * 1000 overflows
 
   CreateStreamRequest create;
-  *create.mutable_stream()       = MakeStream("overflow-test");
+  *create.mutable_stream() = MakeStream("overflow-test");
   create.set_retention_max_age_sec(kHugeAge);
   service.CreateStream(create);
 
@@ -82,7 +82,7 @@ void TestRetentionMaxAgeSecNormalPath() {
 
   // retention_max_age_sec = 0 means no age-based pruning.
   CreateStreamRequest create;
-  *create.mutable_stream()       = MakeStream("normal-retention");
+  *create.mutable_stream() = MakeStream("normal-retention");
   create.set_retention_max_entries(0);
   create.set_retention_max_age_sec(0);
   service.CreateStream(create);
@@ -110,7 +110,7 @@ void TestRetentionMaxEntriesTruncates() {
   auto service = MakeService(repo);
 
   CreateStreamRequest create;
-  *create.mutable_stream()       = MakeStream("max-entries");
+  *create.mutable_stream() = MakeStream("max-entries");
   create.set_retention_max_entries(3);
   service.CreateStream(create);
 
@@ -128,7 +128,7 @@ void TestRetentionMaxEntriesTruncates() {
   assert(result.entries_size() == 3 && "only 3 most recent entries must remain");
 }
 
-}  // namespace
+} // namespace
 
 int main() {
   TestRetentionMaxAgeSecOverflowSafe();

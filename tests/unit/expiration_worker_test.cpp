@@ -5,6 +5,8 @@
   - Worker triggers ExpireStale: TTL-expired payload is removed
 */
 
+#include "internal/expiration/expiration_worker.hpp"
+
 #include <cassert>
 #include <chrono>
 #include <cstring>
@@ -16,7 +18,6 @@
 
 #include "internal/core/payload_manager.hpp"
 #include "internal/db/memory/memory_repository.hpp"
-#include "internal/expiration/expiration_worker.hpp"
 #include "internal/lease/lease_manager.hpp"
 #include "internal/storage/storage_backend.hpp"
 #include "payload/manager/v1.hpp"

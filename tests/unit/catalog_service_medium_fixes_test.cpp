@@ -95,13 +95,13 @@ struct Fixture {
     storage[TIER_DISK] = disk;
     return std::make_shared<PayloadManager>(storage, lease_mgr, repo);
   }()};
-  payload::service::ServiceContext ctx{[&] {
+  payload::service::ServiceContext                       ctx{[&] {
     payload::service::ServiceContext c;
     c.manager    = manager;
     c.repository = repo;
     return c;
   }()};
-  payload::service::CatalogService service{ctx};
+  payload::service::CatalogService                       service{ctx};
 };
 
 // ---------------------------------------------------------------------------
@@ -195,7 +195,7 @@ void TestSpillDefaultTargetIsDisk() {
 // Spill: payload with spill_target=TIER_OBJECT fails because no OBJECT backend
 // is registered, confirming that GetSpillTarget (not hardcoded TIER_DISK) is used.
 void TestSpillUsesPerPayloadTarget() {
-  Fixture f;  // No OBJECT backend registered.
+  Fixture f; // No OBJECT backend registered.
 
   EvictionPolicy policy;
   policy.set_spill_target(TIER_OBJECT);

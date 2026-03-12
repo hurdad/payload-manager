@@ -35,9 +35,8 @@ void SpillWorker::Run() {
     try {
       manager_->ExecuteSpill(task->id, task->target_tier, task->fsync);
     } catch (const std::exception& e) {
-      PAYLOAD_LOG_ERROR("spill failed",
-                        {payload::observability::StringField("payload_id", task->id.value()),
-                         payload::observability::StringField("error", e.what())});
+      PAYLOAD_LOG_ERROR("spill failed", {payload::observability::StringField("payload_id", task->id.value()),
+                                         payload::observability::StringField("error", e.what())});
     }
   }
 }

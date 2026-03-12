@@ -229,11 +229,11 @@ AppendResponse StreamService::Append(const AppendRequest& req) {
     }
 
     if (stream.retention_max_age_sec > 0) {
-      const auto     now_ms         = payload::util::ToUnixMillis(payload::util::Now());
-      constexpr auto kMaxSecToMs    = std::numeric_limits<uint64_t>::max() / 1000;
-      const auto     retention_ms   = stream.retention_max_age_sec > kMaxSecToMs ? std::numeric_limits<uint64_t>::max()
-                                                                                  : stream.retention_max_age_sec * 1000;
-      const auto     cutoff_ms      = now_ms > retention_ms ? now_ms - retention_ms : 0;
+      const auto     now_ms      = payload::util::ToUnixMillis(payload::util::Now());
+      constexpr auto kMaxSecToMs = std::numeric_limits<uint64_t>::max() / 1000;
+      const auto     retention_ms =
+          stream.retention_max_age_sec > kMaxSecToMs ? std::numeric_limits<uint64_t>::max() : stream.retention_max_age_sec * 1000;
+      const auto cutoff_ms = now_ms > retention_ms ? now_ms - retention_ms : 0;
       ThrowIfError(ctx_.repository->DeleteStreamEntriesOlderThan(*tx, stream.stream_id, cutoff_ms), "append retention max age");
     }
 
@@ -253,9 +253,8 @@ ReadResponse StreamService::Read(const ReadRequest& req) {
 
     const auto     stream              = GetStreamOrThrow(*ctx_.repository, *tx, req.stream(), "read");
     constexpr auto kMaxStreamReadBatch = uint64_t{10'000};
-    const auto     max_entries         = req.max_entries() == 0
-                                             ? std::make_optional<uint64_t>(kMaxStreamReadBatch)
-                                             : std::make_optional<uint64_t>(std::min<uint64_t>(req.max_entries(), kMaxStreamReadBatch));
+    const auto     max_entries         = req.max_entries() == 0 ? std::make_optional<uint64_t>(kMaxStreamReadBatch)
+                                                                : std::make_optional<uint64_t>(std::min<uint64_t>(req.max_entries(), kMaxStreamReadBatch));
 
     const auto min_append_time =
         IsTimestampSet(req.not_before()) ? std::make_optional<uint64_t>(ToMillis(req.not_before())) : std::optional<uint64_t>{};
@@ -289,8 +288,8 @@ std::vector<SubscribeResponse> StreamService::Subscribe(const SubscribeRequest& 
     }
 
     constexpr auto kMaxStreamReadBatch = uint64_t{10'000};
-    const auto     entries             = ctx_.repository->ReadStreamEntries(*tx, stream.stream_id, start_offset,
-                                                                        std::make_optional<uint64_t>(kMaxStreamReadBatch), std::nullopt);
+    const auto     entries =
+        ctx_.repository->ReadStreamEntries(*tx, stream.stream_id, start_offset, std::make_optional<uint64_t>(kMaxStreamReadBatch), std::nullopt);
 
     std::vector<SubscribeResponse> responses;
     responses.reserve(entries.size());
