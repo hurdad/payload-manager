@@ -26,7 +26,7 @@ payload::service::ServiceContext BuildServiceContext() {
   payload::service::ServiceContext ctx;
   auto                             repository = std::make_shared<payload::db::memory::MemoryRepository>();
   ctx.manager                                 = std::make_shared<payload::core::PayloadManager>(payload::storage::StorageFactory::TierMap{},
-                                                                                                std::make_shared<payload::lease::LeaseManager>(), nullptr, nullptr, repository);
+                                                                                                std::make_shared<payload::lease::LeaseManager>(), repository);
   ctx.repository                              = repository;
   ctx.metadata                                = std::make_shared<payload::metadata::MetadataCache>();
   ctx.lineage                                 = std::make_shared<payload::lineage::LineageGraph>();

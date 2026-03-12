@@ -56,7 +56,13 @@ void DiskArrowStore::Write(const PayloadID& id, const std::shared_ptr<arrow::Buf
     Unwrap(out->Close());
   }
 
-  std::filesystem::rename(tmp_path, final_path);
+  try {
+    std::filesystem::rename(tmp_path, final_path);
+  } catch (...) {
+    std::error_code ec;
+    std::filesystem::remove(tmp_path, ec);
+    throw;
+  }
 }
 
 /*

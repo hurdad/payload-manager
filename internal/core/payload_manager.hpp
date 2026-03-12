@@ -20,19 +20,12 @@
 namespace payload::lease {
 class LeaseManager;
 }
-namespace payload::metadata {
-class MetadataCache;
-}
-namespace payload::lineage {
-class LineageGraph;
-}
 
 namespace payload::core {
 
 class PayloadManager {
  public:
   PayloadManager(payload::storage::StorageFactory::TierMap storage, std::shared_ptr<payload::lease::LeaseManager> lease_mgr,
-                 std::shared_ptr<payload::metadata::MetadataCache> metadata, std::shared_ptr<payload::lineage::LineageGraph> lineage,
                  std::shared_ptr<payload::db::Repository> repository);
 
   payload::manager::v1::PayloadDescriptor Allocate(uint64_t size_bytes, payload::manager::v1::Tier preferred, uint64_t ttl_ms = 0,

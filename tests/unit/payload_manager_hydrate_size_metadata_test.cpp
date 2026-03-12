@@ -77,8 +77,7 @@ void TestHydrateCachesUsesSizeMetadataWithoutRead() {
   payload::storage::StorageFactory::TierMap storage;
   storage[TIER_DISK] = backend;
 
-  PayloadManager manager(std::move(storage), std::make_shared<payload::lease::LeaseManager>(), /*metadata=*/nullptr,
-                         /*lineage=*/nullptr, repository);
+  PayloadManager manager(std::move(storage), std::make_shared<payload::lease::LeaseManager>(), repository);
 
   manager.HydrateCaches();
 

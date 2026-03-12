@@ -68,7 +68,7 @@ struct Fixture {
                            storage[TIER_DISK] = disk;
                            return storage;
                          }(),
-                         lease_mgr, nullptr, nullptr, repo};
+                         lease_mgr, repo};
 };
 
 // Allocate with TTL=1ms, sleep past expiry, call ExpireStale —

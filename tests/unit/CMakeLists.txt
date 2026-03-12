@@ -24,6 +24,7 @@ payload_manager_add_unit_test(payload_manager_unit_stream_service_concurrency st
 payload_manager_add_unit_test(payload_manager_unit_critical_fixes payload_manager_critical_fixes_test.cpp "payload")
 payload_manager_add_unit_test(payload_manager_unit_ttl payload_manager_ttl_test.cpp "payload;ttl")
 payload_manager_add_unit_test(payload_manager_unit_eviction_policy payload_manager_eviction_policy_test.cpp "payload;eviction")
+payload_manager_add_unit_test(payload_manager_unit_stream_service_retention stream_service_retention_test.cpp "stream;retention")
 
 if(TARGET payload_manager::client)
   payload_manager_add_unit_test(payload_manager_unit_client_payload_manager_client client/payload_manager_client_test.cpp "client")

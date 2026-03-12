@@ -222,7 +222,7 @@ void TestPromoteCommitsDbBeforeSourceRemoval() {
   storage[TIER_RAM]  = ram_backend;
   storage[TIER_DISK] = disk_backend;
 
-  PayloadManager manager(std::move(storage), lease_mgr, nullptr, nullptr, repo);
+  PayloadManager manager(std::move(storage), lease_mgr, repo);
 
   auto desc = manager.Commit(manager.Allocate(256, TIER_RAM).payload_id());
   assert(desc.tier() == TIER_RAM);
@@ -261,7 +261,7 @@ void TestSpillCommitsDbBeforeSourceRemoval() {
   storage[TIER_RAM]  = ram_backend;
   storage[TIER_DISK] = disk_backend;
 
-  PayloadManager manager(std::move(storage), lease_mgr, nullptr, nullptr, repo);
+  PayloadManager manager(std::move(storage), lease_mgr, repo);
 
   auto desc = manager.Commit(manager.Allocate(128, TIER_RAM).payload_id());
   assert(desc.tier() == TIER_RAM);
@@ -296,7 +296,7 @@ void TestPromoteSameTierIsNoop() {
   storage[TIER_RAM]  = ram_backend;
   storage[TIER_DISK] = disk_backend;
 
-  PayloadManager manager(std::move(storage), lease_mgr, nullptr, nullptr, repo);
+  PayloadManager manager(std::move(storage), lease_mgr, repo);
 
   auto desc = manager.Commit(manager.Allocate(64, TIER_RAM).payload_id());
   log->clear();
@@ -321,7 +321,7 @@ void TestDeletePrunesPayloadMutex() {
   storage[TIER_RAM]  = ram_backend;
   storage[TIER_DISK] = std::make_shared<OrderTrackingBackend>(TIER_DISK, log);
 
-  PayloadManager manager(std::move(storage), lease_mgr, nullptr, nullptr, std::make_shared<payload::db::memory::MemoryRepository>());
+  PayloadManager manager(std::move(storage), lease_mgr, std::make_shared<payload::db::memory::MemoryRepository>());
 
   // Allocate and commit several payloads, then delete them all.
   std::vector<payload::manager::v1::PayloadID> ids;
@@ -372,7 +372,7 @@ void TestSpillDataAvailableInDestAfterComplete() {
   storage[TIER_RAM]  = ram_backend;
   storage[TIER_DISK] = disk_backend;
 
-  PayloadManager manager(std::move(storage), lease_mgr, nullptr, nullptr, repo);
+  PayloadManager manager(std::move(storage), lease_mgr, repo);
 
   auto desc = manager.Commit(manager.Allocate(128, TIER_RAM).payload_id());
 
@@ -387,6 +387,97 @@ void TestSpillDataAvailableInDestAfterComplete() {
   assert(snapshot.tier() == TIER_DISK);
 }
 
+// ---------------------------------------------------------------------------
+// Test: Allocate with zero bytes throws
+// ---------------------------------------------------------------------------
+void TestAllocateZeroBytesThrows() {
+  auto log       = std::make_shared<std::vector<std::string>>();
+  auto backend   = std::make_shared<OrderTrackingBackend>(TIER_RAM, log);
+  auto lease_mgr = std::make_shared<LeaseManager>();
+
+  payload::storage::StorageFactory::TierMap storage;
+  storage[TIER_RAM] = backend;
+
+  PayloadManager manager(std::move(storage), lease_mgr, std::make_shared<payload::db::memory::MemoryRepository>());
+
+  bool threw = false;
+  try {
+    (void)manager.Allocate(0, TIER_RAM);
+  } catch (const std::invalid_argument&) {
+    threw = true;
+  }
+  assert(threw && "Allocate(0) must throw std::invalid_argument");
+}
+
+// ---------------------------------------------------------------------------
+// Test: Delete succeeds even when storage Remove throws (orphaned bytes are
+// preferable to a visible failure after a committed DB deletion).
+// ---------------------------------------------------------------------------
+class ThrowingRemoveBackend final : public StorageBackend {
+ public:
+  explicit ThrowingRemoveBackend(payload::manager::v1::Tier tier) : tier_(tier) {
+  }
+
+  std::shared_ptr<arrow::Buffer> Allocate(const payload::manager::v1::PayloadID& id, uint64_t size_bytes) override {
+    auto maybe = arrow::AllocateBuffer(size_bytes);
+    if (!maybe.ok()) throw std::runtime_error("alloc failed");
+    std::shared_ptr<arrow::Buffer> buf(std::move(*maybe));
+    buffers_[id.value()] = buf;
+    return buf;
+  }
+
+  std::shared_ptr<arrow::Buffer> Read(const payload::manager::v1::PayloadID& id) override {
+    return buffers_.at(id.value());
+  }
+
+  void Write(const payload::manager::v1::PayloadID& id, const std::shared_ptr<arrow::Buffer>& buf, bool) override {
+    buffers_[id.value()] = buf;
+  }
+
+  void Remove(const payload::manager::v1::PayloadID&) override {
+    throw std::runtime_error("simulated storage failure during Remove");
+  }
+
+  payload::manager::v1::Tier TierType() const override {
+    return tier_;
+  }
+
+ private:
+  payload::manager::v1::Tier                                      tier_;
+  std::unordered_map<std::string, std::shared_ptr<arrow::Buffer>> buffers_;
+};
+
+void TestDeleteSucceedsWhenStorageRemoveThrows() {
+  auto lease_mgr = std::make_shared<LeaseManager>();
+  auto backend   = std::make_shared<ThrowingRemoveBackend>(TIER_RAM);
+
+  payload::storage::StorageFactory::TierMap storage;
+  storage[TIER_RAM]  = backend;
+  storage[TIER_DISK] = std::make_shared<ThrowingRemoveBackend>(TIER_DISK);
+
+  PayloadManager manager(std::move(storage), lease_mgr, std::make_shared<payload::db::memory::MemoryRepository>());
+
+  auto desc = manager.Commit(manager.Allocate(64, TIER_RAM).payload_id());
+
+  // Delete must not throw even though Remove() throws internally.
+  bool threw = false;
+  try {
+    manager.Delete(desc.payload_id(), /*force=*/true);
+  } catch (...) {
+    threw = true;
+  }
+  assert(!threw && "Delete must not propagate storage Remove failures after DB commit");
+
+  // The payload must no longer be resolvable.
+  bool not_found = false;
+  try {
+    (void)manager.ResolveSnapshot(desc.payload_id());
+  } catch (const std::runtime_error&) {
+    not_found = true;
+  }
+  assert(not_found && "payload must be gone from DB even if storage Remove failed");
+}
+
 } // namespace
 
 int main() {
@@ -395,6 +486,8 @@ int main() {
   TestPromoteSameTierIsNoop();
   TestDeletePrunesPayloadMutex();
   TestSpillDataAvailableInDestAfterComplete();
+  TestAllocateZeroBytesThrows();
+  TestDeleteSucceedsWhenStorageRemoveThrows();
 
   std::cout << "payload_manager_critical_fixes_test: pass\n";
   return 0;

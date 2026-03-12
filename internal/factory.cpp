@@ -173,7 +173,7 @@ Application Build(const payload::runtime::config::RuntimeConfig& config) {
   auto lineage_graph  = std::make_shared<lineage::LineageGraph>();
   auto repository     = BuildRepository(config);
 
-  auto payload_manager = std::make_shared<core::PayloadManager>(storage_map, lease_mgr, metadata_cache, lineage_graph, repository);
+  auto payload_manager = std::make_shared<core::PayloadManager>(storage_map, lease_mgr, repository);
   payload_manager->HydrateCaches();
 
   // ------------------------------------------------------------------

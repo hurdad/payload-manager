@@ -98,7 +98,7 @@ struct BenchFixture {
     auto repo  = std::make_shared<payload::db::memory::MemoryRepository>();
     auto lease = std::make_shared<payload::lease::LeaseManager>();
 
-    manager = std::make_shared<payload::core::PayloadManager>(std::move(storage), lease, nullptr, nullptr, repo);
+    manager = std::make_shared<payload::core::PayloadManager>(std::move(storage), lease, repo);
   }
 
   // Allocate a payload in RAM and commit it.

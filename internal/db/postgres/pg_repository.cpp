@@ -100,7 +100,7 @@ std::vector<model::PayloadRecord> PgRepository::ListExpiredPayloads(Transaction&
       r.state             = (payload::manager::v1::PayloadState)row[2].as<int>();
       r.size_bytes        = row[3].as<uint64_t>();
       r.version           = row[4].as<uint64_t>();
-      r.expires_at_ms     = row[5].as<uint64_t>();
+      r.expires_at_ms     = row[5].is_null() ? 0 : row[5].as<uint64_t>();
       r.persist           = row[6].as<int>() != 0;
       r.eviction_priority = row[7].as<int>();
       r.spill_target      = row[8].as<int>();

@@ -229,9 +229,11 @@ AppendResponse StreamService::Append(const AppendRequest& req) {
     }
 
     if (stream.retention_max_age_sec > 0) {
-      const auto now_ms       = payload::util::ToUnixMillis(payload::util::Now());
-      const auto retention_ms = stream.retention_max_age_sec * 1000;
-      const auto cutoff_ms    = now_ms > retention_ms ? now_ms - retention_ms : 0;
+      const auto     now_ms         = payload::util::ToUnixMillis(payload::util::Now());
+      constexpr auto kMaxSecToMs    = std::numeric_limits<uint64_t>::max() / 1000;
+      const auto     retention_ms   = stream.retention_max_age_sec > kMaxSecToMs ? std::numeric_limits<uint64_t>::max()
+                                                                                  : stream.retention_max_age_sec * 1000;
+      const auto     cutoff_ms      = now_ms > retention_ms ? now_ms - retention_ms : 0;
       ThrowIfError(ctx_.repository->DeleteStreamEntriesOlderThan(*tx, stream.stream_id, cutoff_ms), "append retention max age");
     }
 

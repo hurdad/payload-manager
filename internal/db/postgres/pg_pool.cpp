@@ -22,9 +22,9 @@ std::shared_ptr<pqxx::connection> PgPool::Acquire() {
         lock.unlock();
 
         try {
-          auto* conn = new pqxx::connection(conninfo_);
+          auto conn = std::make_unique<pqxx::connection>(conninfo_);
           PrepareStatements(*conn);
-          return Wrap(conn);
+          return Wrap(conn.release());
         } catch (...) {
           std::lock_guard rollback_lock(mutex_);
           --live_connections_;

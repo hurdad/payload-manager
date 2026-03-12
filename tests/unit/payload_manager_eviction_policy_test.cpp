@@ -104,7 +104,7 @@ struct Fixture {
                            storage[TIER_DISK] = disk;
                            return storage;
                          }(),
-                         lease_mgr, nullptr, nullptr, repo};
+                         lease_mgr, repo};
 };
 
 // ---------------------------------------------------------------------------

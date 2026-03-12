@@ -33,8 +33,7 @@ void TestResolveSnapshotUsesCachedDescriptorUntilRefresh() {
     tx->Commit();
   }
 
-  auto manager = PayloadManager(/*storage=*/{}, std::make_shared<payload::lease::LeaseManager>(), /*metadata=*/nullptr,
-                                /*lineage=*/nullptr, repository);
+  auto manager = PayloadManager(/*storage=*/{}, std::make_shared<payload::lease::LeaseManager>(), repository);
 
   payload::manager::v1::PayloadID id;
   id.set_value("payload-preloaded");

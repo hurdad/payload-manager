@@ -72,8 +72,7 @@ PayloadManager MakeManager(const std::shared_ptr<LeaseManager>& lease_mgr) {
   storage[TIER_RAM]  = std::make_shared<TrackingStorageBackend>(TIER_RAM);
   storage[TIER_DISK] = std::make_shared<TrackingStorageBackend>(TIER_DISK);
 
-  return PayloadManager(std::move(storage), lease_mgr, /*metadata=*/nullptr, /*lineage=*/nullptr,
-                        std::make_shared<payload::db::memory::MemoryRepository>());
+  return PayloadManager(std::move(storage), lease_mgr, std::make_shared<payload::db::memory::MemoryRepository>());
 }
 
 void TestForceDeleteRemovesPayloadAndLeases() {
@@ -177,8 +176,7 @@ void TestDeleteRemovesStoragePayload() {
   storage[TIER_RAM]  = ram_backend;
   storage[TIER_DISK] = std::make_shared<TrackingStorageBackend>(TIER_DISK);
 
-  PayloadManager manager(std::move(storage), lease_mgr, /*metadata=*/nullptr, /*lineage=*/nullptr,
-                         std::make_shared<payload::db::memory::MemoryRepository>());
+  PayloadManager manager(std::move(storage), lease_mgr, std::make_shared<payload::db::memory::MemoryRepository>());
 
   const auto descriptor = manager.Commit(manager.Allocate(128, TIER_RAM).payload_id());
   manager.Delete(descriptor.payload_id(), /*force=*/true);

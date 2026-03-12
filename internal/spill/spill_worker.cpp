@@ -1,8 +1,7 @@
 #include "spill_worker.hpp"
 
-#include <iostream>
-
 #include "internal/core/payload_manager.hpp"
+#include "internal/observability/logging.hpp"
 
 namespace payload::spill {
 
@@ -36,7 +35,9 @@ void SpillWorker::Run() {
     try {
       manager_->ExecuteSpill(task->id, task->target_tier, task->fsync);
     } catch (const std::exception& e) {
-      std::cerr << "[spill-worker] spill failed: " << e.what() << "\n";
+      PAYLOAD_LOG_ERROR("spill failed",
+                        {payload::observability::StringField("payload_id", task->id.value()),
+                         payload::observability::StringField("error", e.what())});
     }
   }
 }

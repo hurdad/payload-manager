@@ -11,6 +11,7 @@
 #if PAYLOAD_MANAGER_ARROW_CUDA
 #include "internal/storage/gpu/cuda_arrow_store.hpp"
 #endif
+#include "internal/observability/logging.hpp"
 #include "internal/util/errors.hpp"
 #include "internal/util/time.hpp"
 #include "internal/util/uuid.hpp"
@@ -104,7 +105,6 @@ PayloadDescriptor ToPayloadDescriptor(const db::model::PayloadRecord& record) {
 } // namespace
 
 PayloadManager::PayloadManager(payload::storage::StorageFactory::TierMap storage, std::shared_ptr<payload::lease::LeaseManager> lease_mgr,
-                               std::shared_ptr<payload::metadata::MetadataCache>, std::shared_ptr<payload::lineage::LineageGraph>,
                                std::shared_ptr<payload::db::Repository> repository)
     : storage_(std::move(storage)), lease_mgr_(std::move(lease_mgr)), repository_(std::move(repository)) {
 }
@@ -217,6 +217,10 @@ void PayloadManager::PopulateLocation(PayloadDescriptor* descriptor) {
 
 PayloadDescriptor PayloadManager::Allocate(uint64_t size_bytes, Tier preferred, uint64_t ttl_ms, bool persist,
                                            const payload::manager::core::v1::EvictionPolicy& eviction_policy) {
+  if (size_bytes == 0) {
+    throw std::invalid_argument("allocate payload: size_bytes must be greater than zero");
+  }
+
   PayloadDescriptor desc;
   *desc.mutable_payload_id() = payload::util::ToProto(payload::util::GenerateUUID());
   desc.set_tier(preferred);
@@ -351,9 +355,18 @@ void PayloadManager::Delete(const PayloadID& id, bool force) {
     ThrowIfDbError(repository_->DeletePayload(*tx, Key(id)), "delete payload");
     tx->Commit();
 
+    // Storage removal is best-effort: the DB commit is the authoritative deletion.
+    // Suppress exceptions here to avoid leaving the manager in an inconsistent state
+    // after a successful commit (orphaned storage bytes are preferable to a half-deleted payload).
     const auto storage_it = storage_.find(payload_tier);
     if (storage_it != storage_.end() && storage_it->second) {
-      storage_it->second->Remove(id);
+      try {
+        storage_it->second->Remove(id);
+      } catch (const std::exception& e) {
+        PAYLOAD_LOG_WARN("delete payload: storage removal failed after DB commit (orphaned storage bytes)",
+                         {payload::observability::StringField("payload_id", Key(id)),
+                          payload::observability::StringField("error", e.what())});
+      }
     }
 
     {
