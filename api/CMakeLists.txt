@@ -94,7 +94,27 @@ endforeach()
 
 find_package(Python3 COMPONENTS Interpreter QUIET)
 
-if(Python3_FOUND)
+if(PAYLOAD_MANAGER_ENABLE_PYTHON_PROTO)
+  if(NOT Python3_FOUND)
+    message(FATAL_ERROR
+            "PAYLOAD_MANAGER_ENABLE_PYTHON_PROTO=ON but Python3 was not found.")
+  endif()
+
+  execute_process(
+          COMMAND ${Python3_EXECUTABLE} -c "import grpc_tools"
+          RESULT_VARIABLE GRPC_TOOLS_AVAILABLE
+          OUTPUT_QUIET ERROR_QUIET
+  )
+
+  if(NOT GRPC_TOOLS_AVAILABLE EQUAL 0)
+    message(FATAL_ERROR
+            "PAYLOAD_MANAGER_ENABLE_PYTHON_PROTO=ON but grpcio-tools is not installed.\n"
+            "Install it with: pip install grpcio-tools")
+  endif()
+
+  set(ENABLE_PYTHON_PROTO ON)
+  message(STATUS "Python proto generation enabled (PAYLOAD_MANAGER_ENABLE_PYTHON_PROTO=ON)")
+elseif(Python3_FOUND)
   execute_process(
           COMMAND ${Python3_EXECUTABLE} -c "import grpc_tools"
           RESULT_VARIABLE GRPC_TOOLS_AVAILABLE
@@ -106,7 +126,7 @@ if(Python3_FOUND)
     message(STATUS "Python grpc_tools detected — enabling Python proto generation")
   else()
     set(ENABLE_PYTHON_PROTO OFF)
-    message(STATUS "grpc_tools not found — Python generation disabled")
+    message(STATUS "grpc_tools not found — Python generation disabled (install grpcio-tools or set -DPAYLOAD_MANAGER_ENABLE_PYTHON_PROTO=ON to make this an error)")
   endif()
 else()
   set(ENABLE_PYTHON_PROTO OFF)
@@ -190,16 +210,29 @@ add_custom_command(
 # ------------------------------------------------------------------------------
 
 if(ENABLE_PYTHON_PROTO)
+  # Pass 1: generate *_pb2.py for every proto (schema + service).
   add_custom_command(
-          OUTPUT ${PY_PROTO_SRCS} ${PY_GRPC_SRCS}
+          OUTPUT ${PY_PROTO_SRCS}
           COMMAND ${Python3_EXECUTABLE} -m grpc_tools.protoc
           -I ${PROTO_ROOT}
           --python_out=${PYTHON_OUT_DIR}
-          --grpc_python_out=${PYTHON_OUT_DIR}
           ${ALL_DEP_PROTOS}
           WORKING_DIRECTORY ${PROTO_ROOT}
           DEPENDS ${PROTO_ABS_FILES}
-          COMMENT "Generating Python protobuf + gRPC sources"
+          COMMENT "Generating Python protobuf sources"
+          VERBATIM
+  )
+
+  # Pass 2: generate *_pb2_grpc.py only for service protos.
+  add_custom_command(
+          OUTPUT ${PY_GRPC_SRCS}
+          COMMAND ${Python3_EXECUTABLE} -m grpc_tools.protoc
+          -I ${PROTO_ROOT}
+          --grpc_python_out=${PYTHON_OUT_DIR}
+          ${SERVICE_PROTO_FILES}
+          WORKING_DIRECTORY ${PROTO_ROOT}
+          DEPENDS ${PROTO_ABS_FILES}
+          COMMENT "Generating Python gRPC service stubs"
           VERBATIM
   )
 endif()
@@ -266,4 +299,19 @@ if(ENABLE_PYTHON_PROTO)
   add_custom_target(payload_manager_py
           DEPENDS ${PY_PROTO_SRCS} ${PY_GRPC_SRCS}
   )
+
+  # Copy generated stubs into the Python client source tree so they can be
+  # committed and distributed via pip install.  Run after proto changes:
+  #   cmake --build build --target sync_python_client
+  set(_py_client_dir ${CMAKE_SOURCE_DIR}/client/python/payload)
+  add_custom_target(sync_python_client
+          COMMAND ${CMAKE_COMMAND} -E rm -rf ${_py_client_dir}
+          COMMAND ${CMAKE_COMMAND} -E copy_directory
+                  ${PYTHON_OUT_DIR}/payload
+                  ${_py_client_dir}
+          DEPENDS payload_manager_py
+          COMMENT "Syncing generated Python stubs to client/python/payload/"
+          VERBATIM
+  )
+  unset(_py_client_dir)
 endif()

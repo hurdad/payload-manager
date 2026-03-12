@@ -11,7 +11,7 @@ import grpc
 
 from payload_manager_client import PayloadClient
 from payload.manager.catalog.v1 import lineage_pb2
-from payload.manager.core.v1 import placement_pb2, policy_pb2
+from payload.manager.core.v1 import policy_pb2, types_pb2
 from payload.manager.runtime.v1 import lifecycle_pb2, tiering_pb2
 
 
@@ -23,7 +23,7 @@ def main() -> int:
 
     # Allocate a short-lived RAM payload (TTL 60s) so we can safely exercise
     # admin APIs without leaving long-term test artifacts.
-    writable = client.AllocateWritableBuffer(16, placement_pb2.TIER_RAM, ttl_ms=60_000, persist=False)
+    writable = client.AllocateWritableBuffer(16, types_pb2.TIER_RAM, ttl_ms=60_000, persist=False)
     writable.mmap_obj[:] = bytes(range(1, 17))
 
     payload_id = writable.descriptor.payload_id
@@ -33,11 +33,11 @@ def main() -> int:
 
     # Promotion/spill requests demonstrate tiering controls. BEST_EFFORT means
     # the server may partially succeed depending on current constraints.
-    promote_request = tiering_pb2.PromoteRequest(target_tier=placement_pb2.TIER_RAM, policy=policy_pb2.PROMOTION_POLICY_BEST_EFFORT)
+    promote_request = tiering_pb2.PromoteRequest(target_tier=types_pb2.TIER_RAM, policy=policy_pb2.PROMOTION_POLICY_BEST_EFFORT)
     promote_request.id.CopyFrom(payload_id)
     client.Promote(promote_request)
 
-    spill_request = tiering_pb2.SpillRequest(policy=tiering_pb2.SPILL_POLICY_BEST_EFFORT, wait_for_leases=True)
+    spill_request = tiering_pb2.SpillRequest(policy=policy_pb2.SPILL_POLICY_BEST_EFFORT, wait_for_leases=True)
     spill_request.ids.add().CopyFrom(payload_id)
     client.Spill(spill_request)
 

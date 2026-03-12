@@ -13,11 +13,12 @@ import grpc
 import pyarrow as pa
 
 from payload.manager.admin.v1 import stats_pb2
+from payload.manager.catalog.v1 import catalog_pb2
 from payload.manager.catalog.v1 import lineage_pb2
-from payload.manager.catalog.v1 import metadata_pb2
 from payload.manager.core.v1 import id_pb2
 from payload.manager.core.v1 import placement_pb2
 from payload.manager.core.v1 import policy_pb2
+from payload.manager.core.v1 import types_pb2
 from payload.manager.runtime.v1 import lease_pb2
 from payload.manager.runtime.v1 import lifecycle_pb2
 from payload.manager.runtime.v1 import stream_pb2
@@ -91,14 +92,14 @@ class PayloadClient:
 
     def UpdatePayloadMetadata(
         self,
-        request: metadata_pb2.UpdatePayloadMetadataRequest,
-    ) -> metadata_pb2.UpdatePayloadMetadataResponse:
+        request: catalog_pb2.UpdatePayloadMetadataRequest,
+    ) -> catalog_pb2.UpdatePayloadMetadataResponse:
         return self._catalog_stub.UpdatePayloadMetadata(request, metadata=_trace_metadata())
 
     def AppendPayloadMetadataEvent(
         self,
-        request: metadata_pb2.AppendPayloadMetadataEventRequest,
-    ) -> metadata_pb2.AppendPayloadMetadataEventResponse:
+        request: catalog_pb2.AppendPayloadMetadataEventRequest,
+    ) -> catalog_pb2.AppendPayloadMetadataEventResponse:
         return self._catalog_stub.AppendPayloadMetadataEvent(request, metadata=_trace_metadata())
 
     # Data service --------------------------------------------------------
@@ -146,7 +147,7 @@ class PayloadClient:
     def AllocateWritableBuffer(
         self,
         size_bytes: int,
-        preferred_tier: int = placement_pb2.TIER_RAM,
+        preferred_tier: int = types_pb2.TIER_RAM,
         ttl_ms: int = 0,
         persist: bool = False,
         eviction_policy: policy_pb2.EvictionPolicy | None = None,
@@ -178,7 +179,7 @@ class PayloadClient:
     def AcquireReadableBuffer(
         self,
         payload_id: id_pb2.PayloadID,
-        min_tier: int = placement_pb2.TIER_RAM,
+        min_tier: int = types_pb2.TIER_RAM,
         promotion_policy: int = policy_pb2.PROMOTION_POLICY_BEST_EFFORT,
         min_lease_duration_ms: int = 0,
     ) -> ReadablePayload:
@@ -236,7 +237,7 @@ class PayloadClient:
             return mapped, pa.py_buffer(mapped)
 
         raise NotImplementedError(
-            f"Writable Arrow buffer for tier {placement_pb2.Tier.Name(descriptor.tier)} is not supported"
+            f"Writable Arrow buffer for tier {types_pb2.Tier.Name(descriptor.tier)} is not supported"
         )
 
     def _OpenReadableBuffer(self, descriptor: placement_pb2.PayloadDescriptor) -> tuple[mmap.mmap, pa.Buffer]:
@@ -264,14 +265,14 @@ class PayloadClient:
             return mapped, pa.py_buffer(mapped)
 
         raise NotImplementedError(
-            f"Readable Arrow buffer for tier {placement_pb2.Tier.Name(descriptor.tier)} is not supported"
+            f"Readable Arrow buffer for tier {types_pb2.Tier.Name(descriptor.tier)} is not supported"
         )
 
     @staticmethod
     def _ValidateHasLocation(descriptor: placement_pb2.PayloadDescriptor) -> None:
         if descriptor.HasField("gpu") or descriptor.HasField("ram") or descriptor.HasField("disk"):
             return
-        raise ValueError(f"payload descriptor is missing location for tier {placement_pb2.Tier.Name(descriptor.tier)}")
+        raise ValueError(f"payload descriptor is missing location for tier {types_pb2.Tier.Name(descriptor.tier)}")
 
 
 def _descriptor_length_bytes(descriptor: placement_pb2.PayloadDescriptor) -> int:

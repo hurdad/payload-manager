@@ -10,7 +10,7 @@ import uuid
 import grpc
 
 from payload_manager_client import PayloadClient
-from payload.manager.core.v1 import placement_pb2
+from payload.manager.core.v1 import types_pb2
 from payload.manager.runtime.v1 import stream_pb2
 
 
@@ -31,7 +31,7 @@ def main() -> int:
 
     # Prepare a tiny payload and commit it so stream entries can reference a
     # durable payload ID instead of embedding raw bytes.
-    writable = client.AllocateWritableBuffer(8, placement_pb2.TIER_RAM)
+    writable = client.AllocateWritableBuffer(8, types_pb2.TIER_RAM)
     writable.mmap_obj[:] = bytes(range(10, 18))
 
     payload_id = writable.descriptor.payload_id

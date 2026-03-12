@@ -10,7 +10,7 @@ import uuid
 import grpc
 
 from payload_manager_client import PayloadClient
-from payload.manager.core.v1 import placement_pb2
+from payload.manager.core.v1 import types_pb2
 
 
 def main() -> int:
@@ -22,7 +22,7 @@ def main() -> int:
     payload_size = 64
     # Allocate a writable RAM-tier buffer. The server returns a descriptor
     # (including UUID) plus an mmap-backed byte region we can fill directly.
-    writable = client.AllocateWritableBuffer(payload_size, placement_pb2.TIER_RAM)
+    writable = client.AllocateWritableBuffer(payload_size, types_pb2.TIER_RAM)
     writable.mmap_obj[:] = bytes((i & 0xFF) for i in range(payload_size))
 
     # Use the canonical PayloadID protobuf returned by AllocatePayload and

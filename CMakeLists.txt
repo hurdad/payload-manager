@@ -14,6 +14,9 @@ option(PAYLOAD_MANAGER_BUILD_SERVICE "Build payload-manager service components" 
 option(PAYLOAD_MANAGER_BUILD_PAYLOADCTL "Build payloadctl CLI" ON)
 option(PAYLOAD_MANAGER_BUILD_CLIENT "Build C++ client library" ON)
 option(PAYLOAD_MANAGER_BUILD_EXAMPLES "Build C++ examples" ON)
+option(PAYLOAD_MANAGER_ENABLE_PYTHON_PROTO
+       "Generate Python protobuf/gRPC stubs (requires grpcio-tools); OFF = auto-detect"
+       OFF)
 
 if(PAYLOAD_MANAGER_ENABLE_OTEL)
   add_compile_definitions(ENABLE_OTEL)

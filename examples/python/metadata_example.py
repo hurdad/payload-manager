@@ -10,8 +10,8 @@ import uuid
 import grpc
 
 from payload_manager_client import PayloadClient
-from payload.manager.catalog.v1 import metadata_pb2
-from payload.manager.core.v1 import placement_pb2
+from payload.manager.catalog.v1 import catalog_pb2
+from payload.manager.core.v1 import policy_pb2, types_pb2
 
 
 def main() -> int:
@@ -22,7 +22,7 @@ def main() -> int:
 
     # Allocate and seed a payload that we will later annotate via catalog
     # metadata APIs.
-    writable = client.AllocateWritableBuffer(8, placement_pb2.TIER_RAM)
+    writable = client.AllocateWritableBuffer(8, types_pb2.TIER_RAM)
     writable.mmap_obj[0] = 42
 
     payload_id = writable.descriptor.payload_id
@@ -31,8 +31,8 @@ def main() -> int:
 
     # UpdatePayloadMetadata writes the canonical metadata document for this
     # payload ID. REPLACE mode swaps the full document in one operation.
-    update_request = metadata_pb2.UpdatePayloadMetadataRequest(
-        mode=metadata_pb2.METADATA_UPDATE_MODE_REPLACE,
+    update_request = catalog_pb2.UpdatePayloadMetadataRequest(
+        mode=policy_pb2.METADATA_UPDATE_MODE_REPLACE,
         actor="examples/python/metadata_example",
         reason="demonstrate metadata update flow",
     )
@@ -44,7 +44,7 @@ def main() -> int:
 
     # AppendPayloadMetadataEvent stores an immutable event entry so consumers
     # can track metadata evolution over time.
-    event_request = metadata_pb2.AppendPayloadMetadataEventRequest(
+    event_request = catalog_pb2.AppendPayloadMetadataEventRequest(
         source="examples/python/metadata_example",
         version="v1",
     )
