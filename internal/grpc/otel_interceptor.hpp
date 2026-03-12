@@ -1,6 +1,6 @@
 #pragma once
 
-#include <grpcpp/impl/server_interceptor.h>
+#include <grpcpp/support/server_interceptor.h>
 
 namespace payload::grpc {
 

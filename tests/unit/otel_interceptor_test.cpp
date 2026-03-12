@@ -64,8 +64,9 @@ void TestExtractsTraceparent() {
   std::map<std::string, std::string> headers  = {{"traceparent", tp}};
   MapCarrier                         carrier(headers);
 
-  auto extracted = GetPropagator()->Extract(carrier, opentelemetry::context::RuntimeContext::GetCurrent());
-  auto token     = opentelemetry::context::RuntimeContext::Attach(extracted);
+  auto current_ctx1 = opentelemetry::context::RuntimeContext::GetCurrent();
+  auto extracted    = GetPropagator()->Extract(carrier, current_ctx1);
+  auto token        = opentelemetry::context::RuntimeContext::Attach(extracted);
 
   auto span     = opentelemetry::trace::GetSpan(opentelemetry::context::RuntimeContext::GetCurrent());
   auto span_ctx = span->GetContext();
@@ -81,7 +82,7 @@ void TestExtractsTraceparent() {
   span_ctx.span_id().ToLowerBase16({sid, 16});
   assert(std::string_view(sid, 16) == span_id);
 
-  opentelemetry::context::RuntimeContext::Detach(token);
+  opentelemetry::context::RuntimeContext::Detach(*token);
 }
 
 // Test: After Detach, the span context is no longer active — mirroring what
@@ -96,12 +97,13 @@ void TestContextIsRestoredAfterDetach() {
   std::map<std::string, std::string> headers = {{"traceparent", "00-aabbccddeeff00112233445566778899-0102030405060708-01"}};
   MapCarrier                         carrier(headers);
 
-  auto extracted = GetPropagator()->Extract(carrier, opentelemetry::context::RuntimeContext::GetCurrent());
-  auto token     = opentelemetry::context::RuntimeContext::Attach(extracted);
+  auto current_ctx2 = opentelemetry::context::RuntimeContext::GetCurrent();
+  auto extracted    = GetPropagator()->Extract(carrier, current_ctx2);
+  auto token        = opentelemetry::context::RuntimeContext::Attach(extracted);
 
   assert(opentelemetry::trace::GetSpan(opentelemetry::context::RuntimeContext::GetCurrent())->GetContext().IsValid());
 
-  opentelemetry::context::RuntimeContext::Detach(token);
+  opentelemetry::context::RuntimeContext::Detach(*token);
 
   // After detach the span context must be invalid again.
   auto after = opentelemetry::trace::GetSpan(opentelemetry::context::RuntimeContext::GetCurrent());
@@ -129,8 +131,9 @@ void TestInjectsTraceparentFromActiveContext() {
   const std::string                  seed_trace_id = "aabbccddeeff00112233445566778899";
   std::map<std::string, std::string> seed          = {{"traceparent", "00-" + seed_trace_id + "-0102030405060708-01"}};
   MapCarrier                         seed_carrier(seed);
-  auto                               ctx   = GetPropagator()->Extract(seed_carrier, opentelemetry::context::RuntimeContext::GetCurrent());
-  auto                               token = opentelemetry::context::RuntimeContext::Attach(ctx);
+  auto                               current_ctx = opentelemetry::context::RuntimeContext::GetCurrent();
+  auto                               ctx         = GetPropagator()->Extract(seed_carrier, current_ctx);
+  auto                               token       = opentelemetry::context::RuntimeContext::Attach(ctx);
 
   std::map<std::string, std::string> out;
   MapCarrier                         out_carrier(out);
@@ -139,7 +142,7 @@ void TestInjectsTraceparentFromActiveContext() {
   assert(out.count("traceparent") == 1);
   assert(out.at("traceparent").find(seed_trace_id) != std::string::npos);
 
-  opentelemetry::context::RuntimeContext::Detach(token);
+  opentelemetry::context::RuntimeContext::Detach(*token);
 }
 
 // Test: Carrier Get returns the correct value for a known key and empty for
@@ -183,14 +186,15 @@ void TestNotSampledFlagIsPropagated() {
   std::map<std::string, std::string> headers = {{"traceparent", "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-00"}};
   MapCarrier                         carrier(headers);
 
-  auto extracted = GetPropagator()->Extract(carrier, opentelemetry::context::RuntimeContext::GetCurrent());
-  auto token     = opentelemetry::context::RuntimeContext::Attach(extracted);
+  auto current_ctx = opentelemetry::context::RuntimeContext::GetCurrent();
+  auto extracted   = GetPropagator()->Extract(carrier, current_ctx);
+  auto token       = opentelemetry::context::RuntimeContext::Attach(extracted);
 
   auto span_ctx = opentelemetry::trace::GetSpan(opentelemetry::context::RuntimeContext::GetCurrent())->GetContext();
   assert(span_ctx.IsValid());
   assert(!span_ctx.IsSampled()); // flags = 00
 
-  opentelemetry::context::RuntimeContext::Detach(token);
+  opentelemetry::context::RuntimeContext::Detach(*token);
 }
 
 } // namespace

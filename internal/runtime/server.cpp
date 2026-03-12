@@ -6,7 +6,7 @@
 
 namespace payload::runtime {
 
-Server::Server(std::string bind_address, std::vector<std::unique_ptr<grpc::Service>> services)
+Server::Server(std::string bind_address, std::vector<std::unique_ptr<::grpc::Service>> services)
     : bind_address_(std::move(bind_address)), services_(std::move(services)) {
 }
 
@@ -15,15 +15,15 @@ Server::~Server() {
 }
 
 void Server::Start() {
-  grpc::ServerBuilder builder;
-  builder.AddListeningPort(bind_address_, grpc::InsecureServerCredentials());
+  ::grpc::ServerBuilder builder;
+  builder.AddListeningPort(bind_address_, ::grpc::InsecureServerCredentials());
   for (const auto& service : services_) {
     builder.RegisterService(service.get());
   }
 
 #ifdef ENABLE_OTEL
   {
-    std::vector<std::unique_ptr<grpc::experimental::ServerInterceptorFactoryInterface>> interceptors;
+    std::vector<std::unique_ptr<::grpc::experimental::ServerInterceptorFactoryInterface>> interceptors;
     interceptors.push_back(std::make_unique<payload::grpc::OtelServerInterceptorFactory>());
     builder.experimental().SetInterceptorCreators(std::move(interceptors));
   }
