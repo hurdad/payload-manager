@@ -82,6 +82,9 @@ CatalogService::CatalogService(ServiceContext ctx) : ctx_(std::move(ctx)) {
 
 AllocatePayloadResponse CatalogService::Allocate(const AllocatePayloadRequest& req) {
   return ObserveRpc("CatalogService.Allocate", nullptr, [&] {
+    if (req.preferred_tier() == TIER_UNSPECIFIED) {
+      throw payload::util::InvalidState("allocate: preferred_tier must be specified");
+    }
     AllocatePayloadResponse resp;
     *resp.mutable_payload_descriptor() =
         ctx_.manager->Allocate(req.size_bytes(), req.preferred_tier(), req.ttl_ms(), req.persist(), req.eviction_policy());
@@ -99,6 +102,9 @@ CommitPayloadResponse CatalogService::Commit(const CommitPayloadRequest& req) {
 
 PromoteResponse CatalogService::Promote(const PromoteRequest& req) {
   return ObserveRpc("CatalogService.Promote", &req.id(), [&] {
+    if (req.target_tier() == TIER_UNSPECIFIED) {
+      throw payload::util::InvalidState("promote: target_tier must be specified");
+    }
     PromoteResponse resp;
     *resp.mutable_payload_descriptor() = ctx_.manager->Promote(req.id(), req.target_tier());
     return resp;
@@ -109,7 +115,9 @@ SpillResponse CatalogService::Spill(const SpillRequest& req) {
   return ObserveRpc("CatalogService.Spill", nullptr, [&] {
     SpillResponse resp;
 
-    const auto target_tier = TIER_DISK;
+    // TODO: respect req.policy() (BEST_EFFORT vs BLOCKING) once SpillScheduler supports it
+    // TODO: respect req.wait_for_leases() once lease-aware spill is implemented
+
     for (const auto& id : req.ids()) {
       auto* result          = resp.add_results();
       *result->mutable_id() = id;
@@ -117,6 +125,7 @@ SpillResponse CatalogService::Spill(const SpillRequest& req) {
       try {
         payload::observability::SpanScope spill_span("CatalogService.SpillItem");
         spill_span.SetAttribute("payload.id", id.value());
+        const auto target_tier = ctx_.manager->GetSpillTarget(id);
         ctx_.manager->ExecuteSpill(id, target_tier, req.fsync());
         result->set_ok(true);
         *result->mutable_payload_descriptor() = ctx_.manager->ResolveSnapshot(id);
@@ -125,9 +134,6 @@ SpillResponse CatalogService::Spill(const SpillRequest& req) {
         result->set_error_message(e.what());
       }
     }
-
-    (void)req.policy();
-    (void)req.wait_for_leases();
 
     return resp;
   });

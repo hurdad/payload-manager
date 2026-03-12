@@ -42,6 +42,9 @@ set(INTERNAL_SRC
         grpc/stream_server.cpp
         grpc/grpc_error.cpp
 
+        # expiration
+        expiration/expiration_worker.cpp
+
         # spill + tiering
         spill/spill_scheduler.cpp
         spill/spill_worker.cpp

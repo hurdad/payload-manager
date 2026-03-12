@@ -251,8 +251,11 @@ ReadResponse StreamService::Read(const ReadRequest& req) {
     std::shared_lock<std::shared_mutex> stream_lock(StreamShard(req.stream()));
     auto                                tx = ctx_.repository->Begin();
 
-    const auto stream      = GetStreamOrThrow(*ctx_.repository, *tx, req.stream(), "read");
-    const auto max_entries = req.max_entries() == 0 ? std::optional<uint64_t>{} : std::make_optional<uint64_t>(req.max_entries());
+    const auto     stream              = GetStreamOrThrow(*ctx_.repository, *tx, req.stream(), "read");
+    constexpr auto kMaxStreamReadBatch = uint64_t{10'000};
+    const auto     max_entries         = req.max_entries() == 0
+                                             ? std::make_optional<uint64_t>(kMaxStreamReadBatch)
+                                             : std::make_optional<uint64_t>(std::min<uint64_t>(req.max_entries(), kMaxStreamReadBatch));
 
     const auto min_append_time =
         IsTimestampSet(req.not_before()) ? std::make_optional<uint64_t>(ToMillis(req.not_before())) : std::optional<uint64_t>{};
@@ -285,7 +288,9 @@ std::vector<SubscribeResponse> StreamService::Subscribe(const SubscribeRequest& 
       }
     }
 
-    const auto entries = ctx_.repository->ReadStreamEntries(*tx, stream.stream_id, start_offset, std::optional<uint64_t>{}, std::nullopt);
+    constexpr auto kMaxStreamReadBatch = uint64_t{10'000};
+    const auto     entries             = ctx_.repository->ReadStreamEntries(*tx, stream.stream_id, start_offset,
+                                                                        std::make_optional<uint64_t>(kMaxStreamReadBatch), std::nullopt);
 
     std::vector<SubscribeResponse> responses;
     responses.reserve(entries.size());

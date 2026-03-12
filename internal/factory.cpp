@@ -20,6 +20,7 @@
 #include "internal/service/data_service.hpp"
 #include "internal/service/service_context.hpp"
 #include "internal/service/stream_service.hpp"
+#include "internal/expiration/expiration_worker.hpp"
 #include "internal/spill/spill_scheduler.hpp"
 #include "internal/spill/spill_worker.hpp"
 #include "internal/storage/storage_factory.hpp"
@@ -185,6 +186,12 @@ Application Build(const payload::runtime::config::RuntimeConfig& config) {
   spill_worker->Start();
 
   // ------------------------------------------------------------------
+  // Expiration worker
+  // ------------------------------------------------------------------
+  auto expiration_worker = std::make_shared<expiration::ExpirationWorker>(payload_manager);
+  expiration_worker->Start();
+
+  // ------------------------------------------------------------------
   // Services
   // ------------------------------------------------------------------
   service::ServiceContext ctx;
@@ -208,6 +215,7 @@ Application Build(const payload::runtime::config::RuntimeConfig& config) {
 
   // Keep ownership of workers so they live for process lifetime
   app.background_workers.push_back(spill_worker);
+  app.background_workers.push_back(expiration_worker);
 
   return app;
 }
