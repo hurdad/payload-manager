@@ -6,6 +6,7 @@
 #include <vector>
 
 #include "internal/core/payload_manager.hpp"
+#include "internal/observability/logging.hpp"
 #include "internal/db/api/repository.hpp"
 #include "internal/db/memory/memory_repository.hpp"
 #include "internal/expiration/expiration_worker.hpp"
@@ -142,6 +143,12 @@ std::shared_ptr<db::Repository> BuildRepository(const payload::runtime::config::
 
   if (database.has_postgres()) {
 #if PAYLOAD_DB_POSTGRES
+    // The snapshot cache uses single-instance semantics: mutations applied
+    // directly to the PostgreSQL database by another process (or a future
+    // second instance) are NOT reflected until HydrateCaches() is called.
+    // Run only one payload-manager instance per database to avoid silent
+    // cache divergence.
+    PAYLOAD_LOG_WARN("PostgreSQL backend: snapshot cache enforces single-instance semantics; direct DB mutations from other processes will not be visible until HydrateCaches() is called");
     auto pool = std::make_shared<db::postgres::PgPool>(database.postgres().connection_uri(), database.postgres().max_connections());
     BootstrapPostgresSchema(pool);
     return std::make_shared<db::postgres::PgRepository>(std::move(pool));
@@ -169,7 +176,16 @@ Application Build(const payload::runtime::config::RuntimeConfig& config) {
   // ------------------------------------------------------------------
   // Core components
   // ------------------------------------------------------------------
-  auto lease_mgr      = std::make_shared<lease::LeaseManager>();
+  const auto& lease_cfg        = config.leases();
+  const uint64_t default_lease_ms =
+      lease_cfg.has_default_lease()
+          ? static_cast<uint64_t>(lease_cfg.default_lease().seconds() * 1000 + lease_cfg.default_lease().nanos() / 1'000'000)
+          : 20'000;
+  const uint64_t max_lease_ms =
+      lease_cfg.has_max_lease()
+          ? static_cast<uint64_t>(lease_cfg.max_lease().seconds() * 1000 + lease_cfg.max_lease().nanos() / 1'000'000)
+          : 120'000;
+  auto lease_mgr = std::make_shared<lease::LeaseManager>(default_lease_ms, max_lease_ms);
   auto metadata_cache = std::make_shared<metadata::MetadataCache>();
   auto lineage_graph  = std::make_shared<lineage::LineageGraph>();
   auto repository     = BuildRepository(config);
@@ -180,10 +196,17 @@ Application Build(const payload::runtime::config::RuntimeConfig& config) {
   // ------------------------------------------------------------------
   // Spill system
   // ------------------------------------------------------------------
-  auto spill_scheduler = std::make_shared<spill::SpillScheduler>();
-  auto spill_worker    = std::make_shared<spill::SpillWorker>(spill_scheduler, payload_manager);
+  const uint32_t num_spill_threads =
+      config.spill_workers().threads() > 0 ? config.spill_workers().threads() : 1;
 
-  spill_worker->Start();
+  auto spill_scheduler = std::make_shared<spill::SpillScheduler>();
+  std::vector<std::shared_ptr<spill::SpillWorker>> spill_worker_pool;
+  spill_worker_pool.reserve(num_spill_threads);
+  for (uint32_t i = 0; i < num_spill_threads; ++i) {
+    auto w = std::make_shared<spill::SpillWorker>(spill_scheduler, payload_manager);
+    w->Start();
+    spill_worker_pool.push_back(std::move(w));
+  }
 
   // ------------------------------------------------------------------
   // Expiration worker
@@ -214,7 +237,9 @@ Application Build(const payload::runtime::config::RuntimeConfig& config) {
   app.grpc_services.push_back(std::make_unique<grpc::StreamServer>(stream_service));
 
   // Keep ownership of workers so they live for process lifetime
-  app.background_workers.push_back(spill_worker);
+  for (auto& w : spill_worker_pool) {
+    app.background_workers.push_back(w);
+  }
   app.background_workers.push_back(expiration_worker);
 
   return app;

@@ -85,6 +85,7 @@ class PayloadManager {
   std::unordered_map<std::string, PinState> pins_;
 
   bool IsPinnedLocked(const std::string& key, uint64_t now_ms);
+  void SweepExpiredPins();
 
   // IDs that must never be automatically evicted (persist=true or EVICTION_PRIORITY_NEVER).
   mutable std::mutex              no_evict_guard_;

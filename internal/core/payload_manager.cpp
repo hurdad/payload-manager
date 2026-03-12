@@ -175,6 +175,19 @@ bool PayloadManager::IsPinnedLocked(const std::string& key, uint64_t now_ms) {
   return false;
 }
 
+void PayloadManager::SweepExpiredPins() {
+  const uint64_t now_ms = payload::util::ToUnixMillis(payload::util::Now());
+  std::lock_guard<std::mutex> lock(pins_guard_);
+  for (auto it = pins_.begin(); it != pins_.end();) {
+    const auto& state = it->second;
+    if (state.expires_at_ms.has_value() && *state.expires_at_ms <= now_ms) {
+      it = pins_.erase(it);
+    } else {
+      ++it;
+    }
+  }
+}
+
 void PayloadManager::CacheSnapshot(const PayloadDescriptor& descriptor) {
   std::unique_lock lock(snapshot_cache_mutex_);
   snapshot_cache_[descriptor.payload_id().value()] = descriptor;
@@ -332,6 +345,11 @@ PayloadDescriptor PayloadManager::Allocate(uint64_t size_bytes, Tier preferred, 
 }
 
 void PayloadManager::ExpireStale() {
+  // Proactively remove expired pin entries so they don't accumulate indefinitely.
+  // IsPinnedLocked prunes lazily on access, but payloads that are never re-checked
+  // would otherwise hold stale map entries until process restart.
+  SweepExpiredPins();
+
   const uint64_t now_ms = payload::util::ToUnixMillis(payload::util::Now());
 
   auto       tx      = repository_->Begin();
@@ -591,6 +609,29 @@ void PayloadManager::HydrateCaches() {
     new_spill_targets[record.id] = (record.spill_target != 0) ? static_cast<Tier>(record.spill_target) : TIER_DISK;
   }
 
+  // Bump the persisted version for every non-terminal payload so that any
+  // PayloadDescriptor a client cached before this restart is clearly stale.
+  // The in-memory LeaseTable is empty after a restart; without this bump a
+  // client could re-acquire a lease and receive the same version it already
+  // cached, with no signal that placement may have changed during downtime.
+  {
+    PAYLOAD_LOG_WARN("startup: in-memory lease table cleared; bumping payload versions to invalidate pre-restart descriptors");
+    auto bump_tx = repository_->Begin();
+    for (const auto& record : records) {
+      if (record.state == PAYLOAD_STATE_DELETED || record.state == PAYLOAD_STATE_EXPIRED) {
+        continue;
+      }
+      db::model::PayloadRecord bumped = record;
+      bumped.version++;
+      repository_->UpdatePayload(*bump_tx, bumped);
+      auto it = new_snapshot_cache.find(record.id);
+      if (it != new_snapshot_cache.end()) {
+        it->second.set_version(bumped.version);
+      }
+    }
+    bump_tx->Commit();
+  }
+
   {
     std::unique_lock lock(snapshot_cache_mutex_);
     snapshot_cache_ = std::move(new_snapshot_cache);
@@ -636,6 +677,13 @@ void PayloadManager::ExecuteSpill(const PayloadID& id, Tier target, bool fsync) 
     if (source_tier != target && IsPinnedLocked(Key(id), payload::util::ToUnixMillis(payload::util::Now()))) {
       throw payload::util::LeaseConflict("spill payload: payload is pinned; unpin or wait for pin expiry before spilling");
     }
+  }
+
+  // Respect active read leases: spilling moves bytes to a new location, which
+  // invalidates any descriptor held by a leaseholder.  This mirrors the check
+  // in PromoteUnlocked and prevents silent data-location races.
+  if (source_tier != target && lease_mgr_->HasActiveLeases(id)) {
+    throw payload::util::LeaseConflict("spill payload: active lease present; release leases before spilling");
   }
 
   if (source_tier != target) {
