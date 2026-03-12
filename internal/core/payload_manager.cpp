@@ -480,7 +480,7 @@ AcquireReadLeaseResponse PayloadManager::AcquireReadLease(const PayloadID& id, T
   std::lock_guard<std::mutex> delete_lock(delete_mutex_);
 
   auto desc = ResolveSnapshot(id);
-  if (PlacementEngine::IsHigherTier(min_tier, desc.tier())) {
+  if (min_tier != TIER_UNSPECIFIED && PlacementEngine::IsHigherTier(min_tier, desc.tier())) {
     desc = PromoteUnlocked(id, min_tier);
   }
   if (!IsReadableState(desc.state())) {
