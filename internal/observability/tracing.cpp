@@ -2,6 +2,7 @@
 
 #ifdef ENABLE_OTEL
 
+#include <opentelemetry/context/propagation/global_propagator.h>
 #include <opentelemetry/exporters/otlp/otlp_grpc_exporter_factory.h>
 #include <opentelemetry/exporters/otlp/otlp_grpc_exporter_options.h>
 #include <opentelemetry/exporters/otlp/otlp_http_exporter_factory.h>
@@ -13,7 +14,9 @@
 #include <opentelemetry/sdk/trace/samplers/always_on_factory.h>
 #include <opentelemetry/sdk/trace/simple_processor_factory.h>
 #include <opentelemetry/sdk/trace/tracer_provider_factory.h>
+#include <opentelemetry/trace/propagation/http_trace_context.h>
 #include <opentelemetry/trace/provider.h>
+#include <unistd.h>
 
 #include <chrono>
 #include <cstdlib>
@@ -47,7 +50,18 @@ std::string ResolveEndpoint(const OtlpConfig& config) {
 }
 
 resource::Resource BuildResource(const OtlpConfig& config) {
-  resource::ResourceAttributes attrs = {{"service.name", config.service_name}};
+  char hostname[256] = {};
+  gethostname(hostname, sizeof(hostname) - 1);
+
+  const char* env_version = std::getenv("PAYLOAD_SERVICE_VERSION");
+  const char* env_deploy  = std::getenv("PAYLOAD_DEPLOYMENT_ENV");
+
+  resource::ResourceAttributes attrs = {
+      {"service.name", config.service_name},
+      {"service.version", std::string(env_version ? env_version : "0.1.0")},
+      {"deployment.environment", std::string(env_deploy ? env_deploy : "production")},
+      {"host.name", std::string(hostname)},
+  };
   return resource::Resource::Create(attrs);
 }
 
@@ -74,6 +88,9 @@ bool InitializeTracing(const OtlpConfig& config) {
   g_sdk_provider = std::shared_ptr<sdktrace::TracerProvider>(std::move(provider));
   trace_api::Provider::SetTracerProvider(opentelemetry::nostd::shared_ptr<trace_api::TracerProvider>(g_sdk_provider));
   g_tracer = g_sdk_provider->GetTracer("payload-manager", "0.1.0");
+  opentelemetry::context::propagation::GlobalTextMapPropagator::SetGlobalPropagator(
+      opentelemetry::nostd::shared_ptr<opentelemetry::context::propagation::TextMapPropagator>(
+          new opentelemetry::trace::propagation::HttpTraceContext()));
   return static_cast<bool>(g_tracer);
 }
 
@@ -137,6 +154,9 @@ bool InitializeTracing(const payload::runtime::config::RuntimeConfig& config) {
   g_sdk_provider = std::shared_ptr<sdktrace::TracerProvider>(std::move(provider));
   trace_api::Provider::SetTracerProvider(opentelemetry::nostd::shared_ptr<trace_api::TracerProvider>(g_sdk_provider));
   g_tracer = g_sdk_provider->GetTracer("payload-manager", "0.1.0");
+  opentelemetry::context::propagation::GlobalTextMapPropagator::SetGlobalPropagator(
+      opentelemetry::nostd::shared_ptr<opentelemetry::context::propagation::TextMapPropagator>(
+          new opentelemetry::trace::propagation::HttpTraceContext()));
   return static_cast<bool>(g_tracer);
 }
 

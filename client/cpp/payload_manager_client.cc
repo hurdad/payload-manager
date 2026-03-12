@@ -1,6 +1,12 @@
 #include "client/cpp/payload_manager_client.h"
 
 #include <arrow/status.h>
+#ifdef PAYLOAD_CLIENT_ENABLE_OTEL
+#include <opentelemetry/context/propagation/global_propagator.h>
+#include <opentelemetry/context/propagation/text_map_propagator.h>
+#include <opentelemetry/context/runtime_context.h>
+#include <opentelemetry/nostd/string_view.h>
+#endif
 #if PAYLOAD_CLIENT_ARROW_CUDA
 #include <arrow/gpu/cuda_context.h>
 #include <arrow/gpu/cuda_memory.h>
@@ -28,6 +34,34 @@ namespace payload::manager::client {
 #endif
 
 namespace {
+
+#ifdef PAYLOAD_CLIENT_ENABLE_OTEL
+class GrpcClientMetadataCarrier : public opentelemetry::context::propagation::TextMapCarrier {
+ public:
+  explicit GrpcClientMetadataCarrier(grpc::ClientContext& ctx) : ctx_(ctx) {
+  }
+
+  opentelemetry::nostd::string_view Get(opentelemetry::nostd::string_view) const noexcept override {
+    return {};
+  }
+
+  void Set(opentelemetry::nostd::string_view key, opentelemetry::nostd::string_view value) noexcept override {
+    ctx_.AddMetadata(std::string(key), std::string(value));
+  }
+
+ private:
+  grpc::ClientContext& ctx_;
+};
+
+void InjectTraceContext(grpc::ClientContext& ctx) {
+  GrpcClientMetadataCarrier carrier(ctx);
+  auto                      propagator = opentelemetry::context::propagation::GlobalTextMapPropagator::GetGlobalPropagator();
+  propagator->Inject(carrier, opentelemetry::context::RuntimeContext::GetCurrent());
+}
+#else
+void InjectTraceContext(grpc::ClientContext&) {
+}
+#endif
 
 arrow::Status GrpcToArrow(const grpc::Status& status, std::string_view action) {
   if (status.ok()) {
@@ -233,6 +267,7 @@ arrow::Result<PayloadClient::WritablePayload> PayloadClient::AllocateWritableBuf
 
   payload::manager::v1::AllocatePayloadResponse resp;
   grpc::ClientContext                           ctx;
+  InjectTraceContext(ctx);
 
   ARROW_RETURN_NOT_OK(GrpcToArrow(catalog_stub_->AllocatePayload(&ctx, req, &resp), "AllocatePayload"));
   ARROW_RETURN_NOT_OK(ValidateHasLocation(resp.payload_descriptor()));
@@ -258,6 +293,7 @@ arrow::Status PayloadClient::CommitPayload(const payload::manager::v1::PayloadID
 
   payload::manager::v1::CommitPayloadResponse resp;
   grpc::ClientContext                         ctx;
+  InjectTraceContext(ctx);
 
   return GrpcToArrow(catalog_stub_->CommitPayload(&ctx, req, &resp), "CommitPayload");
 }
@@ -269,6 +305,7 @@ arrow::Result<payload::manager::v1::ResolveSnapshotResponse> PayloadClient::Reso
 
   payload::manager::v1::ResolveSnapshotResponse response;
   grpc::ClientContext                           ctx;
+  InjectTraceContext(ctx);
 
   ARROW_RETURN_NOT_OK(GrpcToArrow(data_stub_->ResolveSnapshot(&ctx, request, &response), "ResolveSnapshot"));
   return response;
@@ -288,6 +325,7 @@ arrow::Result<PayloadClient::ReadablePayload> PayloadClient::AcquireReadableBuff
 
   payload::manager::v1::AcquireReadLeaseResponse resp;
   grpc::ClientContext                            ctx;
+  InjectTraceContext(ctx);
 
   ARROW_RETURN_NOT_OK(GrpcToArrow(data_stub_->AcquireReadLease(&ctx, req, &resp), "AcquireReadLease"));
   ARROW_RETURN_NOT_OK(ValidateHasLocation(resp.payload_descriptor()));
@@ -302,6 +340,7 @@ arrow::Status PayloadClient::Release(const payload::manager::v1::LeaseID& lease_
 
   google::protobuf::Empty resp;
   grpc::ClientContext     ctx;
+  InjectTraceContext(ctx);
 
   return GrpcToArrow(data_stub_->ReleaseLease(&ctx, req, &resp), "ReleaseLease");
 }
@@ -309,6 +348,7 @@ arrow::Status PayloadClient::Release(const payload::manager::v1::LeaseID& lease_
 arrow::Result<payload::manager::v1::PromoteResponse> PayloadClient::Promote(const payload::manager::v1::PromoteRequest& request) const {
   payload::manager::v1::PromoteResponse response;
   grpc::ClientContext                   ctx;
+  InjectTraceContext(ctx);
 
   ARROW_RETURN_NOT_OK(GrpcToArrow(catalog_stub_->Promote(&ctx, request, &response), "Promote"));
   return response;
@@ -317,6 +357,7 @@ arrow::Result<payload::manager::v1::PromoteResponse> PayloadClient::Promote(cons
 arrow::Result<payload::manager::v1::SpillResponse> PayloadClient::Spill(const payload::manager::v1::SpillRequest& request) const {
   payload::manager::v1::SpillResponse response;
   grpc::ClientContext                 ctx;
+  InjectTraceContext(ctx);
 
   ARROW_RETURN_NOT_OK(GrpcToArrow(catalog_stub_->Spill(&ctx, request, &response), "Spill"));
   return response;
@@ -326,6 +367,7 @@ arrow::Status PayloadClient::Prefetch(const payload::manager::v1::PrefetchReques
   google::protobuf::Empty response;
   grpc::ClientContext     ctx;
 
+  InjectTraceContext(ctx);
   return GrpcToArrow(catalog_stub_->Prefetch(&ctx, request, &response), "Prefetch");
 }
 
@@ -333,6 +375,7 @@ arrow::Status PayloadClient::Pin(const payload::manager::v1::PinRequest& request
   google::protobuf::Empty response;
   grpc::ClientContext     ctx;
 
+  InjectTraceContext(ctx);
   return GrpcToArrow(catalog_stub_->Pin(&ctx, request, &response), "Pin");
 }
 
@@ -340,6 +383,7 @@ arrow::Status PayloadClient::Unpin(const payload::manager::v1::UnpinRequest& req
   google::protobuf::Empty response;
   grpc::ClientContext     ctx;
 
+  InjectTraceContext(ctx);
   return GrpcToArrow(catalog_stub_->Unpin(&ctx, request, &response), "Unpin");
 }
 
@@ -347,6 +391,7 @@ arrow::Status PayloadClient::Delete(const payload::manager::v1::DeleteRequest& r
   google::protobuf::Empty response;
   grpc::ClientContext     ctx;
 
+  InjectTraceContext(ctx);
   return GrpcToArrow(catalog_stub_->Delete(&ctx, request, &response), "Delete");
 }
 
@@ -354,12 +399,14 @@ arrow::Status PayloadClient::AddLineage(const payload::manager::v1::AddLineageRe
   google::protobuf::Empty response;
   grpc::ClientContext     ctx;
 
+  InjectTraceContext(ctx);
   return GrpcToArrow(catalog_stub_->AddLineage(&ctx, request, &response), "AddLineage");
 }
 
 arrow::Result<payload::manager::v1::GetLineageResponse> PayloadClient::GetLineage(const payload::manager::v1::GetLineageRequest& request) const {
   payload::manager::v1::GetLineageResponse response;
   grpc::ClientContext                      ctx;
+  InjectTraceContext(ctx);
 
   ARROW_RETURN_NOT_OK(GrpcToArrow(catalog_stub_->GetLineage(&ctx, request, &response), "GetLineage"));
   return response;
@@ -369,6 +416,7 @@ arrow::Result<payload::manager::v1::UpdatePayloadMetadataResponse> PayloadClient
     const payload::manager::v1::UpdatePayloadMetadataRequest& request) const {
   payload::manager::v1::UpdatePayloadMetadataResponse response;
   grpc::ClientContext                                 ctx;
+  InjectTraceContext(ctx);
 
   ARROW_RETURN_NOT_OK(GrpcToArrow(catalog_stub_->UpdatePayloadMetadata(&ctx, request, &response), "UpdatePayloadMetadata"));
   return response;
@@ -378,6 +426,7 @@ arrow::Result<payload::manager::v1::AppendPayloadMetadataEventResponse> PayloadC
     const payload::manager::v1::AppendPayloadMetadataEventRequest& request) const {
   payload::manager::v1::AppendPayloadMetadataEventResponse response;
   grpc::ClientContext                                      ctx;
+  InjectTraceContext(ctx);
 
   ARROW_RETURN_NOT_OK(GrpcToArrow(catalog_stub_->AppendPayloadMetadataEvent(&ctx, request, &response), "AppendPayloadMetadataEvent"));
   return response;
@@ -386,6 +435,7 @@ arrow::Result<payload::manager::v1::AppendPayloadMetadataEventResponse> PayloadC
 arrow::Result<payload::manager::v1::StatsResponse> PayloadClient::Stats(const payload::manager::v1::StatsRequest& request) const {
   payload::manager::v1::StatsResponse response;
   grpc::ClientContext                 ctx;
+  InjectTraceContext(ctx);
 
   ARROW_RETURN_NOT_OK(GrpcToArrow(admin_stub_->Stats(&ctx, request, &response), "Stats"));
   return response;
@@ -395,6 +445,7 @@ arrow::Status PayloadClient::CreateStream(const payload::manager::v1::CreateStre
   google::protobuf::Empty response;
   grpc::ClientContext     ctx;
 
+  InjectTraceContext(ctx);
   return GrpcToArrow(stream_stub_->CreateStream(&ctx, request, &response), "CreateStream");
 }
 
@@ -402,12 +453,14 @@ arrow::Status PayloadClient::DeleteStream(const payload::manager::v1::DeleteStre
   google::protobuf::Empty response;
   grpc::ClientContext     ctx;
 
+  InjectTraceContext(ctx);
   return GrpcToArrow(stream_stub_->DeleteStream(&ctx, request, &response), "DeleteStream");
 }
 
 arrow::Result<payload::manager::v1::AppendResponse> PayloadClient::Append(const payload::manager::v1::AppendRequest& request) const {
   payload::manager::v1::AppendResponse response;
   grpc::ClientContext                  ctx;
+  InjectTraceContext(ctx);
 
   ARROW_RETURN_NOT_OK(GrpcToArrow(stream_stub_->Append(&ctx, request, &response), "Append"));
   return response;
@@ -416,6 +469,7 @@ arrow::Result<payload::manager::v1::AppendResponse> PayloadClient::Append(const 
 arrow::Result<payload::manager::v1::ReadResponse> PayloadClient::Read(const payload::manager::v1::ReadRequest& request) const {
   payload::manager::v1::ReadResponse response;
   grpc::ClientContext                ctx;
+  InjectTraceContext(ctx);
 
   ARROW_RETURN_NOT_OK(GrpcToArrow(stream_stub_->Read(&ctx, request, &response), "Read"));
   return response;
@@ -423,6 +477,7 @@ arrow::Result<payload::manager::v1::ReadResponse> PayloadClient::Read(const payl
 
 std::unique_ptr<grpc::ClientReader<payload::manager::v1::SubscribeResponse>> PayloadClient::Subscribe(
     const payload::manager::v1::SubscribeRequest& request, grpc::ClientContext* context) const {
+  InjectTraceContext(*context);
   return stream_stub_->Subscribe(context, request);
 }
 
@@ -430,6 +485,7 @@ arrow::Status PayloadClient::Commit(const payload::manager::v1::CommitRequest& r
   google::protobuf::Empty response;
   grpc::ClientContext     ctx;
 
+  InjectTraceContext(ctx);
   return GrpcToArrow(stream_stub_->Commit(&ctx, request, &response), "Commit");
 }
 
@@ -437,6 +493,7 @@ arrow::Result<payload::manager::v1::GetCommittedResponse> PayloadClient::GetComm
     const payload::manager::v1::GetCommittedRequest& request) const {
   payload::manager::v1::GetCommittedResponse response;
   grpc::ClientContext                        ctx;
+  InjectTraceContext(ctx);
 
   ARROW_RETURN_NOT_OK(GrpcToArrow(stream_stub_->GetCommitted(&ctx, request, &response), "GetCommitted"));
   return response;
@@ -445,6 +502,7 @@ arrow::Result<payload::manager::v1::GetCommittedResponse> PayloadClient::GetComm
 arrow::Result<payload::manager::v1::GetRangeResponse> PayloadClient::GetRange(const payload::manager::v1::GetRangeRequest& request) const {
   payload::manager::v1::GetRangeResponse response;
   grpc::ClientContext                    ctx;
+  InjectTraceContext(ctx);
 
   ARROW_RETURN_NOT_OK(GrpcToArrow(stream_stub_->GetRange(&ctx, request, &response), "GetRange"));
   return response;

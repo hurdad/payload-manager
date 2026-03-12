@@ -72,6 +72,7 @@ if(PAYLOAD_MANAGER_ENABLE_OTEL)
     list(APPEND INTERNAL_SRC
             observability/metrics.cpp
             observability/tracing.cpp
+            grpc/otel_interceptor.cpp
     )
 endif()
 

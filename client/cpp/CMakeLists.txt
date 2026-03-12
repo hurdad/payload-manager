@@ -5,6 +5,10 @@ option(PAYLOAD_MANAGER_CLIENT_ENABLE_CUDA
         "Enable Arrow CUDA support in the C++ client"
         OFF)
 
+option(PAYLOAD_MANAGER_CLIENT_ENABLE_OTEL
+        "Enable W3C Trace Context propagation in the C++ client (requires OTel API headers)"
+        OFF)
+
 set(_payload_manager_client_arrow_cuda_targets)
 
 if(PAYLOAD_MANAGER_CLIENT_ENABLE_CUDA)
@@ -44,6 +48,17 @@ target_compile_definitions(payload_manager_client
         PUBLIC
         PAYLOAD_CLIENT_ARROW_CUDA=$<IF:$<BOOL:${PAYLOAD_MANAGER_CLIENT_ENABLE_CUDA}>,1,0>
 )
+
+if(PAYLOAD_MANAGER_CLIENT_ENABLE_OTEL)
+    target_include_directories(payload_manager_client
+            PRIVATE
+            ${CMAKE_SOURCE_DIR}/third_party/opentelemetry-cpp/api/include
+    )
+    target_compile_definitions(payload_manager_client
+            PRIVATE
+            PAYLOAD_CLIENT_ENABLE_OTEL=1
+    )
+endif()
 
 target_link_libraries(payload_manager_client
         PUBLIC

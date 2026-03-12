@@ -58,89 +58,89 @@ class PayloadClient:
     def AllocatePayload(
         self, request: lifecycle_pb2.AllocatePayloadRequest
     ) -> lifecycle_pb2.AllocatePayloadResponse:
-        return self._catalog_stub.AllocatePayload(request)
+        return self._catalog_stub.AllocatePayload(request, metadata=_trace_metadata())
 
     def CommitPayloadRpc(
         self, request: lifecycle_pb2.CommitPayloadRequest
     ) -> lifecycle_pb2.CommitPayloadResponse:
-        return self._catalog_stub.CommitPayload(request)
+        return self._catalog_stub.CommitPayload(request, metadata=_trace_metadata())
 
     def Delete(self, request: lifecycle_pb2.DeleteRequest) -> empty_pb2.Empty:
-        return self._catalog_stub.Delete(request)
+        return self._catalog_stub.Delete(request, metadata=_trace_metadata())
 
     def Promote(self, request: tiering_pb2.PromoteRequest) -> tiering_pb2.PromoteResponse:
-        return self._catalog_stub.Promote(request)
+        return self._catalog_stub.Promote(request, metadata=_trace_metadata())
 
     def Spill(self, request: tiering_pb2.SpillRequest) -> tiering_pb2.SpillResponse:
-        return self._catalog_stub.Spill(request)
+        return self._catalog_stub.Spill(request, metadata=_trace_metadata())
 
     def Prefetch(self, request: tiering_pb2.PrefetchRequest) -> empty_pb2.Empty:
-        return self._catalog_stub.Prefetch(request)
+        return self._catalog_stub.Prefetch(request, metadata=_trace_metadata())
 
     def Pin(self, request: tiering_pb2.PinRequest) -> empty_pb2.Empty:
-        return self._catalog_stub.Pin(request)
+        return self._catalog_stub.Pin(request, metadata=_trace_metadata())
 
     def Unpin(self, request: tiering_pb2.UnpinRequest) -> empty_pb2.Empty:
-        return self._catalog_stub.Unpin(request)
+        return self._catalog_stub.Unpin(request, metadata=_trace_metadata())
 
     def AddLineage(self, request: lineage_pb2.AddLineageRequest) -> empty_pb2.Empty:
-        return self._catalog_stub.AddLineage(request)
+        return self._catalog_stub.AddLineage(request, metadata=_trace_metadata())
 
     def GetLineage(self, request: lineage_pb2.GetLineageRequest) -> lineage_pb2.GetLineageResponse:
-        return self._catalog_stub.GetLineage(request)
+        return self._catalog_stub.GetLineage(request, metadata=_trace_metadata())
 
     def UpdatePayloadMetadata(
         self,
         request: metadata_pb2.UpdatePayloadMetadataRequest,
     ) -> metadata_pb2.UpdatePayloadMetadataResponse:
-        return self._catalog_stub.UpdatePayloadMetadata(request)
+        return self._catalog_stub.UpdatePayloadMetadata(request, metadata=_trace_metadata())
 
     def AppendPayloadMetadataEvent(
         self,
         request: metadata_pb2.AppendPayloadMetadataEventRequest,
     ) -> metadata_pb2.AppendPayloadMetadataEventResponse:
-        return self._catalog_stub.AppendPayloadMetadataEvent(request)
+        return self._catalog_stub.AppendPayloadMetadataEvent(request, metadata=_trace_metadata())
 
     # Data service --------------------------------------------------------
     def ResolveSnapshot(self, request: lease_pb2.ResolveSnapshotRequest) -> lease_pb2.ResolveSnapshotResponse:
-        return self._data_stub.ResolveSnapshot(request)
+        return self._data_stub.ResolveSnapshot(request, metadata=_trace_metadata())
 
     def AcquireReadLease(
         self, request: lease_pb2.AcquireReadLeaseRequest
     ) -> lease_pb2.AcquireReadLeaseResponse:
-        return self._data_stub.AcquireReadLease(request)
+        return self._data_stub.AcquireReadLease(request, metadata=_trace_metadata())
 
     def ReleaseLease(self, request: lease_pb2.ReleaseLeaseRequest) -> empty_pb2.Empty:
-        return self._data_stub.ReleaseLease(request)
+        return self._data_stub.ReleaseLease(request, metadata=_trace_metadata())
 
     # Admin service -------------------------------------------------------
     def Stats(self, request: stats_pb2.StatsRequest) -> stats_pb2.StatsResponse:
-        return self._admin_stub.Stats(request)
+        return self._admin_stub.Stats(request, metadata=_trace_metadata())
 
     # Stream service ------------------------------------------------------
     def CreateStream(self, request: stream_pb2.CreateStreamRequest) -> empty_pb2.Empty:
-        return self._stream_stub.CreateStream(request)
+        return self._stream_stub.CreateStream(request, metadata=_trace_metadata())
 
     def DeleteStream(self, request: stream_pb2.DeleteStreamRequest) -> empty_pb2.Empty:
-        return self._stream_stub.DeleteStream(request)
+        return self._stream_stub.DeleteStream(request, metadata=_trace_metadata())
 
     def Append(self, request: stream_pb2.AppendRequest) -> stream_pb2.AppendResponse:
-        return self._stream_stub.Append(request)
+        return self._stream_stub.Append(request, metadata=_trace_metadata())
 
     def Read(self, request: stream_pb2.ReadRequest) -> stream_pb2.ReadResponse:
-        return self._stream_stub.Read(request)
+        return self._stream_stub.Read(request, metadata=_trace_metadata())
 
     def Subscribe(self, request: stream_pb2.SubscribeRequest) -> Iterator[stream_pb2.SubscribeResponse]:
-        return self._stream_stub.Subscribe(request)
+        return self._stream_stub.Subscribe(request, metadata=_trace_metadata())
 
     def Commit(self, request: stream_pb2.CommitRequest) -> empty_pb2.Empty:
-        return self._stream_stub.Commit(request)
+        return self._stream_stub.Commit(request, metadata=_trace_metadata())
 
     def GetCommitted(self, request: stream_pb2.GetCommittedRequest) -> stream_pb2.GetCommittedResponse:
-        return self._stream_stub.GetCommitted(request)
+        return self._stream_stub.GetCommitted(request, metadata=_trace_metadata())
 
     def GetRange(self, request: stream_pb2.GetRangeRequest) -> stream_pb2.GetRangeResponse:
-        return self._stream_stub.GetRange(request)
+        return self._stream_stub.GetRange(request, metadata=_trace_metadata())
 
     # Convenience methods -------------------------------------------------
     def AllocateWritableBuffer(
@@ -312,3 +312,20 @@ def _uuid_bytes(value: PayloadIdLike) -> bytes:
 def _shm_path(shm_name: str) -> str:
     cleaned = shm_name[1:] if shm_name.startswith("/") else shm_name
     return os.path.join("/dev/shm", cleaned)
+
+
+def _trace_metadata() -> list[tuple[str, str]]:
+    """Return gRPC metadata carrying the active W3C Trace Context, if available.
+
+    Soft-imports ``opentelemetry.propagate`` so that the client works without
+    the opentelemetry-api package installed.  When no active span exists the
+    propagator returns an empty dict and no metadata is added.
+    """
+    try:
+        from opentelemetry import propagate as _propagate  # type: ignore[import]
+
+        headers: dict[str, str] = {}
+        _propagate.inject(headers)
+        return list(headers.items())
+    except ImportError:
+        return []

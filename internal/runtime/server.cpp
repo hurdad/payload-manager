@@ -2,6 +2,8 @@
 
 #include <utility>
 
+#include "internal/grpc/otel_interceptor.hpp"
+
 namespace payload::runtime {
 
 Server::Server(std::string bind_address, std::vector<std::unique_ptr<grpc::Service>> services)
@@ -18,6 +20,14 @@ void Server::Start() {
   for (const auto& service : services_) {
     builder.RegisterService(service.get());
   }
+
+#ifdef ENABLE_OTEL
+  {
+    std::vector<std::unique_ptr<grpc::experimental::ServerInterceptorFactoryInterface>> interceptors;
+    interceptors.push_back(std::make_unique<payload::grpc::OtelServerInterceptorFactory>());
+    builder.experimental().SetInterceptorCreators(std::move(interceptors));
+  }
+#endif
 
   grpc_server_ = builder.BuildAndStart();
   if (!grpc_server_) {

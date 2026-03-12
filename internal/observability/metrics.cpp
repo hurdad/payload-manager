@@ -10,10 +10,12 @@
 #include <opentelemetry/exporters/otlp/otlp_http_metric_exporter_options.h>
 #include <opentelemetry/metrics/provider.h>
 #include <opentelemetry/sdk/metrics/meter_provider.h>
+#include <unistd.h>
 
 #include <algorithm>
 #include <chrono>
 #include <cstdlib>
+#include <limits>
 #include <memory>
 #include <mutex>
 #include <unordered_map>
@@ -70,7 +72,18 @@ std::string ResolveEndpoint(const OtlpConfig& config) {
 }
 
 resource::Resource BuildResource(const OtlpConfig& config) {
-  resource::ResourceAttributes attrs = {{"service.name", config.service_name}};
+  char hostname[256] = {};
+  gethostname(hostname, sizeof(hostname) - 1);
+
+  const char* env_version = std::getenv("PAYLOAD_SERVICE_VERSION");
+  const char* env_deploy  = std::getenv("PAYLOAD_DEPLOYMENT_ENV");
+
+  resource::ResourceAttributes attrs = {
+      {"service.name", config.service_name},
+      {"service.version", std::string(env_version ? env_version : "0.1.0")},
+      {"deployment.environment", std::string(env_deploy ? env_deploy : "production")},
+      {"host.name", std::string(hostname)},
+  };
   return resource::Resource::Create(attrs);
 }
 
@@ -294,7 +307,9 @@ void Metrics::SetTierOccupancyBytes(std::string_view tier, std::uint64_t bytes) 
   }
 
   std::lock_guard<std::mutex> lock(impl_->tier_occupancy_mutex);
-  impl_->tier_occupancy_values[std::string(tier)] = static_cast<std::int64_t>(bytes);
+  impl_->tier_occupancy_values[std::string(tier)] = bytes <= static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max())
+                                                        ? static_cast<std::int64_t>(bytes)
+                                                        : std::numeric_limits<std::int64_t>::max();
 }
 
 } // namespace payload::observability

@@ -12,6 +12,7 @@
 #include "internal/storage/gpu/cuda_arrow_store.hpp"
 #endif
 #include "internal/observability/logging.hpp"
+#include "internal/observability/spans.hpp"
 #include "internal/util/errors.hpp"
 #include "internal/util/time.hpp"
 #include "internal/util/uuid.hpp"
@@ -20,6 +21,40 @@
 namespace payload::core {
 
 using namespace payload::manager::v1;
+
+namespace {
+
+static std::string_view TierName(Tier tier) {
+  switch (tier) {
+    case TIER_RAM:
+      return "ram";
+    case TIER_DISK:
+      return "disk";
+    case TIER_GPU:
+      return "gpu";
+    case TIER_OBJECT:
+      return "object";
+    default:
+      return "unknown";
+  }
+}
+
+} // namespace
+
+void PayloadManager::UpdateTierBytes(Tier tier, int64_t delta) {
+  uint64_t bytes = 0;
+  {
+    std::lock_guard<std::mutex> lock(tier_bytes_guard_);
+    auto&                       val = tier_bytes_[static_cast<int>(tier)];
+    if (delta < 0 && static_cast<uint64_t>(-delta) > val) {
+      val = 0;
+    } else {
+      val = static_cast<uint64_t>(static_cast<int64_t>(val) + delta);
+    }
+    bytes = val;
+  }
+  payload::observability::Metrics::Instance().SetTierOccupancyBytes(TierName(tier), bytes);
+}
 
 namespace {
 
@@ -292,6 +327,7 @@ PayloadDescriptor PayloadManager::Allocate(uint64_t size_bytes, Tier preferred, 
   }
 
   CacheSnapshot(desc);
+  UpdateTierBytes(preferred, static_cast<int64_t>(size_bytes));
   return desc;
 }
 
@@ -351,7 +387,8 @@ void PayloadManager::Delete(const PayloadID& id, bool force) {
       throw payload::util::NotFound("delete payload: payload not found; verify payload id");
     }
 
-    const Tier payload_tier = record->tier;
+    const Tier     payload_tier = record->tier;
+    const uint64_t payload_size = record->size_bytes;
     ThrowIfDbError(repository_->DeletePayload(*tx, Key(id)), "delete payload");
     tx->Commit();
 
@@ -387,6 +424,8 @@ void PayloadManager::Delete(const PayloadID& id, bool force) {
       std::lock_guard<std::mutex> lock(spill_targets_guard_);
       spill_targets_.erase(Key(id));
     }
+
+    UpdateTierBytes(payload_tier, -static_cast<int64_t>(payload_size));
   } // payload_lock released
 
   // Prune the per-payload mutex now that the payload is fully deleted.
@@ -518,6 +557,10 @@ PayloadDescriptor PayloadManager::PromoteUnlocked(const PayloadID& id, Tier targ
   auto descriptor = ToPayloadDescriptor(*record);
   PopulateLocation(&descriptor);
   CacheSnapshot(descriptor);
+  if (source_tier != target) {
+    UpdateTierBytes(source_tier, -static_cast<int64_t>(record->size_bytes));
+    UpdateTierBytes(target, static_cast<int64_t>(record->size_bytes));
+  }
   return descriptor;
 }
 
@@ -559,6 +602,20 @@ void PayloadManager::HydrateCaches() {
   {
     std::lock_guard<std::mutex> lock(spill_targets_guard_);
     spill_targets_ = std::move(new_spill_targets);
+  }
+
+  std::unordered_map<int, uint64_t> new_tier_bytes;
+  for (const auto& record : records) {
+    new_tier_bytes[static_cast<int>(record.tier)] += record.size_bytes;
+  }
+  std::unordered_map<int, uint64_t> tier_snapshot;
+  {
+    std::lock_guard<std::mutex> lock(tier_bytes_guard_);
+    tier_bytes_   = std::move(new_tier_bytes);
+    tier_snapshot = tier_bytes_;
+  }
+  for (const auto& [tier_int, bytes] : tier_snapshot) {
+    payload::observability::Metrics::Instance().SetTierOccupancyBytes(TierName(static_cast<Tier>(tier_int)), bytes);
   }
 }
 
@@ -611,6 +668,10 @@ void PayloadManager::ExecuteSpill(const PayloadID& id, Tier target, bool fsync) 
   auto descriptor = ToPayloadDescriptor(*record);
   PopulateLocation(&descriptor);
   CacheSnapshot(descriptor);
+  if (source_tier != target) {
+    UpdateTierBytes(source_tier, -static_cast<int64_t>(record->size_bytes));
+    UpdateTierBytes(target, static_cast<int64_t>(record->size_bytes));
+  }
 }
 
 bool PayloadManager::IsEvictionExempt(const PayloadID& id) const {

@@ -33,6 +33,21 @@ if(TARGET payload_manager::client)
   target_link_libraries(payload_manager_unit_client_payload_manager_client PRIVATE payload_manager::client)
 endif()
 
+if(PAYLOAD_MANAGER_ENABLE_OTEL)
+  add_executable(payload_manager_unit_otel_interceptor otel_interceptor_test.cpp)
+  target_compile_features(payload_manager_unit_otel_interceptor PRIVATE cxx_std_20)
+  target_include_directories(payload_manager_unit_otel_interceptor
+          PRIVATE
+          ${PROJECT_SOURCE_DIR}
+          ${CMAKE_SOURCE_DIR}/third_party/opentelemetry-cpp/api/include
+  )
+  target_link_libraries(payload_manager_unit_otel_interceptor
+          PRIVATE
+          payload_manager::internal
+  )
+  payload_manager_register_test(payload_manager_unit_otel_interceptor "unit;observability;otel")
+endif()
+
 if(PAYLOAD_MANAGER_ENABLE_ARROW_CUDA)
   payload_manager_add_unit_test(payload_manager_unit_cuda_integration cuda_integration_test.cpp "storage;gpu;cuda")
 endif()

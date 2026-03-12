@@ -126,7 +126,10 @@ SpillResponse CatalogService::Spill(const SpillRequest& req) {
         payload::observability::SpanScope spill_span("CatalogService.SpillItem");
         spill_span.SetAttribute("payload.id", id.value());
         const auto target_tier = ctx_.manager->GetSpillTarget(id);
+        const auto spill_start = std::chrono::steady_clock::now();
         ctx_.manager->ExecuteSpill(id, target_tier, req.fsync());
+        const auto spill_ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - spill_start).count();
+        payload::observability::Metrics::Instance().ObserveSpillDurationMs("rpc", spill_ms);
         result->set_ok(true);
         *result->mutable_payload_descriptor() = ctx_.manager->ResolveSnapshot(id);
       } catch (const std::exception& e) {
