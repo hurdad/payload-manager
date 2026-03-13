@@ -50,7 +50,8 @@ using payload::manager::v1::TIER_RAM;
 
 class SimpleBackend final : public payload::storage::StorageBackend {
  public:
-  explicit SimpleBackend(payload::manager::v1::Tier tier) : tier_(tier) {}
+  explicit SimpleBackend(payload::manager::v1::Tier tier) : tier_(tier) {
+  }
 
   std::shared_ptr<arrow::Buffer> Allocate(const payload::manager::v1::PayloadID& id, uint64_t size) override {
     auto r = arrow::AllocateBuffer(size);
@@ -60,11 +61,21 @@ class SimpleBackend final : public payload::storage::StorageBackend {
     bufs_[id.value()] = buf;
     return buf;
   }
-  std::shared_ptr<arrow::Buffer> Read(const payload::manager::v1::PayloadID& id) override { return bufs_.at(id.value()); }
-  void Write(const payload::manager::v1::PayloadID& id, const std::shared_ptr<arrow::Buffer>& b, bool) override { bufs_[id.value()] = b; }
-  void Remove(const payload::manager::v1::PayloadID& id) override { bufs_.erase(id.value()); }
-  bool Has(const payload::manager::v1::PayloadID& id) const { return bufs_.count(id.value()) > 0; }
-  payload::manager::v1::Tier TierType() const override { return tier_; }
+  std::shared_ptr<arrow::Buffer> Read(const payload::manager::v1::PayloadID& id) override {
+    return bufs_.at(id.value());
+  }
+  void Write(const payload::manager::v1::PayloadID& id, const std::shared_ptr<arrow::Buffer>& b, bool) override {
+    bufs_[id.value()] = b;
+  }
+  void Remove(const payload::manager::v1::PayloadID& id) override {
+    bufs_.erase(id.value());
+  }
+  bool Has(const payload::manager::v1::PayloadID& id) const {
+    return bufs_.count(id.value()) > 0;
+  }
+  payload::manager::v1::Tier TierType() const override {
+    return tier_;
+  }
 
  private:
   payload::manager::v1::Tier                                      tier_;
@@ -87,16 +98,16 @@ struct Fixture {
     s[TIER_DISK] = disk;
     return std::make_shared<PayloadManager>(s, lease_mgr, repo);
   }()};
-  payload::service::ServiceContext ctx{[&] {
+  payload::service::ServiceContext                       ctx{[&] {
     payload::service::ServiceContext c;
-    c.manager        = manager;
-    c.repository     = repo;
-    c.lease_mgr      = lease_mgr;
+    c.manager         = manager;
+    c.repository      = repo;
+    c.lease_mgr       = lease_mgr;
     c.spill_scheduler = scheduler;
     return c;
   }()};
-  payload::service::CatalogService catalog{ctx};
-  payload::service::DataService    data{ctx};
+  payload::service::CatalogService                       catalog{ctx};
+  payload::service::DataService                          data{ctx};
 
   // Helper: allocate + commit a payload on RAM and return its ID.
   payload::manager::v1::PayloadID AllocateCommit(uint64_t size = 64) {
@@ -231,7 +242,7 @@ void TestWaitForLeasesSucceedsImmediatelyAfterRelease() {
   const auto id = f.AllocateCommit();
 
   AcquireReadLeaseRequest lr;
-  *lr.mutable_id()             = id;
+  *lr.mutable_id() = id;
   lr.set_mode(LEASE_MODE_READ);
   lr.set_min_lease_duration_ms(0);
   const auto lease_resp = f.data.AcquireReadLease(lr);

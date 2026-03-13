@@ -5,8 +5,7 @@
 
 namespace payload::lease {
 
-LeaseManager::LeaseManager(uint64_t default_lease_ms, uint64_t max_lease_ms)
-    : default_lease_ms_(default_lease_ms), max_lease_ms_(max_lease_ms) {
+LeaseManager::LeaseManager(uint64_t default_lease_ms, uint64_t max_lease_ms) : default_lease_ms_(default_lease_ms), max_lease_ms_(max_lease_ms) {
 }
 
 payload::manager::v1::LeaseID LeaseManager::GenerateLeaseID() {

@@ -130,9 +130,9 @@ SpillResponse CatalogService::Spill(const SpillRequest& req) {
         // Leases will naturally expire; we wait up to max_lease_ms rather than
         // spinning indefinitely.
         if (req.wait_for_leases() && ctx_.lease_mgr) {
-          constexpr auto kPollInterval  = std::chrono::milliseconds(20);
-          constexpr auto kWaitTimeout   = std::chrono::seconds(120);
-          const auto     deadline       = std::chrono::steady_clock::now() + kWaitTimeout;
+          constexpr auto kPollInterval = std::chrono::milliseconds(20);
+          constexpr auto kWaitTimeout  = std::chrono::seconds(120);
+          const auto     deadline      = std::chrono::steady_clock::now() + kWaitTimeout;
           while (ctx_.lease_mgr->HasActiveLeases(id)) {
             if (std::chrono::steady_clock::now() >= deadline) {
               throw payload::util::LeaseConflict("spill: active leases remain after wait timeout; release leases or retry without wait_for_leases");

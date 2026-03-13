@@ -176,7 +176,7 @@ bool PayloadManager::IsPinnedLocked(const std::string& key, uint64_t now_ms) {
 }
 
 void PayloadManager::SweepExpiredPins() {
-  const uint64_t now_ms = payload::util::ToUnixMillis(payload::util::Now());
+  const uint64_t              now_ms = payload::util::ToUnixMillis(payload::util::Now());
   std::lock_guard<std::mutex> lock(pins_guard_);
   for (auto it = pins_.begin(); it != pins_.end();) {
     const auto& state = it->second;

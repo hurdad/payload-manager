@@ -6,7 +6,6 @@
 #include <vector>
 
 #include "internal/core/payload_manager.hpp"
-#include "internal/observability/logging.hpp"
 #include "internal/db/api/repository.hpp"
 #include "internal/db/memory/memory_repository.hpp"
 #include "internal/expiration/expiration_worker.hpp"
@@ -17,6 +16,7 @@
 #include "internal/lease/lease_manager.hpp"
 #include "internal/lineage/lineage_graph.hpp"
 #include "internal/metadata/metadata_cache.hpp"
+#include "internal/observability/logging.hpp"
 #include "internal/service/admin_service.hpp"
 #include "internal/service/catalog_service.hpp"
 #include "internal/service/data_service.hpp"
@@ -151,7 +151,9 @@ std::shared_ptr<db::Repository> BuildRepository(const payload::runtime::config::
     // second instance) are NOT reflected until HydrateCaches() is called.
     // Run only one payload-manager instance per database to avoid silent
     // cache divergence.
-    PAYLOAD_LOG_WARN("PostgreSQL backend: snapshot cache enforces single-instance semantics; direct DB mutations from other processes will not be visible until HydrateCaches() is called");
+    PAYLOAD_LOG_WARN(
+        "PostgreSQL backend: snapshot cache enforces single-instance semantics; direct DB mutations from other processes will not be visible until "
+        "HydrateCaches() is called");
     auto pool = std::make_shared<db::postgres::PgPool>(database.postgres().connection_uri(), database.postgres().max_connections());
     BootstrapPostgresSchema(pool);
     return std::make_shared<db::postgres::PgRepository>(std::move(pool));
@@ -179,16 +181,14 @@ Application Build(const payload::runtime::config::RuntimeConfig& config) {
   // ------------------------------------------------------------------
   // Core components
   // ------------------------------------------------------------------
-  const auto& lease_cfg        = config.leases();
+  const auto&    lease_cfg = config.leases();
   const uint64_t default_lease_ms =
       lease_cfg.has_default_lease()
           ? static_cast<uint64_t>(lease_cfg.default_lease().seconds() * 1000 + lease_cfg.default_lease().nanos() / 1'000'000)
           : 20'000;
   const uint64_t max_lease_ms =
-      lease_cfg.has_max_lease()
-          ? static_cast<uint64_t>(lease_cfg.max_lease().seconds() * 1000 + lease_cfg.max_lease().nanos() / 1'000'000)
-          : 120'000;
-  auto lease_mgr = std::make_shared<lease::LeaseManager>(default_lease_ms, max_lease_ms);
+      lease_cfg.has_max_lease() ? static_cast<uint64_t>(lease_cfg.max_lease().seconds() * 1000 + lease_cfg.max_lease().nanos() / 1'000'000) : 120'000;
+  auto lease_mgr      = std::make_shared<lease::LeaseManager>(default_lease_ms, max_lease_ms);
   auto metadata_cache = std::make_shared<metadata::MetadataCache>();
   auto lineage_graph  = std::make_shared<lineage::LineageGraph>();
   auto repository     = BuildRepository(config);
@@ -199,10 +199,9 @@ Application Build(const payload::runtime::config::RuntimeConfig& config) {
   // ------------------------------------------------------------------
   // Spill system
   // ------------------------------------------------------------------
-  const uint32_t num_spill_threads =
-      config.spill_workers().threads() > 0 ? config.spill_workers().threads() : 1;
+  const uint32_t num_spill_threads = config.spill_workers().threads() > 0 ? config.spill_workers().threads() : 1;
 
-  auto spill_scheduler = std::make_shared<spill::SpillScheduler>();
+  auto                                             spill_scheduler = std::make_shared<spill::SpillScheduler>();
   std::vector<std::shared_ptr<spill::SpillWorker>> spill_worker_pool;
   spill_worker_pool.reserve(num_spill_threads);
   for (uint32_t i = 0; i < num_spill_threads; ++i) {
@@ -214,16 +213,14 @@ Application Build(const payload::runtime::config::RuntimeConfig& config) {
   // ------------------------------------------------------------------
   // Tiering manager (automatic pressure-driven eviction)
   // ------------------------------------------------------------------
-  auto pressure_state      = std::make_shared<tiering::PressureState>();
+  auto pressure_state       = std::make_shared<tiering::PressureState>();
   pressure_state->ram_limit = config.storage().ram().capacity_bytes();
   for (const auto& dev : config.storage().gpu().devices()) {
     pressure_state->gpu_limit += dev.capacity_bytes();
   }
 
   auto tiering_policy = std::make_shared<tiering::TieringPolicy>(
-      metadata_cache, [pm = payload_manager.get()](const manager::v1::PayloadID& id) {
-        return !pm->IsEvictionExempt(id);
-      });
+      metadata_cache, [pm = payload_manager.get()](const manager::v1::PayloadID& id) { return !pm->IsEvictionExempt(id); });
 
   auto tiering_manager = std::make_shared<tiering::TieringManager>(tiering_policy, spill_scheduler, payload_manager, pressure_state);
   tiering_manager->Start();
@@ -238,12 +235,12 @@ Application Build(const payload::runtime::config::RuntimeConfig& config) {
   // Services
   // ------------------------------------------------------------------
   service::ServiceContext ctx;
-  ctx.manager          = payload_manager;
-  ctx.metadata         = metadata_cache;
-  ctx.lineage          = lineage_graph;
-  ctx.repository       = repository;
-  ctx.lease_mgr        = lease_mgr;
-  ctx.spill_scheduler  = spill_scheduler;
+  ctx.manager         = payload_manager;
+  ctx.metadata        = metadata_cache;
+  ctx.lineage         = lineage_graph;
+  ctx.repository      = repository;
+  ctx.lease_mgr       = lease_mgr;
+  ctx.spill_scheduler = spill_scheduler;
 
   auto data_service    = std::make_shared<service::DataService>(ctx);
   auto catalog_service = std::make_shared<service::CatalogService>(ctx);

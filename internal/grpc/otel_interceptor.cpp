@@ -3,7 +3,6 @@
 #ifdef ENABLE_OTEL
 
 #include <grpcpp/server_context.h>
-
 #include <opentelemetry/context/propagation/global_propagator.h>
 #include <opentelemetry/context/propagation/text_map_propagator.h>
 #include <opentelemetry/context/runtime_context.h>
@@ -44,10 +43,10 @@ class OtelServerInterceptor : public ::grpc::experimental::Interceptor {
   void Intercept(::grpc::experimental::InterceptorBatchMethods* methods) override {
     if (methods->QueryInterceptionHookPoint(::grpc::experimental::InterceptionHookPoints::POST_RECV_INITIAL_METADATA)) {
       GrpcMetadataCarrier carrier(info_->server_context());
-      auto                propagator   = opentelemetry::context::propagation::GlobalTextMapPropagator::GetGlobalPropagator();
-      auto                current_ctx  = opentelemetry::context::RuntimeContext::GetCurrent();
-      auto                ctx          = propagator->Extract(carrier, current_ctx);
-      token_ = opentelemetry::context::RuntimeContext::Attach(ctx);
+      auto                propagator  = opentelemetry::context::propagation::GlobalTextMapPropagator::GetGlobalPropagator();
+      auto                current_ctx = opentelemetry::context::RuntimeContext::GetCurrent();
+      auto                ctx         = propagator->Extract(carrier, current_ctx);
+      token_                          = opentelemetry::context::RuntimeContext::Attach(ctx);
     }
 
     if (methods->QueryInterceptionHookPoint(::grpc::experimental::InterceptionHookPoints::PRE_SEND_STATUS)) {
@@ -60,7 +59,7 @@ class OtelServerInterceptor : public ::grpc::experimental::Interceptor {
   }
 
  private:
-  ::grpc::experimental::ServerRpcInfo*                       info_;
+  ::grpc::experimental::ServerRpcInfo*                            info_;
   opentelemetry::nostd::unique_ptr<opentelemetry::context::Token> token_;
 };
 

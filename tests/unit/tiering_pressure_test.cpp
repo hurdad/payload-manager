@@ -33,7 +33,8 @@ using payload::manager::v1::TIER_RAM;
 
 class SimpleBackend final : public payload::storage::StorageBackend {
  public:
-  explicit SimpleBackend(payload::manager::v1::Tier tier) : tier_(tier) {}
+  explicit SimpleBackend(payload::manager::v1::Tier tier) : tier_(tier) {
+  }
 
   std::shared_ptr<arrow::Buffer> Allocate(const payload::manager::v1::PayloadID& id, uint64_t size) override {
     auto r = arrow::AllocateBuffer(size);
@@ -49,8 +50,12 @@ class SimpleBackend final : public payload::storage::StorageBackend {
   void Write(const payload::manager::v1::PayloadID& id, const std::shared_ptr<arrow::Buffer>& b, bool) override {
     bufs_[id.value()] = b;
   }
-  void Remove(const payload::manager::v1::PayloadID& id) override { bufs_.erase(id.value()); }
-  payload::manager::v1::Tier TierType() const override { return tier_; }
+  void Remove(const payload::manager::v1::PayloadID& id) override {
+    bufs_.erase(id.value());
+  }
+  payload::manager::v1::Tier TierType() const override {
+    return tier_;
+  }
 
  private:
   payload::manager::v1::Tier                                      tier_;
@@ -93,8 +98,8 @@ void TestGetTierBytesAfterDelete() {
   auto desc = f.manager->Commit(f.manager->Allocate(128, TIER_RAM).payload_id());
   f.manager->Delete(desc.payload_id(), /*force=*/true);
 
-  const auto bytes  = f.manager->GetTierBytes();
-  const auto it_ram = bytes.find(static_cast<int>(TIER_RAM));
+  const auto bytes     = f.manager->GetTierBytes();
+  const auto it_ram    = bytes.find(static_cast<int>(TIER_RAM));
   uint64_t   ram_bytes = (it_ram != bytes.end()) ? it_ram->second : 0;
   assert(ram_bytes == 0 && "RAM bytes must be zero after Delete");
 }

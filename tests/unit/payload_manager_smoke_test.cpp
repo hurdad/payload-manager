@@ -50,7 +50,8 @@ using payload::manager::v1::TIER_RAM;
 
 class MemStorageBackend final : public payload::storage::StorageBackend {
  public:
-  explicit MemStorageBackend(payload::manager::v1::Tier tier) : tier_(tier) {}
+  explicit MemStorageBackend(payload::manager::v1::Tier tier) : tier_(tier) {
+  }
 
   std::shared_ptr<arrow::Buffer> Allocate(const PayloadID& id, uint64_t size_bytes) override {
     auto result = arrow::AllocateBuffer(size_bytes);
@@ -101,14 +102,14 @@ struct Fixture {
     storage[TIER_DISK] = disk;
     return std::make_shared<PayloadManager>(storage, lease_mgr, repo);
   }()};
-  payload::service::ServiceContext ctx{[&] {
+  payload::service::ServiceContext                       ctx{[&] {
     payload::service::ServiceContext c;
     c.manager    = manager;
     c.repository = repo;
     return c;
   }()};
-  payload::service::CatalogService catalog{ctx};
-  payload::service::DataService    data{ctx};
+  payload::service::CatalogService                       catalog{ctx};
+  payload::service::DataService                          data{ctx};
 };
 
 // ---------------------------------------------------------------------------
@@ -137,8 +138,8 @@ void TestFullLifecycle() {
 
   // 3. ResolveSnapshot (advisory)
   ResolveSnapshotRequest resolve_req;
-  *resolve_req.mutable_id()  = payload_id;
-  const auto resolve_resp    = f.data.ResolveSnapshot(resolve_req);
+  *resolve_req.mutable_id() = payload_id;
+  const auto resolve_resp   = f.data.ResolveSnapshot(resolve_req);
   assert(resolve_resp.payload_descriptor().state() == PAYLOAD_STATE_ACTIVE);
   assert(resolve_resp.payload_descriptor().tier() == TIER_RAM);
 
@@ -226,7 +227,7 @@ void TestForceDeleteWithActiveLease() {
 
   // Acquire a lease and then force-delete without releasing.
   AcquireReadLeaseRequest lease_req;
-  *lease_req.mutable_id()          = payload_id;
+  *lease_req.mutable_id() = payload_id;
   lease_req.set_min_lease_duration_ms(30000);
   const auto lease_resp = f.data.AcquireReadLease(lease_req);
   assert(!lease_resp.lease_id().value().empty());
@@ -273,7 +274,7 @@ void TestSoftDeleteWithActiveLeaseFails() {
   f.catalog.Commit(commit_req);
 
   AcquireReadLeaseRequest lease_req;
-  *lease_req.mutable_id()          = payload_id;
+  *lease_req.mutable_id() = payload_id;
   lease_req.set_min_lease_duration_ms(30000);
   f.data.AcquireReadLease(lease_req);
 
