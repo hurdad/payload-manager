@@ -18,6 +18,10 @@ payload::manager::v1::PayloadID MakePayloadIdOfSize(size_t size) {
   return id;
 }
 
+// ---------------------------------------------------------------------------
+// PayloadIdFromUuid
+// ---------------------------------------------------------------------------
+
 void TestPayloadIdFromUuidParsesCanonicalUuid() {
   const auto parsed = PayloadClient::PayloadIdFromUuid("00112233-4455-6677-8899-aabbccddeeff");
   assert(parsed.ok());
@@ -33,6 +37,27 @@ void TestPayloadIdFromUuidAcceptsHexWithoutDashes() {
   assert(parsed->value().size() == 16);
 }
 
+void TestPayloadIdFromUuidAllZeros() {
+  const auto parsed = PayloadClient::PayloadIdFromUuid("00000000-0000-0000-0000-000000000000");
+  assert(parsed.ok());
+  assert(parsed->value().size() == 16);
+  assert(parsed->value() == std::string(16, '\0'));
+}
+
+void TestPayloadIdFromUuidUppercaseHex() {
+  const auto parsed = PayloadClient::PayloadIdFromUuid("AABBCCDD-EEFF-0011-2233-445566778899");
+  assert(parsed.ok());
+  assert(parsed->value().size() == 16);
+}
+
+void TestPayloadIdFromUuidMixedCaseProducesSameBytes() {
+  // Uppercase and lowercase hex must decode to identical byte sequences.
+  const auto lower = PayloadClient::PayloadIdFromUuid("aabbccddeeff00112233445566778899");
+  const auto upper = PayloadClient::PayloadIdFromUuid("AABBCCDDEEFF00112233445566778899");
+  assert(lower.ok() && upper.ok());
+  assert(lower->value() == upper->value());
+}
+
 void TestPayloadIdFromUuidRejectsInvalidCharacters() {
   const auto parsed = PayloadClient::PayloadIdFromUuid("00112233-4455-6677-8899-aabbccddeefg");
   assert(!parsed.ok());
@@ -44,6 +69,30 @@ void TestPayloadIdFromUuidRejectsInvalidLength() {
   assert(!parsed.ok());
   assert(parsed.status().IsInvalid());
 }
+
+void TestPayloadIdFromUuidRejectsTooLong() {
+  // 33 hex characters after stripping dashes — one too many.
+  const auto parsed = PayloadClient::PayloadIdFromUuid("00112233445566778899aabbccddeeff00");
+  assert(!parsed.ok());
+  assert(parsed.status().IsInvalid());
+}
+
+void TestPayloadIdFromUuidRejectsEmpty() {
+  const auto parsed = PayloadClient::PayloadIdFromUuid("");
+  assert(!parsed.ok());
+  assert(parsed.status().IsInvalid());
+}
+
+void TestPayloadIdFromUuidRejectsOnlyDashes() {
+  // All dashes strip to zero hex characters.
+  const auto parsed = PayloadClient::PayloadIdFromUuid("----");
+  assert(!parsed.ok());
+  assert(parsed.status().IsInvalid());
+}
+
+// ---------------------------------------------------------------------------
+// ValidatePayloadId
+// ---------------------------------------------------------------------------
 
 void TestValidatePayloadIdEnforcesSixteenBytes() {
   const auto ok = PayloadClient::ValidatePayloadId(MakePayloadIdOfSize(16));
@@ -57,6 +106,26 @@ void TestValidatePayloadIdEnforcesSixteenBytes() {
   assert(!long_id.ok());
   assert(long_id.IsInvalid());
 }
+
+void TestValidatePayloadIdRejectsEmpty() {
+  const auto empty = PayloadClient::ValidatePayloadId(MakePayloadIdOfSize(0));
+  assert(!empty.ok());
+  assert(empty.IsInvalid());
+}
+
+void TestValidatePayloadIdDoesNotInspectContent() {
+  // Validation is size-only; content is treated as opaque bytes.
+  payload::manager::v1::PayloadID id;
+  id.set_value(std::string(16, '\0'));
+  assert(PayloadClient::ValidatePayloadId(id).ok());
+
+  id.set_value(std::string(16, '\xFF'));
+  assert(PayloadClient::ValidatePayloadId(id).ok());
+}
+
+// ---------------------------------------------------------------------------
+// Pre-call PayloadID validation on RPC methods
+// ---------------------------------------------------------------------------
 
 void TestRpcHelpersRejectInvalidPayloadIdBeforeGrpcCall() {
   auto          channel = grpc::CreateChannel("dns:///127.0.0.1:1", grpc::InsecureChannelCredentials());
@@ -77,15 +146,40 @@ void TestRpcHelpersRejectInvalidPayloadIdBeforeGrpcCall() {
   assert(acquire.status().IsInvalid());
 }
 
+void TestRpcHelpersRejectEmptyPayloadIdBeforeGrpcCall() {
+  auto          channel = grpc::CreateChannel("dns:///127.0.0.1:1", grpc::InsecureChannelCredentials());
+  PayloadClient client(channel);
+
+  const auto empty_id = MakePayloadIdOfSize(0);
+
+  assert(client.CommitPayload(empty_id).IsInvalid());
+  assert(client.Resolve(empty_id).status().IsInvalid());
+  assert(client.AcquireReadableBuffer(empty_id).status().IsInvalid());
+}
+
 } // namespace
 
 int main() {
+  // PayloadIdFromUuid
   TestPayloadIdFromUuidParsesCanonicalUuid();
   TestPayloadIdFromUuidAcceptsHexWithoutDashes();
+  TestPayloadIdFromUuidAllZeros();
+  TestPayloadIdFromUuidUppercaseHex();
+  TestPayloadIdFromUuidMixedCaseProducesSameBytes();
   TestPayloadIdFromUuidRejectsInvalidCharacters();
   TestPayloadIdFromUuidRejectsInvalidLength();
+  TestPayloadIdFromUuidRejectsTooLong();
+  TestPayloadIdFromUuidRejectsEmpty();
+  TestPayloadIdFromUuidRejectsOnlyDashes();
+
+  // ValidatePayloadId
   TestValidatePayloadIdEnforcesSixteenBytes();
+  TestValidatePayloadIdRejectsEmpty();
+  TestValidatePayloadIdDoesNotInspectContent();
+
+  // Pre-call validation
   TestRpcHelpersRejectInvalidPayloadIdBeforeGrpcCall();
+  TestRpcHelpersRejectEmptyPayloadIdBeforeGrpcCall();
 
   std::cout << "payload_manager_unit_client_payload_manager_client: pass\n";
   return 0;
