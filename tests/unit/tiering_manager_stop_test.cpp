@@ -49,7 +49,8 @@ using payload::manager::v1::TIER_RAM;
 
 class SimpleBackend final : public payload::storage::StorageBackend {
  public:
-  explicit SimpleBackend(payload::manager::v1::Tier tier) : tier_(tier) {}
+  explicit SimpleBackend(payload::manager::v1::Tier tier) : tier_(tier) {
+  }
 
   std::shared_ptr<arrow::Buffer> Allocate(const payload::manager::v1::PayloadID& id, uint64_t size) override {
     auto r = arrow::AllocateBuffer(size);
@@ -59,10 +60,18 @@ class SimpleBackend final : public payload::storage::StorageBackend {
     bufs_[id.value()] = buf;
     return buf;
   }
-  std::shared_ptr<arrow::Buffer> Read(const payload::manager::v1::PayloadID& id) override { return bufs_.at(id.value()); }
-  void Write(const payload::manager::v1::PayloadID& id, const std::shared_ptr<arrow::Buffer>& b, bool) override { bufs_[id.value()] = b; }
-  void Remove(const payload::manager::v1::PayloadID& id) override { bufs_.erase(id.value()); }
-  payload::manager::v1::Tier TierType() const override { return tier_; }
+  std::shared_ptr<arrow::Buffer> Read(const payload::manager::v1::PayloadID& id) override {
+    return bufs_.at(id.value());
+  }
+  void Write(const payload::manager::v1::PayloadID& id, const std::shared_ptr<arrow::Buffer>& b, bool) override {
+    bufs_[id.value()] = b;
+  }
+  void Remove(const payload::manager::v1::PayloadID& id) override {
+    bufs_.erase(id.value());
+  }
+  payload::manager::v1::Tier TierType() const override {
+    return tier_;
+  }
 
  private:
   payload::manager::v1::Tier                                      tier_;
@@ -80,11 +89,12 @@ struct Env {
     s[TIER_DISK] = disk;
     return std::make_shared<payload::core::PayloadManager>(s, lease_mgr, repo);
   }()};
-  std::shared_ptr<payload::metadata::MetadataCache>  cache     = std::make_shared<payload::metadata::MetadataCache>();
-  std::shared_ptr<payload::spill::SpillScheduler>    scheduler = std::make_shared<payload::spill::SpillScheduler>();
-  std::shared_ptr<payload::tiering::PressureState>   pressure  = std::make_shared<payload::tiering::PressureState>();
-  std::shared_ptr<payload::tiering::TieringPolicy>   policy    = std::make_shared<payload::tiering::TieringPolicy>(cache);
-  std::shared_ptr<payload::tiering::TieringManager>  tiering   = std::make_shared<payload::tiering::TieringManager>(policy, scheduler, manager, pressure);
+  std::shared_ptr<payload::metadata::MetadataCache>      cache     = std::make_shared<payload::metadata::MetadataCache>();
+  std::shared_ptr<payload::spill::SpillScheduler>        scheduler = std::make_shared<payload::spill::SpillScheduler>();
+  std::shared_ptr<payload::tiering::PressureState>       pressure  = std::make_shared<payload::tiering::PressureState>();
+  std::shared_ptr<payload::tiering::TieringPolicy>       policy    = std::make_shared<payload::tiering::TieringPolicy>(cache);
+  std::shared_ptr<payload::tiering::TieringManager>      tiering =
+      std::make_shared<payload::tiering::TieringManager>(policy, scheduler, manager, pressure);
 };
 
 // ---------------------------------------------------------------------------
