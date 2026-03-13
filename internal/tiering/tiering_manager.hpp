@@ -1,7 +1,9 @@
 #pragma once
 
 #include <atomic>
+#include <condition_variable>
 #include <memory>
+#include <mutex>
 #include <thread>
 
 #include "internal/spill/spill_scheduler.hpp"
@@ -33,8 +35,10 @@ class TieringManager {
   std::shared_ptr<payload::core::PayloadManager> manager_;
   std::shared_ptr<PressureState>                 state_;
 
-  std::thread       thread_;
-  std::atomic<bool> running_{false};
+  std::thread             thread_;
+  std::atomic<bool>       running_{false};
+  std::mutex              mu_;
+  std::condition_variable cv_;
 };
 
 } // namespace payload::tiering

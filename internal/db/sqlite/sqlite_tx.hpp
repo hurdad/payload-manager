@@ -31,7 +31,8 @@ class SqliteTransaction final : public db::Transaction {
 
  private:
   std::shared_ptr<SqliteDB> db_;
-  bool                      committed_ = false;
+  bool                      committed_  = false;
+  bool                      finalized_  = false; // true after either Commit or Rollback
 };
 
 } // namespace payload::db::sqlite

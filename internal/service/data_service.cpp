@@ -70,7 +70,7 @@ AcquireReadLeaseResponse DataService::AcquireReadLease(const AcquireReadLeaseReq
       throw payload::util::InvalidState("acquire lease: unsupported lease mode; use LEASE_MODE_READ");
     }
 
-    if (req.promotion_policy() == PROMOTION_POLICY_BEST_EFFORT) {
+    if (req.promotion_policy() == PROMOTION_POLICY_BEST_EFFORT && req.min_tier() != TIER_UNSPECIFIED) {
       const auto snapshot = ctx_.manager->ResolveSnapshot(req.id());
       if (payload::core::PlacementEngine::IsHigherTier(req.min_tier(), snapshot.tier())) {
         throw payload::util::InvalidState("acquire lease: best-effort promotion cannot satisfy min_tier; lower min_tier or change promotion policy");

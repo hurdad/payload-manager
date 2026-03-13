@@ -23,12 +23,17 @@ TieringManager::~TieringManager() {
 }
 
 void TieringManager::Start() {
+  if (thread_.joinable()) return; // already running
   running_ = true;
   thread_  = std::thread(&TieringManager::Loop, this);
 }
 
 void TieringManager::Stop() {
-  running_ = false;
+  {
+    std::lock_guard lock(mu_);
+    running_ = false;
+  }
+  cv_.notify_all();
   if (thread_.joinable()) thread_.join();
 }
 
@@ -64,7 +69,8 @@ void TieringManager::Loop() {
       PAYLOAD_LOG_ERROR("ExpireStale failed", {payload::observability::StringField("error", e.what())});
     }
 
-    std::this_thread::sleep_for(100ms);
+    std::unique_lock lock(mu_);
+    cv_.wait_for(lock, 100ms, [&] { return !running_.load(); });
   }
 }
 

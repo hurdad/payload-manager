@@ -507,10 +507,12 @@ Result SqliteRepository::AppendStreamEntries(Transaction& t, uint64_t stream_id,
   if (sqlite3_prepare_v2(db, max_sql, -1, &max_st, nullptr) != SQLITE_OK) return Result::Err(ErrorCode::InternalError, sqlite3_errmsg(db));
 
   BindU64(max_st, 1, stream_id);
-  uint64_t next_offset = 0;
-  if (sqlite3_step(max_st) == SQLITE_ROW) {
-    next_offset = static_cast<uint64_t>(sqlite3_column_int64(max_st, 0) + 1);
+  const int max_rc = sqlite3_step(max_st);
+  if (max_rc != SQLITE_ROW) {
+    sqlite3_finalize(max_st);
+    return Result::Err(ErrorCode::InternalError, sqlite3_errmsg(db));
   }
+  uint64_t next_offset = static_cast<uint64_t>(sqlite3_column_int64(max_st, 0) + 1);
   sqlite3_finalize(max_st);
 
   const char* ins_sql =

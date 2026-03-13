@@ -44,10 +44,16 @@ using namespace payload;
 namespace {
 
 #if PAYLOAD_DB_SQLITE
+// Execute a migration SQL statement, ignoring "duplicate column" errors so that
+// ALTER TABLE ADD COLUMN is idempotent on older SQLite builds that don't support
+// IF NOT EXISTS. All other errors are re-thrown.
 static void TryExecSqlite(const std::shared_ptr<db::sqlite::SqliteDB>& db, const std::string& sql) {
   try {
     db->Exec(sql);
-  } catch (...) {
+  } catch (const std::runtime_error& e) {
+    if (std::string(e.what()).find("duplicate column") == std::string::npos) {
+      throw;
+    }
   }
 }
 

@@ -20,6 +20,7 @@ SpillWorker::~SpillWorker() {
 }
 
 void SpillWorker::Start() {
+  if (thread_.joinable()) return; // already running
   running_ = true;
   thread_  = std::thread(&SpillWorker::Run, this);
 }

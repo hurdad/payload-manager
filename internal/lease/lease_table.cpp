@@ -30,21 +30,18 @@ Lease LeaseTable::Insert(const Lease& lease) {
     }
   }
 
+  // Expire stale leases for this payload only, using equal_range to avoid an
+  // O(total_leases) scan over all payloads.
   const auto now         = Clock::now();
   const auto payload_key = Key(lease.payload_id);
-  for (auto it = by_payload_.begin(); it != by_payload_.end();) {
-    if (it->first != payload_key) {
-      ++it;
-      continue;
-    }
-
+  auto       range       = by_payload_.equal_range(payload_key);
+  for (auto it = range.first; it != range.second;) {
     auto lease_it = leases_.find(it->second);
     if (lease_it == leases_.end() || IsExpired(lease_it->second, now) || Key(lease_it->second.payload_id) != payload_key) {
       if (lease_it != leases_.end()) leases_.erase(lease_it);
       it = by_payload_.erase(it);
       continue;
     }
-
     ++it;
   }
 
@@ -78,19 +75,14 @@ bool LeaseTable::HasActive(const payload::manager::v1::PayloadID& id) {
   const auto payload_key = Key(id);
   bool       has_active  = false;
 
-  for (auto it = by_payload_.begin(); it != by_payload_.end();) {
-    if (it->first != payload_key) {
-      ++it;
-      continue;
-    }
-
+  auto range = by_payload_.equal_range(payload_key);
+  for (auto it = range.first; it != range.second;) {
     auto lease_it = leases_.find(it->second);
     if (lease_it == leases_.end() || IsExpired(lease_it->second, now) || Key(lease_it->second.payload_id) != payload_key) {
       if (lease_it != leases_.end()) leases_.erase(lease_it);
       it = by_payload_.erase(it);
       continue;
     }
-
     has_active = true;
     ++it;
   }
@@ -102,12 +94,8 @@ void LeaseTable::RemoveAll(const payload::manager::v1::PayloadID& id) {
   std::lock_guard lock(mutex_);
 
   const auto payload_key = Key(id);
-  for (auto it = by_payload_.begin(); it != by_payload_.end();) {
-    if (it->first != payload_key) {
-      ++it;
-      continue;
-    }
-
+  auto       range       = by_payload_.equal_range(payload_key);
+  for (auto it = range.first; it != range.second;) {
     leases_.erase(it->second);
     it = by_payload_.erase(it);
   }

@@ -7,7 +7,7 @@ SqliteTransaction::SqliteTransaction(std::shared_ptr<SqliteDB> db) : db_(std::mo
 }
 
 SqliteTransaction::~SqliteTransaction() {
-  if (!committed_) {
+  if (!finalized_) {
     try {
       db_->Exec("ROLLBACK;");
     } catch (...) {
@@ -18,11 +18,12 @@ SqliteTransaction::~SqliteTransaction() {
 void SqliteTransaction::Commit() {
   db_->Exec("COMMIT;");
   committed_ = true;
+  finalized_ = true;
 }
 
 void SqliteTransaction::Rollback() {
   db_->Exec("ROLLBACK;");
-  committed_ = true;
+  finalized_ = true;
 }
 
 } // namespace payload::db::sqlite
