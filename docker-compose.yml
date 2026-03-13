@@ -26,7 +26,7 @@ services:
     ports:
       - "50051:50051"
     volumes:
-      - ./confng/runtime-docker-postgres.yaml:/app/conf/runtime-docker-postgres.yaml:ro
+      - ./config/runtime-docker-postgres.yaml:/app/conf/runtime-docker-postgres.yaml:ro
       - payload-data:/var/lib/payload-manager
 
 volumes:

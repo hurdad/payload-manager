@@ -140,9 +140,7 @@ Run the service with PostgreSQL using Docker Compose:
 docker compose up --build
 ```
 
-Compose uses `docker-compose.yml` and the Docker-ready config file `confng/runtime-docker-postgres.yaml`.
-
-The compose stack also includes Grafana Alloy (`confng/alloy/config.alloy`) to receive OTLP metrics from `payload-manager` and forward them to your backend. Set `ALLOY_METRICS_BACKEND_OTLP_ENDPOINT` (and optionally `ALLOY_METRICS_BACKEND_AUTH_HEADER`) before starting compose.
+Compose uses `docker-compose.yml` and the Docker-ready config file `config/runtime-docker-postgres.yaml`.
 
 ## Clients (CPU vs CUDA)
 

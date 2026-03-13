@@ -46,10 +46,11 @@ Why this default:
 - Simplifies CMake wiring (`add_subdirectory(tests/unit)`) and label-based `ctest` selection.
 - Makes it easier to separate optional test-only dependencies (gtest/gmock) from runtime targets.
 
-Suggested layout:
+Actual layout (reflect current state):
 
-- `tests/unit/internal/core/payload_manager_test.cpp`
-- `tests/unit/internal/lease/lease_manager_test.cpp`
+- `tests/unit/*.cpp` — most unit tests live directly under `tests/unit/` (e.g., `lease_table_test.cpp`, `catalog_service_test.cpp`)
+- `tests/unit/internal/lineage/` — subsystem tests that map closely to source paths
+- `tests/unit/client/` — C++ client unit tests
 - `tests/integration/...` for process/db/storage/gRPC coverage
 
 Exception: tiny header-only utility tests can be colocated when that meaningfully improves discoverability, but keep this rare and consistent.

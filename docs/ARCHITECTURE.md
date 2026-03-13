@@ -25,12 +25,13 @@ These services operate on domain abstractions and call into core managers and re
 
 ### Core orchestration layer
 
-Key responsibilities live in `internal/core`, `internal/lease`, `internal/tiering`, `internal/spill`, and `internal/metadata`:
+Key responsibilities live in `internal/core`, `internal/lease`, `internal/tiering`, `internal/spill`, `internal/expiration`, and `internal/metadata`:
 
 - Payload state transitions and commit semantics.
 - Placement and re-placement decisions.
 - Lease issuance, tracking, and release.
 - Spill scheduling and worker execution.
+- TTL-based expiration via background worker.
 - Metadata caching and lookup helpers.
 
 ### Persistence abstraction
