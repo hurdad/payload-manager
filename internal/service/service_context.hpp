@@ -34,6 +34,9 @@ struct ServiceContext {
   // Optional: used by CatalogService::Spill for wait_for_leases and BEST_EFFORT scheduling.
   std::shared_ptr<payload::lease::LeaseManager>   lease_mgr;
   std::shared_ptr<payload::spill::SpillScheduler> spill_scheduler;
+  // Maximum time to wait for active read leases to expire before giving up on a spill.
+  // Defaults to 120 s; should be set to the configured max lease duration.
+  uint64_t spill_wait_timeout_ms = 120'000;
 };
 
 } // namespace payload::service

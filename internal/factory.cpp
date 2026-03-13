@@ -241,12 +241,13 @@ Application Build(const payload::runtime::config::RuntimeConfig& config) {
   // Services
   // ------------------------------------------------------------------
   service::ServiceContext ctx;
-  ctx.manager         = payload_manager;
-  ctx.metadata        = metadata_cache;
-  ctx.lineage         = lineage_graph;
-  ctx.repository      = repository;
-  ctx.lease_mgr       = lease_mgr;
-  ctx.spill_scheduler = spill_scheduler;
+  ctx.manager               = payload_manager;
+  ctx.metadata              = metadata_cache;
+  ctx.lineage               = lineage_graph;
+  ctx.repository            = repository;
+  ctx.lease_mgr             = lease_mgr;
+  ctx.spill_scheduler       = spill_scheduler;
+  ctx.spill_wait_timeout_ms = max_lease_ms;
 
   auto data_service    = std::make_shared<service::DataService>(ctx);
   auto catalog_service = std::make_shared<service::CatalogService>(ctx);

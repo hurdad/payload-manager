@@ -242,10 +242,15 @@ void PayloadManager::PopulateLocation(PayloadDescriptor* descriptor) {
         throw payload::util::InvalidState("payload GPU backend is not CUDA-capable");
       }
 
-      auto ipc_handle       = cuda_backend->ExportIPC(id);
+      auto ipc_handle = cuda_backend->ExportIPC(id);
+      if (!ipc_handle) {
+        throw payload::util::InvalidState("GPU IPC handle export returned null");
+      }
       auto gpu_buffer       = backend->Read(id);
       auto maybe_serialized = ipc_handle->Serialize();
-      if (!maybe_serialized.ok()) throw std::runtime_error("GPU IPC handle serialize failed: " + maybe_serialized.status().ToString());
+      if (!maybe_serialized.ok()) {
+        throw payload::util::InvalidState("GPU IPC handle serialize failed: " + maybe_serialized.status().ToString());
+      }
       auto serialized = *maybe_serialized;
 
       GpuLocation gpu;
@@ -267,6 +272,10 @@ PayloadDescriptor PayloadManager::Allocate(uint64_t size_bytes, Tier preferred, 
                                            const payload::manager::core::v1::EvictionPolicy& eviction_policy) {
   if (size_bytes == 0) {
     throw std::invalid_argument("allocate payload: size_bytes must be greater than zero");
+  }
+  constexpr uint64_t kMaxPayloadBytes = uint64_t{128} * 1024 * 1024 * 1024; // 128 GiB
+  if (size_bytes > kMaxPayloadBytes) {
+    throw std::invalid_argument("allocate payload: size_bytes exceeds maximum allowed size (128 GiB)");
   }
 
   PayloadDescriptor desc;

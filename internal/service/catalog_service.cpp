@@ -131,7 +131,7 @@ SpillResponse CatalogService::Spill(const SpillRequest& req) {
         // spinning indefinitely.
         if (req.wait_for_leases() && ctx_.lease_mgr) {
           constexpr auto kPollInterval = std::chrono::milliseconds(20);
-          constexpr auto kWaitTimeout  = std::chrono::seconds(120);
+          const auto     kWaitTimeout  = std::chrono::milliseconds(ctx_.spill_wait_timeout_ms);
           const auto     deadline      = std::chrono::steady_clock::now() + kWaitTimeout;
           while (ctx_.lease_mgr->HasActiveLeases(id)) {
             if (std::chrono::steady_clock::now() >= deadline) {
