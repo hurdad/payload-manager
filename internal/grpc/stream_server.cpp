@@ -1,5 +1,8 @@
 #include "stream_server.hpp"
 
+#include <chrono>
+#include <thread>
+
 #include "grpc_error.hpp"
 #include "payload/manager/v1.hpp"
 
@@ -45,14 +48,39 @@ StreamServer::StreamServer(std::shared_ptr<payload::service::StreamService> svc)
   }
 }
 
-::grpc::Status StreamServer::Subscribe(::grpc::ServerContext*, const payload::manager::v1::SubscribeRequest* req,
+::grpc::Status StreamServer::Subscribe(::grpc::ServerContext* ctx, const payload::manager::v1::SubscribeRequest* req,
                                        ::grpc::ServerWriter<payload::manager::v1::SubscribeResponse>* writer) {
   try {
-    for (const auto& response : service_->Subscribe(*req)) {
+    // Resolve the initial start offset and drain any existing entries.
+    auto initial = service_->Subscribe(*req);
+    for (const auto& response : initial.responses) {
       if (!writer->Write(response)) {
-        break;
+        return ::grpc::Status::OK;
       }
     }
+
+    // Long-poll loop: keep reading new entries until the client disconnects.
+    // Poll at 50 ms when idle; advance immediately when entries arrive.
+    constexpr auto kPollInterval = std::chrono::milliseconds(50);
+
+    payload::manager::v1::SubscribeRequest poll_req;
+    *poll_req.mutable_stream() = req->stream();
+    uint64_t next_offset       = initial.next_offset;
+
+    while (!ctx->IsCancelled()) {
+      poll_req.set_offset(next_offset);
+      auto batch = service_->Subscribe(poll_req);
+      for (const auto& response : batch.responses) {
+        if (!writer->Write(response)) {
+          return ::grpc::Status::OK;
+        }
+      }
+      next_offset = batch.next_offset;
+      if (batch.responses.empty()) {
+        std::this_thread::sleep_for(kPollInterval);
+      }
+    }
+
     return ::grpc::Status::OK;
   } catch (const std::exception& e) {
     return ToStatus(e);

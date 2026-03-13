@@ -10,16 +10,21 @@ void SpillScheduler::Enqueue(const SpillTask& task) {
   cv_.notify_one();
 }
 
-std::optional<SpillTask> SpillScheduler::Dequeue() {
+std::optional<SpillTask> SpillScheduler::Dequeue(const std::atomic<bool>& running) {
   std::unique_lock lock(mutex_);
 
-  cv_.wait(lock, [&] { return shutdown_ || !queue_.empty(); });
+  cv_.wait(lock, [&] { return shutdown_ || !running.load() || !queue_.empty(); });
 
+  if (!running.load() && queue_.empty()) return std::nullopt;
   if (shutdown_ && queue_.empty()) return std::nullopt;
 
   SpillTask task = queue_.front();
   queue_.pop();
   return task;
+}
+
+void SpillScheduler::Wakeup() {
+  cv_.notify_all();
 }
 
 void SpillScheduler::Shutdown() {

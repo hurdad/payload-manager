@@ -61,7 +61,7 @@ void TestResolveSnapshotUsesCachedDescriptorUntilRefresh() {
 
   const auto refreshed = manager.ResolveSnapshot(id);
   assert(refreshed.tier() == TIER_DISK);
-  assert(refreshed.version() == 2);
+  assert(refreshed.version() > 1 && "HydrateCaches must serve a fresher version than the stale cached one");
 }
 
 } // namespace

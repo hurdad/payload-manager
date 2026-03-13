@@ -37,6 +37,9 @@ class PayloadManager {
   bool                       IsEvictionExempt(const payload::manager::v1::PayloadID& id) const;
   payload::manager::v1::Tier GetSpillTarget(const payload::manager::v1::PayloadID& id) const;
 
+  // Returns a snapshot of per-tier byte totals (keyed by Tier enum int value).
+  std::unordered_map<int, uint64_t> GetTierBytes() const;
+
   payload::manager::v1::PayloadDescriptor        ResolveSnapshot(const payload::manager::v1::PayloadID& id);
   payload::manager::v1::AcquireReadLeaseResponse AcquireReadLease(const payload::manager::v1::PayloadID& id, payload::manager::v1::Tier min_tier,
                                                                   uint64_t min_duration_ms);

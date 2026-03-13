@@ -722,6 +722,11 @@ void PayloadManager::ExecuteSpill(const PayloadID& id, Tier target, bool fsync) 
   }
 }
 
+std::unordered_map<int, uint64_t> PayloadManager::GetTierBytes() const {
+  std::lock_guard<std::mutex> lock(tier_bytes_guard_);
+  return tier_bytes_;
+}
+
 bool PayloadManager::IsEvictionExempt(const PayloadID& id) const {
   std::lock_guard<std::mutex> lock(no_evict_guard_);
   return no_evict_ids_.count(Key(id)) > 0;

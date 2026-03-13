@@ -22,7 +22,14 @@ class StreamService {
 
   payload::manager::v1::ReadResponse Read(const payload::manager::v1::ReadRequest& req);
 
-  std::vector<payload::manager::v1::SubscribeResponse> Subscribe(const payload::manager::v1::SubscribeRequest& req);
+  // Returned by Subscribe: a batch of entries starting at start_offset, plus
+  // the next offset the caller should use on the following poll iteration.
+  struct SubscribeBatch {
+    std::vector<payload::manager::v1::SubscribeResponse> responses;
+    uint64_t                                             next_offset{0};
+  };
+
+  SubscribeBatch Subscribe(const payload::manager::v1::SubscribeRequest& req);
 
   void Commit(const payload::manager::v1::CommitRequest& req);
 

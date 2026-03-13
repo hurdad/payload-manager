@@ -16,8 +16,12 @@ class SpillScheduler {
  public:
   void Enqueue(const SpillTask& task);
 
-  // blocking wait
-  std::optional<SpillTask> Dequeue();
+  // Blocks until a task is available, shutdown is requested, or the running
+  // flag goes false.  Returns nullopt when the caller should stop.
+  std::optional<SpillTask> Dequeue(const std::atomic<bool>& running);
+
+  // Wake all blocked Dequeue callers without triggering shutdown.
+  void Wakeup();
 
   void Shutdown();
 

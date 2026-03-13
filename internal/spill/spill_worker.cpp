@@ -25,14 +25,14 @@ void SpillWorker::Start() {
 }
 
 void SpillWorker::Stop() {
-  scheduler_->Shutdown();
   running_ = false;
+  scheduler_->Wakeup();
   if (thread_.joinable()) thread_.join();
 }
 
 void SpillWorker::Run() {
   while (running_) {
-    auto task = scheduler_->Dequeue();
+    auto task = scheduler_->Dequeue(running_);
     if (!task) break;
 
     try {

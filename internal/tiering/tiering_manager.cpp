@@ -34,6 +34,16 @@ void TieringManager::Stop() {
 
 void TieringManager::Loop() {
   while (running_) {
+    // Sync live byte counts into the pressure state so eviction thresholds
+    // are evaluated against current occupancy.
+    {
+      const auto tier_bytes = manager_->GetTierBytes();
+      auto       it_ram     = tier_bytes.find(static_cast<int>(payload::manager::v1::TIER_RAM));
+      auto       it_gpu     = tier_bytes.find(static_cast<int>(payload::manager::v1::TIER_GPU));
+      state_->ram_bytes.store(it_ram != tier_bytes.end() ? it_ram->second : 0);
+      state_->gpu_bytes.store(it_gpu != tier_bytes.end() ? it_gpu->second : 0);
+    }
+
     if (auto victim = policy_->ChooseRamEviction(*state_)) {
       spill::SpillTask task;
       task.id          = *victim;

@@ -25,6 +25,9 @@
 #include "internal/spill/spill_scheduler.hpp"
 #include "internal/spill/spill_worker.hpp"
 #include "internal/storage/storage_factory.hpp"
+#include "internal/tiering/pressure_state.hpp"
+#include "internal/tiering/tiering_manager.hpp"
+#include "internal/tiering/tiering_policy.hpp"
 #if PAYLOAD_DB_SQLITE
 #include "internal/db/sqlite/sqlite_db.hpp"
 #include "internal/db/sqlite/sqlite_repository.hpp"
@@ -209,6 +212,23 @@ Application Build(const payload::runtime::config::RuntimeConfig& config) {
   }
 
   // ------------------------------------------------------------------
+  // Tiering manager (automatic pressure-driven eviction)
+  // ------------------------------------------------------------------
+  auto pressure_state      = std::make_shared<tiering::PressureState>();
+  pressure_state->ram_limit = config.storage().ram().capacity_bytes();
+  for (const auto& dev : config.storage().gpu().devices()) {
+    pressure_state->gpu_limit += dev.capacity_bytes();
+  }
+
+  auto tiering_policy = std::make_shared<tiering::TieringPolicy>(
+      metadata_cache, [pm = payload_manager.get()](const manager::v1::PayloadID& id) {
+        return !pm->IsEvictionExempt(id);
+      });
+
+  auto tiering_manager = std::make_shared<tiering::TieringManager>(tiering_policy, spill_scheduler, payload_manager, pressure_state);
+  tiering_manager->Start();
+
+  // ------------------------------------------------------------------
   // Expiration worker
   // ------------------------------------------------------------------
   auto expiration_worker = std::make_shared<expiration::ExpirationWorker>(payload_manager);
@@ -218,10 +238,12 @@ Application Build(const payload::runtime::config::RuntimeConfig& config) {
   // Services
   // ------------------------------------------------------------------
   service::ServiceContext ctx;
-  ctx.manager    = payload_manager;
-  ctx.metadata   = metadata_cache;
-  ctx.lineage    = lineage_graph;
-  ctx.repository = repository;
+  ctx.manager          = payload_manager;
+  ctx.metadata         = metadata_cache;
+  ctx.lineage          = lineage_graph;
+  ctx.repository       = repository;
+  ctx.lease_mgr        = lease_mgr;
+  ctx.spill_scheduler  = spill_scheduler;
 
   auto data_service    = std::make_shared<service::DataService>(ctx);
   auto catalog_service = std::make_shared<service::CatalogService>(ctx);
@@ -236,11 +258,14 @@ Application Build(const payload::runtime::config::RuntimeConfig& config) {
   app.grpc_services.push_back(std::make_unique<grpc::AdminServer>(admin_service));
   app.grpc_services.push_back(std::make_unique<grpc::StreamServer>(stream_service));
 
-  // Keep ownership of workers so they live for process lifetime
+  // Keep ownership of workers so they live for process lifetime.
+  // TieringManager is stopped first so it stops enqueuing new tasks before
+  // the spill workers drain and exit.
+  app.background_workers.push_back(tiering_manager);
+  app.background_workers.push_back(expiration_worker);
   for (auto& w : spill_worker_pool) {
     app.background_workers.push_back(w);
   }
-  app.background_workers.push_back(expiration_worker);
 
   return app;
 }

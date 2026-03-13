@@ -3,6 +3,7 @@
 #include <chrono>
 #include <queue>
 #include <stdexcept>
+#include <thread>
 #include <type_traits>
 #include <unordered_set>
 
@@ -11,10 +12,13 @@
 #include "internal/db/model/lineage_record.hpp"
 #include "internal/db/model/metadata_event_record.hpp"
 #include "internal/db/model/metadata_record.hpp"
+#include "internal/lease/lease_manager.hpp"
 #include "internal/lineage/lineage_graph.hpp"
 #include "internal/metadata/metadata_cache.hpp"
 #include "internal/observability/logging.hpp"
 #include "internal/observability/spans.hpp"
+#include "internal/spill/spill_scheduler.hpp"
+#include "internal/spill/spill_task.hpp"
 #include "internal/util/errors.hpp"
 #include "internal/util/time.hpp"
 #include "payload/manager/v1.hpp"
@@ -115,23 +119,49 @@ SpillResponse CatalogService::Spill(const SpillRequest& req) {
   return ObserveRpc("CatalogService.Spill", nullptr, [&] {
     SpillResponse resp;
 
-    // TODO: respect req.policy() (BEST_EFFORT vs BLOCKING) once SpillScheduler supports it
-    // TODO: respect req.wait_for_leases() once lease-aware spill is implemented
+    const bool best_effort = (req.policy() == SPILL_POLICY_BEST_EFFORT) && ctx_.spill_scheduler;
 
     for (const auto& id : req.ids()) {
       auto* result          = resp.add_results();
       *result->mutable_id() = id;
 
       try {
-        payload::observability::SpanScope spill_span("CatalogService.SpillItem");
-        spill_span.SetAttribute("payload.id", id.value());
-        const auto target_tier = ctx_.manager->GetSpillTarget(id);
-        const auto spill_start = std::chrono::steady_clock::now();
-        ctx_.manager->ExecuteSpill(id, target_tier, req.fsync());
-        const auto spill_ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - spill_start).count();
-        payload::observability::Metrics::Instance().ObserveSpillDurationMs("rpc", spill_ms);
-        result->set_ok(true);
-        *result->mutable_payload_descriptor() = ctx_.manager->ResolveSnapshot(id);
+        // If requested, wait for all active read leases to expire before spilling.
+        // Leases will naturally expire; we wait up to max_lease_ms rather than
+        // spinning indefinitely.
+        if (req.wait_for_leases() && ctx_.lease_mgr) {
+          constexpr auto kPollInterval  = std::chrono::milliseconds(20);
+          constexpr auto kWaitTimeout   = std::chrono::seconds(120);
+          const auto     deadline       = std::chrono::steady_clock::now() + kWaitTimeout;
+          while (ctx_.lease_mgr->HasActiveLeases(id)) {
+            if (std::chrono::steady_clock::now() >= deadline) {
+              throw payload::util::LeaseConflict("spill: active leases remain after wait timeout; release leases or retry without wait_for_leases");
+            }
+            std::this_thread::sleep_for(kPollInterval);
+          }
+        }
+
+        if (best_effort) {
+          // Fire-and-forget: enqueue to the background spill workers.
+          spill::SpillTask task;
+          task.id          = id;
+          task.target_tier = ctx_.manager->GetSpillTarget(id);
+          task.fsync       = req.fsync();
+          ctx_.spill_scheduler->Enqueue(task);
+          result->set_ok(true);
+          // No descriptor: data movement has not completed yet.
+        } else {
+          // Blocking: execute synchronously and return the final descriptor.
+          payload::observability::SpanScope spill_span("CatalogService.SpillItem");
+          spill_span.SetAttribute("payload.id", id.value());
+          const auto target_tier = ctx_.manager->GetSpillTarget(id);
+          const auto spill_start = std::chrono::steady_clock::now();
+          ctx_.manager->ExecuteSpill(id, target_tier, req.fsync());
+          const auto spill_ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - spill_start).count();
+          payload::observability::Metrics::Instance().ObserveSpillDurationMs("rpc", spill_ms);
+          result->set_ok(true);
+          *result->mutable_payload_descriptor() = ctx_.manager->ResolveSnapshot(id);
+        }
       } catch (const std::exception& e) {
         result->set_ok(false);
         result->set_error_message(e.what());

@@ -269,7 +269,7 @@ ReadResponse StreamService::Read(const ReadRequest& req) {
   });
 }
 
-std::vector<SubscribeResponse> StreamService::Subscribe(const SubscribeRequest& req) {
+StreamService::SubscribeBatch StreamService::Subscribe(const SubscribeRequest& req) {
   return ObserveRpc("StreamService.Subscribe", &req.stream(), nullptr, [&] {
     std::shared_lock<std::shared_mutex> global_lock(global_mu_);
     std::shared_lock<std::shared_mutex> stream_lock(StreamShard(req.stream()));
@@ -291,15 +291,17 @@ std::vector<SubscribeResponse> StreamService::Subscribe(const SubscribeRequest& 
     const auto     entries =
         ctx_.repository->ReadStreamEntries(*tx, stream.stream_id, start_offset, std::make_optional<uint64_t>(kMaxStreamReadBatch), std::nullopt);
 
-    std::vector<SubscribeResponse> responses;
-    responses.reserve(entries.size());
+    SubscribeBatch batch;
+    batch.next_offset = start_offset;
+    batch.responses.reserve(entries.size());
     for (const auto& entry : entries) {
       SubscribeResponse response;
       *response.mutable_entry() = ToProtoEntry(req.stream(), entry);
-      responses.push_back(std::move(response));
+      batch.responses.push_back(std::move(response));
+      batch.next_offset = entry.offset + 1;
     }
 
-    return responses;
+    return batch;
   });
 }
 
