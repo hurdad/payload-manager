@@ -83,9 +83,8 @@ void ThrowIfDbError(const payload::db::Result& result, const std::string& contex
 
 db::model::PayloadRecord ToPayloadRecord(const PayloadDescriptor& descriptor) {
   db::model::PayloadRecord record;
-  record.id      = descriptor.payload_id().value().size() == 16
-                       ? payload::util::ToString(payload::util::FromProto(descriptor.payload_id()))
-                       : descriptor.payload_id().value();
+  record.id      = descriptor.payload_id().value().size() == 16 ? payload::util::ToString(payload::util::FromProto(descriptor.payload_id()))
+                                                                : descriptor.payload_id().value();
   record.tier    = descriptor.tier();
   record.state   = descriptor.state();
   record.version = descriptor.version();

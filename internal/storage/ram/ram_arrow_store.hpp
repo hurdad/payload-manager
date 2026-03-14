@@ -51,7 +51,9 @@ class RamArrowStore final : public StorageBackend {
   // Static overload for use when only a prefix string is available.
   static std::string ShmName(const payload::manager::v1::PayloadID& id, const std::string& prefix);
 
-  const std::string& GetShmPrefix() const { return shm_prefix_; }
+  const std::string& GetShmPrefix() const {
+    return shm_prefix_;
+  }
 
  private:
   using UUID = std::string;

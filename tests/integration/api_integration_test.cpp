@@ -42,31 +42,31 @@ using payload::manager::client::PayloadClient;
 
 namespace {
 
-#define ASSERT_OK(expr)                                                                      \
-  do {                                                                                       \
-    auto _s = (expr);                                                                        \
-    if (!_s.ok()) {                                                                          \
+#define ASSERT_OK(expr)                                                                                 \
+  do {                                                                                                  \
+    auto _s = (expr);                                                                                   \
+    if (!_s.ok()) {                                                                                     \
       std::cerr << "FAIL [" #expr "]: " << _s.ToString() << "\n  at " __FILE__ ":" << __LINE__ << '\n'; \
-      std::exit(1);                                                                          \
-    }                                                                                        \
+      std::exit(1);                                                                                     \
+    }                                                                                                   \
   } while (0)
 
-#define ASSERT_TRUE(cond)                                                                          \
-  do {                                                                                             \
-    if (!(cond)) {                                                                                 \
-      std::cerr << "FAIL assertion: " #cond "\n  at " __FILE__ ":" << __LINE__ << '\n';           \
-      std::exit(1);                                                                                \
-    }                                                                                             \
+#define ASSERT_TRUE(cond)                                                               \
+  do {                                                                                  \
+    if (!(cond)) {                                                                      \
+      std::cerr << "FAIL assertion: " #cond "\n  at " __FILE__ ":" << __LINE__ << '\n'; \
+      std::exit(1);                                                                     \
+    }                                                                                   \
   } while (0)
 
-#define ASSERT_EQ(a, b)                                                                                           \
-  do {                                                                                                            \
-    auto _a = (a);                                                                                                \
-    auto _b = (b);                                                                                                \
-    if (_a != _b) {                                                                                               \
+#define ASSERT_EQ(a, b)                                                                                            \
+  do {                                                                                                             \
+    auto _a = (a);                                                                                                 \
+    auto _b = (b);                                                                                                 \
+    if (_a != _b) {                                                                                                \
       std::cerr << "FAIL: " #a " (" << _a << ") != " #b " (" << _b << ")\n  at " __FILE__ ":" << __LINE__ << '\n'; \
-      std::exit(1);                                                                                               \
-    }                                                                                                             \
+      std::exit(1);                                                                                                \
+    }                                                                                                              \
   } while (0)
 
 void log(const char* test) {
@@ -130,8 +130,8 @@ void TestSpillAndPromote(const PayloadClient& client) {
   constexpr uint64_t kSize = 128;
   constexpr uint8_t  kFill = 0x7E;
 
-  auto desc = AllocateAndCommit(client, kSize, kFill);
-  const auto& id = desc.payload_id();
+  auto        desc = AllocateAndCommit(client, kSize, kFill);
+  const auto& id   = desc.payload_id();
 
   // Spill to disk
   SpillRequest spill_req;
@@ -169,8 +169,8 @@ void TestSpillAndPromote(const PayloadClient& client) {
 void TestPinBlocksSpill(const PayloadClient& client) {
   log("Pin/Unpin: pinned payload resists spill; spill succeeds after unpin");
 
-  auto desc       = AllocateAndCommit(client, 64, 0x11);
-  const auto& id  = desc.payload_id();
+  auto        desc = AllocateAndCommit(client, 64, 0x11);
+  const auto& id   = desc.payload_id();
 
   // Pin
   PinRequest pin_req;
@@ -205,8 +205,8 @@ void TestPinBlocksSpill(const PayloadClient& client) {
 void TestMetadata(const PayloadClient& client) {
   log("Metadata: upsert, replace, append event");
 
-  auto desc      = AllocateAndCommit(client, 32, 0x00);
-  const auto& id = desc.payload_id();
+  auto        desc = AllocateAndCommit(client, 32, 0x00);
+  const auto& id   = desc.payload_id();
 
   // Initial upsert
   UpdatePayloadMetadataRequest upsert_req;
@@ -243,10 +243,10 @@ void TestMetadata(const PayloadClient& client) {
 void TestLineage(const PayloadClient& client) {
   log("Lineage: two payloads → add edge → traverse graph");
 
-  auto parent_desc = AllocateAndCommit(client, 32, 0x01);
-  auto child_desc  = AllocateAndCommit(client, 32, 0x02);
-  const auto& parent_id = parent_desc.payload_id();
-  const auto& child_id  = child_desc.payload_id();
+  auto        parent_desc = AllocateAndCommit(client, 32, 0x01);
+  auto        child_desc  = AllocateAndCommit(client, 32, 0x02);
+  const auto& parent_id   = parent_desc.payload_id();
+  const auto& child_id    = child_desc.payload_id();
 
   AddLineageRequest add_req;
   *add_req.mutable_child() = child_id;
@@ -325,13 +325,13 @@ void TestStream(const PayloadClient& client) {
   AppendRequest append_req;
   *append_req.mutable_stream() = stream;
   {
-    auto* item              = append_req.add_items();
+    auto* item                  = append_req.add_items();
     *item->mutable_payload_id() = p0.payload_id();
     item->set_duration_ns(1000);
     (*item->mutable_tags())["source"] = "api-integration";
   }
   {
-    auto* item              = append_req.add_items();
+    auto* item                  = append_req.add_items();
     *item->mutable_payload_id() = p1.payload_id();
     item->set_duration_ns(2000);
   }
@@ -354,13 +354,13 @@ void TestStream(const PayloadClient& client) {
 
   // Subscribe — read one entry then cancel
   grpc::ClientContext sub_ctx;
-  SubscribeRequest sub_req;
+  SubscribeRequest    sub_req;
   *sub_req.mutable_stream() = stream;
   sub_req.set_offset(first_offset);
   sub_req.set_max_inflight(1);
-  auto reader = client.Subscribe(sub_req, &sub_ctx);
+  auto              reader = client.Subscribe(sub_req, &sub_ctx);
   SubscribeResponse sub_resp;
-  bool got = reader->Read(&sub_resp);
+  bool              got = reader->Read(&sub_resp);
   ASSERT_TRUE(got);
   ASSERT_EQ(sub_resp.entry().offset(), first_offset);
   sub_ctx.TryCancel();
@@ -369,14 +369,14 @@ void TestStream(const PayloadClient& client) {
 
   // Commit consumer offset
   CommitRequest commit_req;
-  *commit_req.mutable_stream()  = stream;
+  *commit_req.mutable_stream() = stream;
   commit_req.set_consumer_group("test-group");
   commit_req.set_offset(last_offset);
   ASSERT_OK(client.Commit(commit_req));
 
   // Get committed
   GetCommittedRequest gc_req;
-  *gc_req.mutable_stream()  = stream;
+  *gc_req.mutable_stream() = stream;
   gc_req.set_consumer_group("test-group");
   auto gc_resp = client.GetCommitted(gc_req);
   ASSERT_OK(gc_resp.status());
@@ -404,8 +404,8 @@ void TestStream(const PayloadClient& client) {
 } // namespace
 
 int main(int argc, char** argv) {
-  const char* env_endpoint = std::getenv("PAYLOAD_MANAGER_ENDPOINT");
-  const std::string endpoint = (argc > 1) ? argv[1] : (env_endpoint ? env_endpoint : "");
+  const char*       env_endpoint = std::getenv("PAYLOAD_MANAGER_ENDPOINT");
+  const std::string endpoint     = (argc > 1) ? argv[1] : (env_endpoint ? env_endpoint : "");
   if (endpoint.empty()) {
     std::cout << "api_integration_test: skip (set PAYLOAD_MANAGER_ENDPOINT to run)\n";
     return 0;

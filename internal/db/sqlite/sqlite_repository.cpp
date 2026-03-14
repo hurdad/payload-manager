@@ -25,7 +25,8 @@ static void BindUuid(sqlite3_stmt* st, int idx, const std::string& uuid_str) {
       auto bytes = payload::util::FromString(uuid_str);
       sqlite3_bind_blob(st, idx, bytes.data(), 16, SQLITE_TRANSIENT);
       return;
-    } catch (...) {}
+    } catch (...) {
+    }
   }
   sqlite3_bind_text(st, idx, uuid_str.c_str(), -1, SQLITE_TRANSIENT);
 }

@@ -72,10 +72,12 @@ void BootstrapSqliteSchema(const std::shared_ptr<db::sqlite::SqliteDB>& sqlite_d
       "CREATE TABLE IF NOT EXISTS payload_schema_migrations (version INTEGER PRIMARY KEY, applied_at_ms INTEGER NOT NULL);",
       "CREATE TABLE IF NOT EXISTS streams (stream_id INTEGER PRIMARY KEY AUTOINCREMENT, namespace TEXT NOT NULL, name TEXT NOT NULL, created_at "
       "INTEGER NOT NULL DEFAULT (unixepoch() * 1000), retention_max_entries INTEGER, retention_max_age_sec INTEGER, UNIQUE(namespace, name));",
-      "CREATE TABLE IF NOT EXISTS stream_entries (stream_id INTEGER NOT NULL REFERENCES streams(stream_id) ON DELETE CASCADE, offset INTEGER NOT NULL, payload_uuid "
+      "CREATE TABLE IF NOT EXISTS stream_entries (stream_id INTEGER NOT NULL REFERENCES streams(stream_id) ON DELETE CASCADE, offset INTEGER NOT "
+      "NULL, payload_uuid "
       "BLOB NOT NULL, event_time INTEGER, append_time INTEGER NOT NULL DEFAULT (unixepoch() * 1000), duration_ns INTEGER, tags TEXT, PRIMARY KEY "
       "(stream_id, offset));",
-      "CREATE TABLE IF NOT EXISTS stream_consumer_offsets (stream_id INTEGER NOT NULL REFERENCES streams(stream_id) ON DELETE CASCADE, consumer_group TEXT NOT NULL, "
+      "CREATE TABLE IF NOT EXISTS stream_consumer_offsets (stream_id INTEGER NOT NULL REFERENCES streams(stream_id) ON DELETE CASCADE, "
+      "consumer_group TEXT NOT NULL, "
       "offset INTEGER NOT NULL, updated_at INTEGER NOT NULL DEFAULT (unixepoch() * 1000), PRIMARY KEY (stream_id, consumer_group));"};
 
   for (const auto& sql : kBootstrapSql) {
@@ -133,12 +135,14 @@ void BootstrapPostgresSchema(const std::string& conninfo) {
       "CREATE TABLE IF NOT EXISTS streams (stream_id BIGSERIAL PRIMARY KEY, namespace TEXT NOT NULL, name TEXT NOT NULL, created_at TIMESTAMPTZ NOT "
       "NULL DEFAULT now(), retention_max_entries BIGINT, retention_max_age_sec BIGINT, UNIQUE(namespace, name));");
   tx.exec(
-      "CREATE TABLE IF NOT EXISTS stream_entries (stream_id BIGINT NOT NULL REFERENCES streams(stream_id) ON DELETE CASCADE, \"offset\" BIGINT NOT NULL, payload_uuid "
+      "CREATE TABLE IF NOT EXISTS stream_entries (stream_id BIGINT NOT NULL REFERENCES streams(stream_id) ON DELETE CASCADE, \"offset\" BIGINT NOT "
+      "NULL, payload_uuid "
       "UUID "
       "NOT NULL, event_time TIMESTAMPTZ, append_time TIMESTAMPTZ NOT NULL DEFAULT now(), duration_ns BIGINT, tags JSONB, PRIMARY KEY (stream_id, "
       "\"offset\"));");
   tx.exec(
-      "CREATE TABLE IF NOT EXISTS stream_consumer_offsets (stream_id BIGINT NOT NULL REFERENCES streams(stream_id) ON DELETE CASCADE, consumer_group TEXT NOT NULL, "
+      "CREATE TABLE IF NOT EXISTS stream_consumer_offsets (stream_id BIGINT NOT NULL REFERENCES streams(stream_id) ON DELETE CASCADE, consumer_group "
+      "TEXT NOT NULL, "
       "\"offset\" BIGINT NOT NULL, updated_at TIMESTAMPTZ NOT NULL DEFAULT now(), PRIMARY KEY (stream_id, consumer_group));");
 
   // Migrate stream FK constraints to add ON DELETE CASCADE for existing databases.
