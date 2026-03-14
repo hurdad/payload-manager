@@ -1,5 +1,5 @@
 CREATE TABLE IF NOT EXISTS payload (
-                                       id TEXT PRIMARY KEY,
+                                       id BLOB PRIMARY KEY,
                                        tier INTEGER NOT NULL,
                                        state INTEGER NOT NULL,
                                        size_bytes INTEGER NOT NULL,

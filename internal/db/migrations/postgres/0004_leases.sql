@@ -4,7 +4,7 @@
 
 CREATE TABLE IF NOT EXISTS payload_lease (
                                              lease_id BYTEA PRIMARY KEY,
-                                             payload_id TEXT NOT NULL REFERENCES payload(id) ON DELETE CASCADE,
+                                             payload_id UUID NOT NULL REFERENCES payload(id) ON DELETE CASCADE,
     expires_at_ms BIGINT NOT NULL
     );
 

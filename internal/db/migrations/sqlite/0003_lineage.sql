@@ -1,6 +1,6 @@
 CREATE TABLE IF NOT EXISTS payload_lineage (
-                                               parent_id TEXT NOT NULL,
-                                               child_id  TEXT NOT NULL,
+                                               parent_id BLOB NOT NULL,
+                                               child_id  BLOB NOT NULL,
                                                operation TEXT,
                                                role TEXT,
                                                parameters TEXT,

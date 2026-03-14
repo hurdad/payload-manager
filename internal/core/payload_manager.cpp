@@ -82,7 +82,7 @@ void ThrowIfDbError(const payload::db::Result& result, const std::string& contex
 
 db::model::PayloadRecord ToPayloadRecord(const PayloadDescriptor& descriptor) {
   db::model::PayloadRecord record;
-  record.id      = descriptor.payload_id().value();
+  record.id      = payload::util::ToString(payload::util::FromProto(descriptor.payload_id()));
   record.tier    = descriptor.tier();
   record.state   = descriptor.state();
   record.version = descriptor.version();
@@ -100,7 +100,7 @@ db::model::PayloadRecord ToPayloadRecord(const PayloadDescriptor& descriptor) {
 
 PayloadDescriptor ToPayloadDescriptor(const db::model::PayloadRecord& record) {
   PayloadDescriptor descriptor;
-  descriptor.mutable_payload_id()->set_value(record.id);
+  *descriptor.mutable_payload_id() = payload::util::ToProto(payload::util::FromString(record.id));
   descriptor.set_tier(record.tier);
   descriptor.set_state(record.state);
   descriptor.set_version(record.version);
@@ -145,7 +145,7 @@ PayloadManager::PayloadManager(payload::storage::StorageFactory::TierMap storage
 }
 
 std::string PayloadManager::Key(const PayloadID& id) {
-  return id.value();
+  return payload::util::ToString(payload::util::FromProto(id));
 }
 
 std::shared_ptr<std::shared_mutex> PayloadManager::PayloadMutex(const PayloadID& id) {
@@ -190,7 +190,7 @@ void PayloadManager::SweepExpiredPins() {
 
 void PayloadManager::CacheSnapshot(const PayloadDescriptor& descriptor) {
   std::unique_lock lock(snapshot_cache_mutex_);
-  snapshot_cache_[descriptor.payload_id().value()] = descriptor;
+  snapshot_cache_[Key(descriptor.payload_id())] = descriptor;
 }
 
 void PayloadManager::PopulateLocation(PayloadDescriptor* descriptor) {
@@ -222,7 +222,7 @@ void PayloadManager::PopulateLocation(PayloadDescriptor* descriptor) {
       DiskLocation disk;
       disk.set_length_bytes(size);
       disk.set_offset_bytes(0);
-      disk.set_path(id.value() + ".bin");
+      disk.set_path(Key(id) + ".bin");
       *descriptor->mutable_disk() = disk;
       return;
     }
@@ -231,7 +231,7 @@ void PayloadManager::PopulateLocation(PayloadDescriptor* descriptor) {
       DiskLocation object;
       object.set_length_bytes(size);
       object.set_offset_bytes(0);
-      object.set_path(id.value() + ".bin");
+      object.set_path(Key(id) + ".bin");
       *descriptor->mutable_disk() = object;
       return;
     }
@@ -287,7 +287,12 @@ PayloadDescriptor PayloadManager::Allocate(uint64_t size_bytes, Tier preferred, 
 
   const auto storage_it = storage_.find(preferred);
   if (storage_it != storage_.end() && storage_it->second) {
-    storage_it->second->Allocate(desc.payload_id(), size_bytes);
+    try {
+      storage_it->second->Allocate(desc.payload_id(), size_bytes);
+    } catch (...) {
+      payload::observability::Metrics::Instance().RecordAllocationFailure(TierName(preferred));
+      throw;
+    }
     PopulateLocation(&desc);
   } else {
     switch (preferred) {
@@ -300,7 +305,7 @@ PayloadDescriptor PayloadManager::Allocate(uint64_t size_bytes, Tier preferred, 
       case TIER_DISK:
       case TIER_OBJECT: {
         auto* disk = desc.mutable_disk();
-        disk->set_path(desc.payload_id().value() + ".bin");
+        disk->set_path(Key(desc.payload_id()) + ".bin");
         disk->set_offset_bytes(0);
         disk->set_length_bytes(size_bytes);
         break;
@@ -609,7 +614,7 @@ void PayloadManager::HydrateCaches() {
     } catch (const std::exception&) {
       // Ignore hydration failures for missing/evicted bytes; descriptor will be rebuilt on demand.
     }
-    new_snapshot_cache[descriptor.payload_id().value()] = descriptor;
+    new_snapshot_cache[record.id] = descriptor;
 
     if (record.persist || record.eviction_priority == static_cast<int>(EVICTION_PRIORITY_NEVER)) {
       new_no_evict.insert(record.id);
@@ -726,6 +731,7 @@ void PayloadManager::ExecuteSpill(const PayloadID& id, Tier target, bool fsync) 
   PopulateLocation(&descriptor);
   CacheSnapshot(descriptor);
   if (source_tier != target) {
+    payload::observability::Metrics::Instance().RecordSpillBytes("background", record->size_bytes);
     UpdateTierBytes(source_tier, -static_cast<int64_t>(record->size_bytes));
     UpdateTierBytes(target, static_cast<int64_t>(record->size_bytes));
   }

@@ -3,7 +3,7 @@
 -- ============================================================
 
 CREATE TABLE IF NOT EXISTS payload (
-                                       id TEXT PRIMARY KEY,
+                                       id UUID PRIMARY KEY,
                                        tier SMALLINT NOT NULL,
                                        state SMALLINT NOT NULL,
                                        size_bytes BIGINT NOT NULL,

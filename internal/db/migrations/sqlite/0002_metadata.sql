@@ -1,5 +1,5 @@
 CREATE TABLE IF NOT EXISTS payload_metadata (
-                                                id TEXT PRIMARY KEY,
+                                                id BLOB PRIMARY KEY,
                                                 json TEXT NOT NULL,
                                                 schema TEXT,
                                                 updated_at_ms INTEGER NOT NULL,

@@ -11,7 +11,7 @@ CREATE TABLE IF NOT EXISTS streams (
 CREATE TABLE IF NOT EXISTS stream_entries (
                                               stream_id INTEGER NOT NULL REFERENCES streams(stream_id),
                                               offset INTEGER NOT NULL,
-                                              payload_uuid TEXT NOT NULL,
+                                              payload_uuid BLOB NOT NULL,
                                               event_time INTEGER,
                                               append_time INTEGER NOT NULL DEFAULT (unixepoch() * 1000),
                                               duration_ns INTEGER,

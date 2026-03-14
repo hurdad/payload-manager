@@ -3,7 +3,7 @@
 -- ============================================================
 
 CREATE TABLE IF NOT EXISTS payload_metadata (
-                                                id TEXT PRIMARY KEY REFERENCES payload(id) ON DELETE CASCADE,
+                                                id UUID PRIMARY KEY REFERENCES payload(id) ON DELETE CASCADE,
     json JSONB NOT NULL,
     schema TEXT,
     updated_at_ms BIGINT NOT NULL

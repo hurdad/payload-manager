@@ -2,6 +2,9 @@
 
 #include <sqlite3.h>
 
+#include <cstring>
+
+#include "internal/util/uuid.hpp"
 #include "payload/manager/v1.hpp"
 
 namespace payload::db::sqlite {
@@ -11,6 +14,22 @@ using payload::db::Result;
 
 static void BindText(sqlite3_stmt* st, int idx, const std::string& s) {
   sqlite3_bind_text(st, idx, s.c_str(), -1, SQLITE_TRANSIENT);
+}
+
+// Bind a hex-string UUID as a 16-byte BLOB.
+static void BindUuid(sqlite3_stmt* st, int idx, const std::string& hex_uuid) {
+  auto bytes = payload::util::FromString(hex_uuid);
+  sqlite3_bind_blob(st, idx, bytes.data(), 16, SQLITE_TRANSIENT);
+}
+
+// Read a 16-byte BLOB column back as a hex-string UUID.
+static std::string ColUuid(sqlite3_stmt* st, int col) {
+  const void* data = sqlite3_column_blob(st, col);
+  int         len  = sqlite3_column_bytes(st, col);
+  if (!data || len != 16) return "";
+  payload::util::UUID uuid{};
+  std::memcpy(uuid.data(), data, 16);
+  return payload::util::ToString(uuid);
 }
 
 static void BindU64(sqlite3_stmt* st, int idx, uint64_t v) {
@@ -76,7 +95,7 @@ Result SqliteRepository::InsertPayload(Transaction& t, const model::PayloadRecor
   sqlite3_stmt* st = nullptr;
   if (sqlite3_prepare_v2(db, sql, -1, &st, nullptr) != SQLITE_OK) return Result::Err(ErrorCode::InternalError, sqlite3_errmsg(db));
 
-  BindText(st, 1, r.id);
+  BindUuid(st, 1, r.id);
   BindI32(st, 2, static_cast<int>(r.tier));
   BindI32(st, 3, static_cast<int>(r.state));
   BindU64(st, 4, r.size_bytes);
@@ -103,7 +122,7 @@ std::optional<model::PayloadRecord> SqliteRepository::GetPayload(Transaction& t,
   sqlite3_stmt* st  = nullptr;
   if (sqlite3_prepare_v2(db, sql, -1, &st, nullptr) != SQLITE_OK) return std::nullopt;
 
-  BindText(st, 1, id);
+  BindUuid(st, 1, id);
 
   int rc = sqlite3_step(st);
   if (rc != SQLITE_ROW) {
@@ -112,7 +131,7 @@ std::optional<model::PayloadRecord> SqliteRepository::GetPayload(Transaction& t,
   }
 
   model::PayloadRecord r;
-  r.id                = ColText(st, 0);
+  r.id                = ColUuid(st, 0);
   r.tier              = static_cast<payload::manager::v1::Tier>(ColI32(st, 1));
   r.state             = static_cast<payload::manager::v1::PayloadState>(ColI32(st, 2));
   r.size_bytes        = ColU64(st, 3);
@@ -136,7 +155,7 @@ std::vector<model::PayloadRecord> SqliteRepository::ListPayloads(Transaction& t)
   std::vector<model::PayloadRecord> records;
   while (sqlite3_step(st) == SQLITE_ROW) {
     model::PayloadRecord r;
-    r.id                = ColText(st, 0);
+    r.id                = ColUuid(st, 0);
     r.tier              = static_cast<payload::manager::v1::Tier>(ColI32(st, 1));
     r.state             = static_cast<payload::manager::v1::PayloadState>(ColI32(st, 2));
     r.size_bytes        = ColU64(st, 3);
@@ -172,7 +191,7 @@ Result SqliteRepository::UpdatePayload(Transaction& t, const model::PayloadRecor
   BindI32(st, 6, r.persist ? 1 : 0);
   BindI32(st, 7, r.eviction_priority);
   BindI32(st, 8, r.spill_target);
-  BindText(st, 9, r.id);
+  BindUuid(st, 9, r.id);
 
   int rc = sqlite3_step(st);
   sqlite3_finalize(st);
@@ -194,7 +213,7 @@ std::vector<model::PayloadRecord> SqliteRepository::ListExpiredPayloads(Transact
   std::vector<model::PayloadRecord> records;
   while (sqlite3_step(st) == SQLITE_ROW) {
     model::PayloadRecord r;
-    r.id                = ColText(st, 0);
+    r.id                = ColUuid(st, 0);
     r.tier              = static_cast<payload::manager::v1::Tier>(ColI32(st, 1));
     r.state             = static_cast<payload::manager::v1::PayloadState>(ColI32(st, 2));
     r.size_bytes        = ColU64(st, 3);
@@ -217,7 +236,7 @@ Result SqliteRepository::DeletePayload(Transaction& t, const std::string& id) {
   sqlite3_stmt* st  = nullptr;
   if (sqlite3_prepare_v2(db, sql, -1, &st, nullptr) != SQLITE_OK) return Result::Err(ErrorCode::InternalError, sqlite3_errmsg(db));
 
-  BindText(st, 1, id);
+  BindUuid(st, 1, id);
   int rc = sqlite3_step(st);
   sqlite3_finalize(st);
 
@@ -238,7 +257,7 @@ Result SqliteRepository::UpsertMetadata(Transaction& t, const model::MetadataRec
   sqlite3_stmt* st = nullptr;
   if (sqlite3_prepare_v2(db, sql, -1, &st, nullptr) != SQLITE_OK) return Result::Err(ErrorCode::InternalError, sqlite3_errmsg(db));
 
-  BindText(st, 1, r.id);
+  BindUuid(st, 1, r.id);
   BindText(st, 2, r.json);
   BindText(st, 3, r.schema);
   BindU64(st, 4, r.updated_at_ms);
@@ -257,7 +276,7 @@ std::optional<model::MetadataRecord> SqliteRepository::GetMetadata(Transaction& 
   sqlite3_stmt* st = nullptr;
   if (sqlite3_prepare_v2(db, sql, -1, &st, nullptr) != SQLITE_OK) return std::nullopt;
 
-  BindText(st, 1, id);
+  BindUuid(st, 1, id);
 
   int rc = sqlite3_step(st);
   if (rc != SQLITE_ROW) {
@@ -266,7 +285,7 @@ std::optional<model::MetadataRecord> SqliteRepository::GetMetadata(Transaction& 
   }
 
   model::MetadataRecord r;
-  r.id            = ColText(st, 0);
+  r.id            = ColUuid(st, 0);
   r.json          = ColText(st, 1);
   r.schema        = ColText(st, 2);
   r.updated_at_ms = ColU64(st, 3);
@@ -283,7 +302,7 @@ Result SqliteRepository::InsertMetadataEvent(Transaction& t, const model::Metada
   sqlite3_stmt* st = nullptr;
   if (sqlite3_prepare_v2(db, sql, -1, &st, nullptr) != SQLITE_OK) return Result::Err(ErrorCode::InternalError, sqlite3_errmsg(db));
 
-  BindText(st, 1, r.id);
+  BindUuid(st, 1, r.id);
   BindText(st, 2, r.data);
   BindText(st, 3, r.schema);
   BindText(st, 4, r.source);
@@ -310,8 +329,8 @@ Result SqliteRepository::InsertLineage(Transaction& t, const model::LineageRecor
   sqlite3_stmt* st = nullptr;
   if (sqlite3_prepare_v2(db, sql, -1, &st, nullptr) != SQLITE_OK) return Result::Err(ErrorCode::InternalError, sqlite3_errmsg(db));
 
-  BindText(st, 1, r.parent_id);
-  BindText(st, 2, r.child_id);
+  BindUuid(st, 1, r.parent_id);
+  BindUuid(st, 2, r.child_id);
   BindText(st, 3, r.operation);
   BindText(st, 4, r.role);
   BindText(st, 5, r.parameters);
@@ -333,13 +352,13 @@ std::vector<model::LineageRecord> SqliteRepository::GetParents(Transaction& t, c
   sqlite3_stmt* st = nullptr;
   if (sqlite3_prepare_v2(db, sql, -1, &st, nullptr) != SQLITE_OK) return {};
 
-  BindText(st, 1, id);
+  BindUuid(st, 1, id);
 
   std::vector<model::LineageRecord> out;
   while (sqlite3_step(st) == SQLITE_ROW) {
     model::LineageRecord r;
-    r.parent_id     = ColText(st, 0);
-    r.child_id      = ColText(st, 1);
+    r.parent_id     = ColUuid(st, 0);
+    r.child_id      = ColUuid(st, 1);
     r.operation     = ColText(st, 2);
     r.role          = ColText(st, 3);
     r.parameters    = ColText(st, 4);
@@ -361,13 +380,13 @@ std::vector<model::LineageRecord> SqliteRepository::GetChildren(Transaction& t, 
   sqlite3_stmt* st = nullptr;
   if (sqlite3_prepare_v2(db, sql, -1, &st, nullptr) != SQLITE_OK) return {};
 
-  BindText(st, 1, id);
+  BindUuid(st, 1, id);
 
   std::vector<model::LineageRecord> out;
   while (sqlite3_step(st) == SQLITE_ROW) {
     model::LineageRecord r;
-    r.parent_id     = ColText(st, 0);
-    r.child_id      = ColText(st, 1);
+    r.parent_id     = ColUuid(st, 0);
+    r.child_id      = ColUuid(st, 1);
     r.operation     = ColText(st, 2);
     r.role          = ColText(st, 3);
     r.parameters    = ColText(st, 4);
@@ -531,7 +550,7 @@ Result SqliteRepository::AppendStreamEntries(Transaction& t, uint64_t stream_id,
 
     BindU64(ins_st, 1, e.stream_id);
     BindU64(ins_st, 2, e.offset);
-    BindText(ins_st, 3, e.payload_uuid);
+    BindUuid(ins_st, 3, e.payload_uuid);
     BindU64(ins_st, 4, e.event_time_ms);
     if (e.append_time_ms == 0) {
       sqlite3_bind_null(ins_st, 5);
@@ -588,7 +607,7 @@ std::vector<model::StreamEntryRecord> SqliteRepository::ReadStreamEntries(Transa
     model::StreamEntryRecord e;
     e.stream_id      = ColU64(st, 0);
     e.offset         = ColU64(st, 1);
-    e.payload_uuid   = ColText(st, 2);
+    e.payload_uuid   = ColUuid(st, 2);
     e.event_time_ms  = ColU64(st, 3);
     e.append_time_ms = ColU64(st, 4);
     e.duration_ns    = ColU64(st, 5);
@@ -640,7 +659,7 @@ std::vector<model::StreamEntryRecord> SqliteRepository::ReadStreamEntriesRange(T
     model::StreamEntryRecord e;
     e.stream_id      = ColU64(st, 0);
     e.offset         = ColU64(st, 1);
-    e.payload_uuid   = ColText(st, 2);
+    e.payload_uuid   = ColUuid(st, 2);
     e.event_time_ms  = ColU64(st, 3);
     e.append_time_ms = ColU64(st, 4);
     e.duration_ns    = ColU64(st, 5);

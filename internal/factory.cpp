@@ -59,21 +59,21 @@ static void TryExecSqlite(const std::shared_ptr<db::sqlite::SqliteDB>& db, const
 
 void BootstrapSqliteSchema(const std::shared_ptr<db::sqlite::SqliteDB>& sqlite_db) {
   static const std::vector<std::string> kBootstrapSql = {
-      "CREATE TABLE IF NOT EXISTS payload (id TEXT PRIMARY KEY, tier INTEGER NOT NULL, state INTEGER NOT NULL, size_bytes INTEGER NOT NULL, version "
+      "CREATE TABLE IF NOT EXISTS payload (id BLOB PRIMARY KEY, tier INTEGER NOT NULL, state INTEGER NOT NULL, size_bytes INTEGER NOT NULL, version "
       "INTEGER NOT NULL, expires_at_ms INTEGER, persist INTEGER NOT NULL DEFAULT 0, eviction_priority INTEGER NOT NULL DEFAULT 0, spill_target "
       "INTEGER NOT NULL DEFAULT 0);",
-      "CREATE TABLE IF NOT EXISTS payload_metadata (id TEXT PRIMARY KEY, json TEXT NOT NULL, schema TEXT, updated_at_ms INTEGER NOT NULL, FOREIGN "
+      "CREATE TABLE IF NOT EXISTS payload_metadata (id BLOB PRIMARY KEY, json TEXT NOT NULL, schema TEXT, updated_at_ms INTEGER NOT NULL, FOREIGN "
       "KEY(id) REFERENCES payload(id) ON DELETE CASCADE);",
-      "CREATE TABLE IF NOT EXISTS payload_lineage (parent_id TEXT NOT NULL, child_id TEXT NOT NULL, operation TEXT, role TEXT, parameters TEXT, "
+      "CREATE TABLE IF NOT EXISTS payload_lineage (parent_id BLOB NOT NULL, child_id BLOB NOT NULL, operation TEXT, role TEXT, parameters TEXT, "
       "created_at_ms INTEGER NOT NULL, FOREIGN KEY(parent_id) REFERENCES payload(id) ON DELETE CASCADE, FOREIGN KEY(child_id) REFERENCES payload(id) "
       "ON DELETE CASCADE);",
-      "CREATE TABLE IF NOT EXISTS payload_metadata_events (rowid INTEGER PRIMARY KEY AUTOINCREMENT, id TEXT NOT NULL, data BLOB, schema TEXT, source "
+      "CREATE TABLE IF NOT EXISTS payload_metadata_events (rowid INTEGER PRIMARY KEY AUTOINCREMENT, id BLOB NOT NULL, data BLOB, schema TEXT, source "
       "TEXT, version TEXT, ts_ms INTEGER NOT NULL);",
       "CREATE TABLE IF NOT EXISTS payload_schema_migrations (version INTEGER PRIMARY KEY, applied_at_ms INTEGER NOT NULL);",
       "CREATE TABLE IF NOT EXISTS streams (stream_id INTEGER PRIMARY KEY AUTOINCREMENT, namespace TEXT NOT NULL, name TEXT NOT NULL, created_at "
       "INTEGER NOT NULL DEFAULT (unixepoch() * 1000), retention_max_entries INTEGER, retention_max_age_sec INTEGER, UNIQUE(namespace, name));",
       "CREATE TABLE IF NOT EXISTS stream_entries (stream_id INTEGER NOT NULL REFERENCES streams(stream_id), offset INTEGER NOT NULL, payload_uuid "
-      "TEXT NOT NULL, event_time INTEGER, append_time INTEGER NOT NULL DEFAULT (unixepoch() * 1000), duration_ns INTEGER, tags TEXT, PRIMARY KEY "
+      "BLOB NOT NULL, event_time INTEGER, append_time INTEGER NOT NULL DEFAULT (unixepoch() * 1000), duration_ns INTEGER, tags TEXT, PRIMARY KEY "
       "(stream_id, offset));",
       "CREATE TABLE IF NOT EXISTS stream_consumer_offsets (stream_id INTEGER NOT NULL REFERENCES streams(stream_id), consumer_group TEXT NOT NULL, "
       "offset INTEGER NOT NULL, updated_at INTEGER NOT NULL DEFAULT (unixepoch() * 1000), PRIMARY KEY (stream_id, consumer_group));"};
@@ -96,38 +96,50 @@ void BootstrapSqliteSchema(const std::shared_ptr<db::sqlite::SqliteDB>& sqlite_d
 #endif
 
 #if PAYLOAD_DB_POSTGRES
-void BootstrapPostgresSchema(const std::shared_ptr<db::postgres::PgPool>& pool) {
-  auto       conn = pool->Acquire();
-  pqxx::work tx(*conn);
+void BootstrapPostgresSchema(const std::string& conninfo) {
+  pqxx::connection conn(conninfo);
+  pqxx::work       tx(conn);
 
   tx.exec(
-      "CREATE TABLE IF NOT EXISTS payload (id TEXT PRIMARY KEY, tier SMALLINT NOT NULL, state SMALLINT NOT NULL, size_bytes BIGINT NOT NULL, version "
+      "CREATE TABLE IF NOT EXISTS payload (id UUID PRIMARY KEY, tier SMALLINT NOT NULL, state SMALLINT NOT NULL, size_bytes BIGINT NOT NULL, version "
       "BIGINT NOT NULL, expires_at_ms BIGINT, persist SMALLINT NOT NULL DEFAULT 0, eviction_priority SMALLINT NOT NULL DEFAULT 0, spill_target "
       "SMALLINT NOT NULL DEFAULT 0);");
   // Migrate existing databases that predate the eviction policy columns.
   tx.exec("ALTER TABLE payload ADD COLUMN IF NOT EXISTS persist SMALLINT NOT NULL DEFAULT 0;");
   tx.exec("ALTER TABLE payload ADD COLUMN IF NOT EXISTS eviction_priority SMALLINT NOT NULL DEFAULT 0;");
   tx.exec("ALTER TABLE payload ADD COLUMN IF NOT EXISTS spill_target SMALLINT NOT NULL DEFAULT 0;");
+  // Migrate id columns from TEXT to UUID if needed (no-op when already UUID).
   tx.exec(
-      "CREATE TABLE IF NOT EXISTS payload_metadata (id TEXT PRIMARY KEY REFERENCES payload(id) ON DELETE CASCADE, json JSONB NOT NULL, schema TEXT, "
+      "DO $$ BEGIN "
+      "  IF (SELECT data_type FROM information_schema.columns WHERE table_name='payload' AND column_name='id') = 'text' THEN "
+      "    ALTER TABLE payload_lineage ALTER COLUMN parent_id TYPE UUID USING parent_id::uuid; "
+      "    ALTER TABLE payload_lineage ALTER COLUMN child_id  TYPE UUID USING child_id::uuid; "
+      "    ALTER TABLE payload_metadata ALTER COLUMN id TYPE UUID USING id::uuid; "
+      "    ALTER TABLE payload_metadata_events ALTER COLUMN id TYPE UUID USING id::uuid; "
+      "    ALTER TABLE payload ALTER COLUMN id TYPE UUID USING id::uuid; "
+      "  END IF; "
+      "END $$;");
+  tx.exec(
+      "CREATE TABLE IF NOT EXISTS payload_metadata (id UUID PRIMARY KEY REFERENCES payload(id) ON DELETE CASCADE, json JSONB NOT NULL, schema TEXT, "
       "updated_at_ms BIGINT NOT NULL);");
   tx.exec(
-      "CREATE TABLE IF NOT EXISTS payload_lineage (parent_id TEXT NOT NULL REFERENCES payload(id) ON DELETE CASCADE, child_id TEXT NOT NULL "
+      "CREATE TABLE IF NOT EXISTS payload_lineage (parent_id UUID NOT NULL REFERENCES payload(id) ON DELETE CASCADE, child_id UUID NOT NULL "
       "REFERENCES payload(id) ON DELETE CASCADE, operation TEXT, role TEXT, parameters TEXT, created_at_ms BIGINT NOT NULL);");
   tx.exec(
-      "CREATE TABLE IF NOT EXISTS payload_metadata_events (id TEXT NOT NULL, data BYTEA, schema TEXT, source TEXT, version TEXT, ts_ms BIGINT NOT "
+      "CREATE TABLE IF NOT EXISTS payload_metadata_events (id UUID NOT NULL, data BYTEA, schema TEXT, source TEXT, version TEXT, ts_ms BIGINT NOT "
       "NULL);");
   tx.exec("CREATE TABLE IF NOT EXISTS payload_schema_migrations (version INTEGER PRIMARY KEY, applied_at TIMESTAMPTZ DEFAULT NOW());");
   tx.exec(
       "CREATE TABLE IF NOT EXISTS streams (stream_id BIGSERIAL PRIMARY KEY, namespace TEXT NOT NULL, name TEXT NOT NULL, created_at TIMESTAMPTZ NOT "
       "NULL DEFAULT now(), retention_max_entries BIGINT, retention_max_age_sec BIGINT, UNIQUE(namespace, name));");
   tx.exec(
-      "CREATE TABLE IF NOT EXISTS stream_entries (stream_id BIGINT NOT NULL REFERENCES streams(stream_id), offset BIGINT NOT NULL, payload_uuid UUID "
+      "CREATE TABLE IF NOT EXISTS stream_entries (stream_id BIGINT NOT NULL REFERENCES streams(stream_id), \"offset\" BIGINT NOT NULL, payload_uuid "
+      "UUID "
       "NOT NULL, event_time TIMESTAMPTZ, append_time TIMESTAMPTZ NOT NULL DEFAULT now(), duration_ns BIGINT, tags JSONB, PRIMARY KEY (stream_id, "
-      "offset));");
+      "\"offset\"));");
   tx.exec(
       "CREATE TABLE IF NOT EXISTS stream_consumer_offsets (stream_id BIGINT NOT NULL REFERENCES streams(stream_id), consumer_group TEXT NOT NULL, "
-      "offset BIGINT NOT NULL, updated_at TIMESTAMPTZ NOT NULL DEFAULT now(), PRIMARY KEY (stream_id, consumer_group));");
+      "\"offset\" BIGINT NOT NULL, updated_at TIMESTAMPTZ NOT NULL DEFAULT now(), PRIMARY KEY (stream_id, consumer_group));");
 
   tx.exec("SELECT id,tier,state,size_bytes,version FROM payload LIMIT 1;");
   tx.exec("SELECT id,json,schema,updated_at_ms FROM payload_metadata LIMIT 1;");
@@ -160,8 +172,8 @@ std::shared_ptr<db::Repository> BuildRepository(const payload::runtime::config::
     PAYLOAD_LOG_WARN(
         "PostgreSQL backend: snapshot cache enforces single-instance semantics; direct DB mutations from other processes will not be visible until "
         "HydrateCaches() is called");
+    BootstrapPostgresSchema(database.postgres().connection_uri());
     auto pool = std::make_shared<db::postgres::PgPool>(database.postgres().connection_uri(), database.postgres().max_connections());
-    BootstrapPostgresSchema(pool);
     return std::make_shared<db::postgres::PgRepository>(std::move(pool));
 #else
     throw std::runtime_error("postgres backend requested but not enabled at build time");
