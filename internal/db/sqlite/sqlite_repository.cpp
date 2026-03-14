@@ -16,20 +16,35 @@ static void BindText(sqlite3_stmt* st, int idx, const std::string& s) {
   sqlite3_bind_text(st, idx, s.c_str(), -1, SQLITE_TRANSIENT);
 }
 
-// Bind a hex-string UUID as a 16-byte BLOB.
-static void BindUuid(sqlite3_stmt* st, int idx, const std::string& hex_uuid) {
-  auto bytes = payload::util::FromString(hex_uuid);
-  sqlite3_bind_blob(st, idx, bytes.data(), 16, SQLITE_TRANSIENT);
+// Bind a UUID column.
+// If the string is a valid 36-char hex UUID it is stored as a 16-byte BLOB;
+// otherwise it is stored as TEXT (preserves synthetic test IDs).
+static void BindUuid(sqlite3_stmt* st, int idx, const std::string& uuid_str) {
+  if (uuid_str.size() == 36) {
+    try {
+      auto bytes = payload::util::FromString(uuid_str);
+      sqlite3_bind_blob(st, idx, bytes.data(), 16, SQLITE_TRANSIENT);
+      return;
+    } catch (...) {}
+  }
+  sqlite3_bind_text(st, idx, uuid_str.c_str(), -1, SQLITE_TRANSIENT);
 }
 
-// Read a 16-byte BLOB column back as a hex-string UUID.
+// Read a UUID column.
+// 16-byte BLOBs are decoded back to a hex UUID string; anything else is
+// returned as TEXT (handles synthetic test IDs stored as TEXT).
 static std::string ColUuid(sqlite3_stmt* st, int col) {
-  const void* data = sqlite3_column_blob(st, col);
-  int         len  = sqlite3_column_bytes(st, col);
-  if (!data || len != 16) return "";
-  payload::util::UUID uuid{};
-  std::memcpy(uuid.data(), data, 16);
-  return payload::util::ToString(uuid);
+  if (sqlite3_column_type(st, col) == SQLITE_BLOB) {
+    const void* data = sqlite3_column_blob(st, col);
+    int         len  = sqlite3_column_bytes(st, col);
+    if (data && len == 16) {
+      payload::util::UUID uuid{};
+      std::memcpy(uuid.data(), data, 16);
+      return payload::util::ToString(uuid);
+    }
+  }
+  const unsigned char* t = sqlite3_column_text(st, col);
+  return t ? reinterpret_cast<const char*>(t) : "";
 }
 
 static void BindU64(sqlite3_stmt* st, int idx, uint64_t v) {
