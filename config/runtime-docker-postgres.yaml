@@ -30,16 +30,16 @@ logging:
 
 observability:
   metrics_enabled: true
-  tracing_enabled: false
+  tracing_enabled: true
   logs_enabled: false
-  otlp_endpoint: "http://alloy:4318"
-  transport: OTLP_TRANSPORT_HTTP
+  otlp_endpoint: "alloy:4317"
+  transport: OTLP_TRANSPORT_GRPC
   metrics:
     request_metrics_enabled: true
     spill_metrics_enabled: true
     tier_occupancy_metrics_enabled: true
-    request_latency_histograms_enabled: false
-    route_labels_enabled: false
+    request_latency_histograms_enabled: true
+    route_labels_enabled: true
     tier_labels_enabled: true
     min_collection_interval_ms: 1000
     collection_interval_ms: 10000

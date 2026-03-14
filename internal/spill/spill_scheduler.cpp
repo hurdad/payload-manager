@@ -23,6 +23,11 @@ std::optional<SpillTask> SpillScheduler::Dequeue(const std::atomic<bool>& runnin
   return task;
 }
 
+std::size_t SpillScheduler::QueueDepth() const {
+  std::lock_guard lock(mutex_);
+  return queue_.size();
+}
+
 void SpillScheduler::Wakeup() {
   cv_.notify_all();
 }

@@ -36,6 +36,8 @@ void SpillWorker::Run() {
     auto task = scheduler_->Dequeue(running_);
     if (!task) break;
 
+    payload::observability::Metrics::Instance().SetSpillQueueDepth(scheduler_->QueueDepth());
+
     try {
       const auto spill_start = std::chrono::steady_clock::now();
       manager_->ExecuteSpill(task->id, task->target_tier, task->fsync);

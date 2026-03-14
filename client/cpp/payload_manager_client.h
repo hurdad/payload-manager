@@ -30,7 +30,7 @@ class PayloadClient {
     /// Descriptor returned by the service for the allocated payload.
     payload::manager::v1::PayloadDescriptor descriptor;
     /// Mutable Arrow buffer mapped/opened for writing payload bytes.
-    std::shared_ptr<arrow::MutableBuffer>   buffer;
+    std::shared_ptr<arrow::MutableBuffer> buffer;
   };
 
   /// Read lease result produced by AcquireReadableBuffer().
@@ -38,9 +38,9 @@ class PayloadClient {
     /// Descriptor for the leased payload snapshot.
     payload::manager::v1::PayloadDescriptor descriptor;
     /// Lease identifier that must be released with Release().
-    payload::manager::v1::LeaseID           lease_id;
+    payload::manager::v1::LeaseID lease_id;
     /// Read-only Arrow buffer mapped/opened for reading payload bytes.
-    std::shared_ptr<arrow::Buffer>          buffer;
+    std::shared_ptr<arrow::Buffer> buffer;
   };
 
   /// Construct a client from a shared gRPC channel.
@@ -54,7 +54,7 @@ class PayloadClient {
   /// Convert a UUID string into a protobuf PayloadID.
   static arrow::Result<payload::manager::v1::PayloadID> PayloadIdFromUuid(std::string_view uuid);
   /// Validate that a PayloadID contains a 16-byte UUID payload.
-  static arrow::Status                                  ValidatePayloadId(const payload::manager::v1::PayloadID& payload_id);
+  static arrow::Status ValidatePayloadId(const payload::manager::v1::PayloadID& payload_id);
 
   /// Mark a previously allocated payload as committed.
   arrow::Status CommitPayload(const payload::manager::v1::PayloadID& payload_id) const;
@@ -135,21 +135,21 @@ class PayloadClient {
   /// Open a mutable Arrow buffer from a descriptor location.
   arrow::Result<std::shared_ptr<arrow::MutableBuffer>> OpenMutableBuffer(const payload::manager::v1::PayloadDescriptor& descriptor) const;
   /// Open a read-only Arrow buffer from a descriptor location.
-  arrow::Result<std::shared_ptr<arrow::Buffer>>        OpenReadableBuffer(const payload::manager::v1::PayloadDescriptor& descriptor) const;
+  arrow::Result<std::shared_ptr<arrow::Buffer>> OpenReadableBuffer(const payload::manager::v1::PayloadDescriptor& descriptor) const;
 
   /// Ensure descriptor has a concrete location for its tier.
   static arrow::Status ValidateHasLocation(const payload::manager::v1::PayloadDescriptor& descriptor);
   /// Return descriptor byte length for whichever location is set.
-  static uint64_t      DescriptorLengthBytes(const payload::manager::v1::PayloadDescriptor& descriptor);
+  static uint64_t DescriptorLengthBytes(const payload::manager::v1::PayloadDescriptor& descriptor);
 
   /// Catalog service RPC stub.
   std::unique_ptr<payload::manager::v1::PayloadCatalogService::Stub> catalog_stub_;
   /// Data service RPC stub.
-  std::unique_ptr<payload::manager::v1::PayloadDataService::Stub>    data_stub_;
+  std::unique_ptr<payload::manager::v1::PayloadDataService::Stub> data_stub_;
   /// Admin service RPC stub.
-  std::unique_ptr<payload::manager::v1::PayloadAdminService::Stub>   admin_stub_;
+  std::unique_ptr<payload::manager::v1::PayloadAdminService::Stub> admin_stub_;
   /// Stream service RPC stub.
-  std::unique_ptr<payload::manager::v1::PayloadStreamService::Stub>  stream_stub_;
+  std::unique_ptr<payload::manager::v1::PayloadStreamService::Stub> stream_stub_;
 };
 
 } // namespace payload::manager::client

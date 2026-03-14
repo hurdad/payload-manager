@@ -42,8 +42,8 @@ observability:
   metrics_enabled: true
   tracing_enabled: false
   logs_enabled: false
-  otlp_endpoint: "http://localhost:4317"
-  transport: OTLP_TRANSPORT_HTTP
+  otlp_endpoint: "localhost:4317"
+  transport: OTLP_TRANSPORT_GRPC
   metrics:
     request_metrics_enabled: true
     spill_metrics_enabled: true

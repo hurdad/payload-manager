@@ -61,7 +61,10 @@ class Metrics {
   void RecordRequest(std::string_view route, bool success);
   void ObserveRequestLatencyMs(std::string_view route, double latency_ms);
   void ObserveSpillDurationMs(std::string_view op, double duration_ms);
+  void RecordSpillBytes(std::string_view op, std::uint64_t bytes);
   void SetTierOccupancyBytes(std::string_view tier, std::uint64_t bytes);
+  void RecordAllocationFailure(std::string_view tier);
+  void SetSpillQueueDepth(std::size_t depth);
 
  private:
   Metrics();
@@ -136,7 +139,16 @@ inline void Metrics::ObserveRequestLatencyMs(std::string_view, double) {
 inline void Metrics::ObserveSpillDurationMs(std::string_view, double) {
 }
 
+inline void Metrics::RecordSpillBytes(std::string_view, std::uint64_t) {
+}
+
 inline void Metrics::SetTierOccupancyBytes(std::string_view, std::uint64_t) {
+}
+
+inline void Metrics::RecordAllocationFailure(std::string_view) {
+}
+
+inline void Metrics::SetSpillQueueDepth(std::size_t) {
 }
 #endif
 

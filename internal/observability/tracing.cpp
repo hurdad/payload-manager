@@ -35,18 +35,24 @@ std::shared_ptr<sdktrace::TracerProvider>           g_sdk_provider;
 opentelemetry::nostd::shared_ptr<trace_api::Tracer> g_tracer;
 
 std::string ResolveEndpoint(const OtlpConfig& config) {
+  std::string endpoint;
   if (!config.endpoint.empty()) {
-    return config.endpoint;
+    endpoint = config.endpoint;
+  } else if (const char* env = std::getenv("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT")) {
+    return env;
+  } else if (const char* env = std::getenv("OTEL_EXPORTER_OTLP_ENDPOINT")) {
+    endpoint = env;
   }
 
-  if (const char* endpoint = std::getenv("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT")) {
-    return endpoint;
-  }
-  if (const char* endpoint = std::getenv("OTEL_EXPORTER_OTLP_ENDPOINT")) {
-    return endpoint;
+  if (endpoint.empty()) {
+    return config.transport == OtlpTransport::kHttpProtobuf ? "http://localhost:4318/v1/traces" : "localhost:4317";
   }
 
-  return config.transport == OtlpTransport::kHttpProtobuf ? "http://localhost:4318/v1/traces" : "localhost:4317";
+  if (config.transport == OtlpTransport::kHttpProtobuf && endpoint.find("/v1/") == std::string::npos) {
+    if (endpoint.back() == '/') endpoint.pop_back();
+    endpoint += "/v1/traces";
+  }
+  return endpoint;
 }
 
 resource::Resource BuildResource(const OtlpConfig& config) {

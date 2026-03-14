@@ -57,18 +57,24 @@ struct MetricsOptions {
 MetricsOptions g_metrics_options;
 
 std::string ResolveEndpoint(const OtlpConfig& config) {
+  std::string endpoint;
   if (!config.endpoint.empty()) {
-    return config.endpoint;
+    endpoint = config.endpoint;
+  } else if (const char* env = std::getenv("OTEL_EXPORTER_OTLP_METRICS_ENDPOINT")) {
+    return env;
+  } else if (const char* env = std::getenv("OTEL_EXPORTER_OTLP_ENDPOINT")) {
+    endpoint = env;
   }
 
-  if (const char* endpoint = std::getenv("OTEL_EXPORTER_OTLP_METRICS_ENDPOINT")) {
-    return endpoint;
-  }
-  if (const char* endpoint = std::getenv("OTEL_EXPORTER_OTLP_ENDPOINT")) {
-    return endpoint;
+  if (endpoint.empty()) {
+    return config.transport == OtlpTransport::kHttpProtobuf ? "http://localhost:4318/v1/metrics" : "localhost:4317";
   }
 
-  return config.transport == OtlpTransport::kHttpProtobuf ? "http://localhost:4318/v1/metrics" : "localhost:4317";
+  if (config.transport == OtlpTransport::kHttpProtobuf && endpoint.find("/v1/") == std::string::npos) {
+    if (endpoint.back() == '/') endpoint.pop_back();
+    endpoint += "/v1/metrics";
+  }
+  return endpoint;
 }
 
 resource::Resource BuildResource(const OtlpConfig& config) {
@@ -129,10 +135,14 @@ struct Metrics::Impl {
   opentelemetry::nostd::shared_ptr<metrics_api::Counter<std::uint64_t>> request_count;
   opentelemetry::nostd::shared_ptr<metrics_api::Histogram<double>>      request_latency_ms;
   opentelemetry::nostd::shared_ptr<metrics_api::Histogram<double>>      spill_duration_ms;
+  opentelemetry::nostd::shared_ptr<metrics_api::Counter<std::uint64_t>> spill_bytes_total;
   opentelemetry::nostd::shared_ptr<metrics_api::ObservableInstrument>   tier_occupancy_gauge;
+  opentelemetry::nostd::shared_ptr<metrics_api::Counter<std::uint64_t>> allocation_failure_count;
+  opentelemetry::nostd::shared_ptr<metrics_api::ObservableInstrument>   spill_queue_depth_gauge;
 
   std::mutex                                    tier_occupancy_mutex;
   std::unordered_map<std::string, std::int64_t> tier_occupancy_values;
+  std::atomic<std::int64_t>                     spill_queue_depth{0};
 };
 
 bool InitializeMetrics(const OtlpConfig& config) {
@@ -237,10 +247,21 @@ Metrics::Metrics() : impl_(std::make_unique<Impl>()) {
   auto provider = metrics_api::Provider::GetMeterProvider();
   impl_->meter  = provider->GetMeter("payload-manager", "0.1.0");
 
-  impl_->request_count        = impl_->meter->CreateUInt64Counter("payload.request.count", "1", "Total number of service requests");
-  impl_->request_latency_ms   = impl_->meter->CreateDoubleHistogram("payload.request.latency_ms", "ms", "End-to-end request latency in milliseconds");
-  impl_->spill_duration_ms    = impl_->meter->CreateDoubleHistogram("payload.spill.duration_ms", "ms", "Spill operation duration in milliseconds");
-  impl_->tier_occupancy_gauge = impl_->meter->CreateInt64ObservableGauge("payload.tier.occupancy_bytes", "Current tier occupancy in bytes", "By");
+  impl_->request_count      = impl_->meter->CreateUInt64Counter("payload.request.count", "1", "Total number of service requests");
+  impl_->request_latency_ms = impl_->meter->CreateDoubleHistogram("payload.request.latency_ms", "ms", "End-to-end request latency in milliseconds");
+  impl_->spill_duration_ms  = impl_->meter->CreateDoubleHistogram("payload.spill.duration_ms", "ms", "Spill operation duration in milliseconds");
+  impl_->spill_bytes_total  = impl_->meter->CreateUInt64Counter("payload.spill.bytes_total", "By", "Total bytes moved by spill operations");
+  impl_->allocation_failure_count =
+      impl_->meter->CreateUInt64Counter("payload.allocation.failure_count", "1", "Total number of allocation failures due to tier capacity");
+  impl_->tier_occupancy_gauge    = impl_->meter->CreateInt64ObservableGauge("payload.tier.occupancy_bytes", "Current tier occupancy in bytes", "By");
+  impl_->spill_queue_depth_gauge = impl_->meter->CreateInt64ObservableGauge("payload.spill.queue_depth", "Number of payloads queued for spill", "1");
+  impl_->spill_queue_depth_gauge->AddCallback(
+      [](metrics_api::ObserverResult result, void* state) {
+        auto* impl       = static_cast<Impl*>(state);
+        auto  int_result = opentelemetry::nostd::get<opentelemetry::nostd::shared_ptr<metrics_api::ObserverResultT<std::int64_t>>>(result);
+        int_result->Observe(impl->spill_queue_depth.load());
+      },
+      impl_.get());
   impl_->tier_occupancy_gauge->AddCallback(
       [](metrics_api::ObserverResult result, void* state) {
         auto*                       impl = static_cast<Impl*>(state);
@@ -299,6 +320,32 @@ void Metrics::ObserveSpillDurationMs(std::string_view op, double duration_ms) {
 
   const std::initializer_list<AttributePair> attributes = {{"op", std::string(op)}};
   RecordWithAttributes(impl_->spill_duration_ms, duration_ms, attributes);
+}
+
+void Metrics::RecordSpillBytes(std::string_view op, std::uint64_t bytes) {
+  if (!impl_ || !impl_->spill_bytes_total || !g_metrics_options.spill_metrics_enabled) {
+    return;
+  }
+
+  const std::initializer_list<AttributePair> attributes = {{"op", std::string(op)}};
+  AddWithAttributes(impl_->spill_bytes_total, bytes, attributes);
+}
+
+void Metrics::RecordAllocationFailure(std::string_view tier) {
+  if (!impl_ || !impl_->allocation_failure_count || !g_metrics_options.request_metrics_enabled) {
+    return;
+  }
+
+  const std::initializer_list<AttributePair> attributes = {{"tier", std::string(tier)}};
+  AddWithAttributes(impl_->allocation_failure_count, static_cast<std::uint64_t>(1), attributes);
+}
+
+void Metrics::SetSpillQueueDepth(std::size_t depth) {
+  if (!impl_ || !impl_->spill_queue_depth_gauge || !g_metrics_options.spill_metrics_enabled) {
+    return;
+  }
+
+  impl_->spill_queue_depth.store(static_cast<std::int64_t>(depth));
 }
 
 void Metrics::SetTierOccupancyBytes(std::string_view tier, std::uint64_t bytes) {

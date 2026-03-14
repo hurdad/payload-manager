@@ -20,13 +20,15 @@ class SpillScheduler {
   // flag goes false.  Returns nullopt when the caller should stop.
   std::optional<SpillTask> Dequeue(const std::atomic<bool>& running);
 
+  std::size_t QueueDepth() const;
+
   // Wake all blocked Dequeue callers without triggering shutdown.
   void Wakeup();
 
   void Shutdown();
 
  private:
-  std::mutex              mutex_;
+  mutable std::mutex      mutex_;
   std::condition_variable cv_;
   std::queue<SpillTask>   queue_;
   bool                    shutdown_ = false;

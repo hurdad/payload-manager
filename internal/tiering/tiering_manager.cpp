@@ -4,6 +4,7 @@
 
 #include "internal/core/payload_manager.hpp"
 #include "internal/observability/logging.hpp"
+#include "internal/observability/spans.hpp"
 #include "payload/manager/v1.hpp"
 
 namespace payload::tiering {
@@ -54,6 +55,7 @@ void TieringManager::Loop() {
       task.id          = *victim;
       task.target_tier = manager_->GetSpillTarget(*victim);
       scheduler_->Enqueue(task);
+      payload::observability::Metrics::Instance().SetSpillQueueDepth(scheduler_->QueueDepth());
     }
 
     if (auto victim = policy_->ChooseGpuEviction(*state_)) {
@@ -61,6 +63,7 @@ void TieringManager::Loop() {
       task.id          = *victim;
       task.target_tier = payload::manager::v1::TIER_RAM;
       scheduler_->Enqueue(task);
+      payload::observability::Metrics::Instance().SetSpillQueueDepth(scheduler_->QueueDepth());
     }
 
     try {

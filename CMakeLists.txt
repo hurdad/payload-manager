@@ -28,7 +28,7 @@ if(PAYLOAD_MANAGER_ENABLE_OTEL)
         "PAYLOAD_MANAGER_ENABLE_OTEL=ON but ${_otel_dir} is missing. Initialize submodules with: git submodule update --init --recursive")
   endif()
 
-  set(_otel_cache_vars BUILD_TESTING WITH_OTLP_GRPC WITH_OTLP_HTTP WITH_EXAMPLES WITH_FUNC_TESTS WITH_BENCHMARK)
+  set(_otel_cache_vars BUILD_TESTING WITH_OTLP_GRPC WITH_OTLP_HTTP WITH_EXAMPLES WITH_FUNC_TESTS WITH_BENCHMARK BUILD_SHARED_LIBS)
   foreach(_otel_var IN LISTS _otel_cache_vars)
     if(DEFINED CACHE{${_otel_var}})
       set(_saved_${_otel_var} "$CACHE{${_otel_var}}")
@@ -44,6 +44,7 @@ if(PAYLOAD_MANAGER_ENABLE_OTEL)
   set(WITH_EXAMPLES OFF CACHE BOOL "Disable OpenTelemetry examples" FORCE)
   set(WITH_FUNC_TESTS OFF CACHE BOOL "Disable OpenTelemetry functional tests" FORCE)
   set(WITH_BENCHMARK OFF CACHE BOOL "Disable OpenTelemetry benchmarks" FORCE)
+  set(BUILD_SHARED_LIBS OFF CACHE BOOL "Build OpenTelemetry as static libraries" FORCE)
 
   add_subdirectory(third_party/opentelemetry-cpp)
 
