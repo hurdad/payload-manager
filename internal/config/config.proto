@@ -47,6 +47,9 @@ message DatabaseConfig {
 message RamTierConfig {
   uint64 capacity_bytes = 1;
   bool use_hugepages = 2;
+  // Prefix for POSIX shm segment names (no leading slash required).
+  // Segments are named /<shm_prefix>-<uuid>. Defaults to "pm".
+  string shm_prefix = 3;
 }
 
 message DiskTierConfig {

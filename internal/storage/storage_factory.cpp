@@ -15,7 +15,8 @@ namespace payload::storage {
 StorageFactory::TierMap StorageFactory::Build(const payload::runtime::config::StorageConfig& cfg) {
   StorageFactory::TierMap stores;
 
-  stores.emplace(payload::manager::v1::TIER_RAM, std::make_shared<RamArrowStore>());
+  const std::string shm_prefix = cfg.ram().shm_prefix().empty() ? "pm" : cfg.ram().shm_prefix();
+  stores.emplace(payload::manager::v1::TIER_RAM, std::make_shared<RamArrowStore>(shm_prefix));
 
   std::filesystem::path disk_root =
       cfg.disk().root_path().empty() ? std::filesystem::path{"/tmp/payload-manager"} : std::filesystem::path{cfg.disk().root_path()};

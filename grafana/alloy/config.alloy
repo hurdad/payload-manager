@@ -1,0 +1,53 @@
+// Grafana Alloy configuration for Payload Manager observability
+// Receives OTLP from payload-manager, forwards metrics to Prometheus
+// and traces to Tempo (if tracing_enabled=true).
+
+// ── OTLP receiver ────────────────────────────────────────────────────────────
+otelcol.receiver.otlp "default" {
+  grpc {
+    endpoint = "0.0.0.0:4317"
+  }
+
+  output {
+    metrics = [otelcol.processor.batch.default.input]
+    traces  = [otelcol.processor.batch.default.input]
+    logs    = [otelcol.processor.batch.default.input]
+  }
+}
+
+// ── Batch processor ──────────────────────────────────────────────────────────
+otelcol.processor.batch "default" {
+  timeout             = "5s"
+  send_batch_size     = 1000
+  send_batch_max_size = 2000
+
+  output {
+    metrics = [otelcol.exporter.prometheus.default.input]
+    traces  = [otelcol.exporter.otlp.tempo.input]
+    logs    = []
+  }
+}
+
+// ── Prometheus exporter (metrics → Prometheus remote_write) ──────────────────
+otelcol.exporter.prometheus "default" {
+  forward_to = [prometheus.remote_write.default.receiver]
+
+  // Preserve the resource attributes that matter for filtering
+  resource_to_telemetry_conversion = true
+}
+
+prometheus.remote_write "default" {
+  endpoint {
+    url = "http://prometheus:9090/api/v1/write"
+  }
+}
+
+// ── Tempo exporter (traces) ───────────────────────────────────────────────────
+otelcol.exporter.otlp "tempo" {
+  client {
+    endpoint = "http://tempo:4317"
+    tls {
+      insecure = true
+    }
+  }
+}

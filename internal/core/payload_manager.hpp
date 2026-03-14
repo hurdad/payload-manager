@@ -64,6 +64,7 @@ class PayloadManager {
   payload::storage::StorageFactory::TierMap     storage_;
   std::shared_ptr<payload::lease::LeaseManager> lease_mgr_;
   std::shared_ptr<payload::db::Repository>      repository_;
+  std::string                                   shm_prefix_{"pm"};
 
   // Serializes Delete with AcquireReadLease to prevent TOCTOU on lease checks.
   mutable std::mutex delete_mutex_;

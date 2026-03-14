@@ -190,8 +190,8 @@ void CatalogService::AddLineage(const AddLineageRequest& req) {
     auto tx = ctx_.repository->Begin();
     for (const auto& edge : req.parents()) {
       payload::db::model::LineageRecord record;
-      record.parent_id     = edge.parent().value();
-      record.child_id      = req.child().value();
+      record.parent_id     = payload::util::PayloadIdToHex(edge.parent());
+      record.child_id      = payload::util::PayloadIdToHex(req.child());
       record.operation     = edge.operation();
       record.role          = edge.role();
       record.parameters    = edge.parameters();
@@ -217,8 +217,8 @@ GetLineageResponse CatalogService::GetLineage(const GetLineageRequest& req) {
     std::queue<std::pair<std::string, uint32_t>> q;
     std::unordered_set<std::string>              visited;
 
-    q.emplace(req.id().value(), 0);
-    visited.insert(req.id().value());
+    q.emplace(payload::util::PayloadIdToHex(req.id()), 0);
+    visited.insert(payload::util::PayloadIdToHex(req.id()));
 
     while (!q.empty()) {
       const auto [node, depth] = q.front();
@@ -260,10 +260,10 @@ UpdatePayloadMetadataResponse CatalogService::UpdateMetadata(const UpdatePayload
     UpdatePayloadMetadataResponse resp;
 
     auto tx             = ctx_.repository->Begin();
-    auto current_record = ctx_.repository->GetMetadata(*tx, req.id().value());
+    auto current_record = ctx_.repository->GetMetadata(*tx, payload::util::PayloadIdToHex(req.id()));
 
     payload::db::model::MetadataRecord record;
-    record.id = req.id().value();
+    record.id = payload::util::PayloadIdToHex(req.id());
 
     if (req.mode() == METADATA_UPDATE_MODE_REPLACE || !current_record.has_value()) {
       record.json   = req.metadata().data();
@@ -298,7 +298,7 @@ AppendPayloadMetadataEventResponse CatalogService::AppendMetadataEvent(const App
     const auto now = payload::util::Now();
 
     payload::db::model::MetadataEventRecord record;
-    record.id      = req.id().value();
+    record.id      = payload::util::PayloadIdToHex(req.id());
     record.data    = req.metadata().data();
     record.schema  = req.metadata().schema();
     record.source  = req.source();

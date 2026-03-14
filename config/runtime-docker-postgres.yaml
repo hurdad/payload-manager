@@ -10,6 +10,7 @@ storage:
   ram:
     capacity_bytes: 8589934592  # 8 GiB
     use_hugepages: false
+    shm_prefix: "pm"  # POSIX shm segments named /pm-<uuid>
   disk:
     root_path: "/var/lib/payload-manager/payloads"
     capacity_bytes: 107374182400  # 100 GiB

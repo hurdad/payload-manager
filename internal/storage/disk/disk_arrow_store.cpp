@@ -6,12 +6,27 @@
 
 #include "internal/storage/common/arrow_utils.hpp"
 #include "internal/storage/common/path_utils.hpp"
+#include "internal/util/uuid.hpp"
 #include "payload/manager/v1.hpp"
 
 namespace payload::storage {
 
 using namespace payload::storage::common;
 using namespace payload::manager::v1;
+
+namespace {
+
+// Convert a PayloadID to its hex-string key, handling binary (16-byte) UUIDs.
+std::string Key(const PayloadID& id) {
+  if (id.value().size() == 16) {
+    payload::util::UUID uuid{};
+    std::memcpy(uuid.data(), id.value().data(), 16);
+    return payload::util::ToString(uuid);
+  }
+  return id.value();
+}
+
+} // namespace
 
 DiskArrowStore::DiskArrowStore(std::filesystem::path root) : root_(std::move(root)) {
   std::filesystem::create_directories(root_);
@@ -29,14 +44,14 @@ std::shared_ptr<arrow::Buffer> DiskArrowStore::Allocate(const PayloadID&, uint64
   Read entire payload from disk.
 */
 std::shared_ptr<arrow::Buffer> DiskArrowStore::Read(const PayloadID& id) {
-  auto path = PayloadPath(root_, id.value());
+  auto path = PayloadPath(root_, Key(id));
 
   auto file = Unwrap(arrow::io::ReadableFile::Open(path.string()));
   return ReadAll(file);
 }
 
 uint64_t DiskArrowStore::Size(const PayloadID& id) {
-  return static_cast<uint64_t>(std::filesystem::file_size(PayloadPath(root_, id.value())));
+  return static_cast<uint64_t>(std::filesystem::file_size(PayloadPath(root_, Key(id))));
 }
 
 /*
@@ -44,7 +59,7 @@ uint64_t DiskArrowStore::Size(const PayloadID& id) {
       write tmp → flush → rename
 */
 void DiskArrowStore::Write(const PayloadID& id, const std::shared_ptr<arrow::Buffer>& buffer, bool fsync) {
-  auto final_path = PayloadPath(root_, id.value());
+  auto final_path = PayloadPath(root_, Key(id));
   auto tmp_path   = final_path.string() + ".tmp";
 
   {
@@ -69,7 +84,7 @@ void DiskArrowStore::Write(const PayloadID& id, const std::shared_ptr<arrow::Buf
   Remove payload from disk
 */
 void DiskArrowStore::Remove(const PayloadID& id) {
-  std::filesystem::remove(PayloadPath(root_, id.value()));
+  std::filesystem::remove(PayloadPath(root_, Key(id)));
 }
 
 } // namespace payload::storage

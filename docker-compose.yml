@@ -23,6 +23,7 @@ services:
       postgres:
         condition: service_healthy
     command: ["./payload-manager", "--config", "/app/conf/runtime-docker-postgres.yaml"]
+    ipc: host
     ports:
       - "50051:50051"
     volumes:

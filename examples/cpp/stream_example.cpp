@@ -62,6 +62,13 @@ int main(int argc, char** argv) {
 
   const auto stream = MakeStreamId();
 
+  // Delete any leftover stream from a prior run so this example is re-runnable.
+  {
+    payload::manager::v1::DeleteStreamRequest pre_delete;
+    *pre_delete.mutable_stream() = stream;
+    client.DeleteStream(pre_delete); // ignore error if stream doesn't exist
+  }
+
   // Create an example stream with bounded retention for repeatable demos.
   payload::manager::v1::CreateStreamRequest create_request;
   *create_request.mutable_stream() = stream;

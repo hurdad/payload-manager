@@ -6,6 +6,7 @@
 #include "internal/core/placement_engine.hpp"
 #include "internal/db/model/payload_record.hpp"
 #include "internal/lease/lease_manager.hpp"
+#include "internal/storage/ram/ram_arrow_store.hpp"
 #include "internal/storage/storage_backend.hpp"
 #include "payload/manager/core/v1/policy.pb.h"
 #if PAYLOAD_MANAGER_ARROW_CUDA
@@ -100,7 +101,7 @@ db::model::PayloadRecord ToPayloadRecord(const PayloadDescriptor& descriptor) {
   return record;
 }
 
-PayloadDescriptor ToPayloadDescriptor(const db::model::PayloadRecord& record) {
+PayloadDescriptor ToPayloadDescriptor(const db::model::PayloadRecord& record, const std::string& shm_prefix) {
   PayloadDescriptor descriptor;
   try {
     *descriptor.mutable_payload_id() = payload::util::ToProto(payload::util::FromString(record.id));
@@ -134,7 +135,9 @@ PayloadDescriptor ToPayloadDescriptor(const db::model::PayloadRecord& record) {
         ram.set_length_bytes(record.size_bytes);
         ram.set_slab_id(0);
         ram.set_block_index(0);
-        ram.set_shm_name("payload");
+        PayloadID tmp_id;
+        tmp_id.set_value(record.id);
+        ram.set_shm_name(payload::storage::RamArrowStore::ShmName(tmp_id, shm_prefix));
         *descriptor.mutable_ram() = ram;
         break;
       }
@@ -148,6 +151,13 @@ PayloadDescriptor ToPayloadDescriptor(const db::model::PayloadRecord& record) {
 PayloadManager::PayloadManager(payload::storage::StorageFactory::TierMap storage, std::shared_ptr<payload::lease::LeaseManager> lease_mgr,
                                std::shared_ptr<payload::db::Repository> repository)
     : storage_(std::move(storage)), lease_mgr_(std::move(lease_mgr)), repository_(std::move(repository)) {
+  // Cache the shm prefix from the RAM backend so descriptor building is consistent.
+  const auto ram_it = storage_.find(TIER_RAM);
+  if (ram_it != storage_.end() && ram_it->second) {
+    if (auto* ram = dynamic_cast<payload::storage::RamArrowStore*>(ram_it->second.get())) {
+      shm_prefix_ = ram->GetShmPrefix();
+    }
+  }
 }
 
 std::string PayloadManager::Key(const PayloadID& id) {
@@ -222,7 +232,7 @@ void PayloadManager::PopulateLocation(PayloadDescriptor* descriptor) {
       ram.set_length_bytes(size);
       ram.set_slab_id(0);
       ram.set_block_index(0);
-      ram.set_shm_name("payload");
+      ram.set_shm_name(payload::storage::RamArrowStore::ShmName(id, shm_prefix_));
       *descriptor->mutable_ram() = ram;
       return;
     }
@@ -325,7 +335,7 @@ PayloadDescriptor PayloadManager::Allocate(uint64_t size_bytes, Tier preferred, 
         ram->set_length_bytes(size_bytes);
         ram->set_slab_id(0);
         ram->set_block_index(0);
-        ram->set_shm_name("payload");
+        ram->set_shm_name(payload::storage::RamArrowStore::ShmName(desc.payload_id(), shm_prefix_));
         break;
       }
     }
@@ -405,7 +415,7 @@ PayloadDescriptor PayloadManager::Commit(const PayloadID& id) {
   record->version++;
   ThrowIfDbError(repository_->UpdatePayload(*tx, *record), "commit payload");
   tx->Commit();
-  const auto descriptor = ToPayloadDescriptor(*record);
+  const auto descriptor = ToPayloadDescriptor(*record, shm_prefix_);
   auto       hydrated   = descriptor;
   PopulateLocation(&hydrated);
   CacheSnapshot(hydrated);
@@ -497,7 +507,7 @@ PayloadDescriptor PayloadManager::ResolveSnapshot(const PayloadID& id) {
   if (!record.has_value()) throw payload::util::NotFound("resolve snapshot: payload not found; verify payload id");
   tx->Commit();
 
-  auto descriptor = ToPayloadDescriptor(*record);
+  auto descriptor = ToPayloadDescriptor(*record, shm_prefix_);
   PopulateLocation(&descriptor);
   CacheSnapshot(descriptor);
   return descriptor;
@@ -599,7 +609,7 @@ PayloadDescriptor PayloadManager::PromoteUnlocked(const PayloadID& id, Tier targ
     }
   }
 
-  auto descriptor = ToPayloadDescriptor(*record);
+  auto descriptor = ToPayloadDescriptor(*record, shm_prefix_);
   PopulateLocation(&descriptor);
   CacheSnapshot(descriptor);
   if (source_tier != target) {
@@ -621,7 +631,7 @@ void PayloadManager::HydrateCaches() {
   std::unordered_map<std::string, PayloadDescriptor> new_snapshot_cache;
 
   for (const auto& record : records) {
-    auto descriptor = ToPayloadDescriptor(record);
+    auto descriptor = ToPayloadDescriptor(record, shm_prefix_);
     try {
       PopulateLocation(&descriptor);
     } catch (const std::exception&) {
@@ -740,7 +750,7 @@ void PayloadManager::ExecuteSpill(const PayloadID& id, Tier target, bool fsync) 
     }
   }
 
-  auto descriptor = ToPayloadDescriptor(*record);
+  auto descriptor = ToPayloadDescriptor(*record, shm_prefix_);
   PopulateLocation(&descriptor);
   CacheSnapshot(descriptor);
   if (source_tier != target) {

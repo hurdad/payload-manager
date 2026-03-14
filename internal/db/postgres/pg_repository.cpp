@@ -312,7 +312,7 @@ Result PgRepository::AppendStreamEntries(Transaction& t, uint64_t stream_id, std
           "VALUES($1,$2,$3::uuid,"
           "CASE WHEN $4=0 THEN NULL ELSE to_timestamp($4 / 1000.0) END,"
           "CASE WHEN $5=0 THEN now() ELSE to_timestamp($5 / 1000.0) END,"
-          "NULLIF($6,0),NULLIF($7,'')) "
+          "NULLIF($6,0),CASE WHEN $7='' THEN NULL ELSE $7::jsonb END) "
           "RETURNING EXTRACT(EPOCH FROM append_time)::bigint * 1000;",
           e.stream_id, e.offset, e.payload_uuid, e.event_time_ms, e.append_time_ms, e.duration_ns, e.tags);
       e.append_time_ms = insert_res[0][0].as<uint64_t>();

@@ -120,6 +120,7 @@ target_link_libraries(payload_manager_internal
         yaml-cpp::yaml-cpp
         spdlog::spdlog
         Arrow::arrow_shared
+        rt
 )
 
 if(PAYLOAD_MANAGER_ENABLE_OTEL)
