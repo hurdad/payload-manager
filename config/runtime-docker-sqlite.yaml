@@ -1,0 +1,35 @@
+server:
+  bind_address: "0.0.0.0:50051"
+
+database:
+  sqlite:
+    path: "/var/lib/payload-manager/payload-manager.db"
+    wal_mode: true
+
+storage:
+  ram:
+    capacity_bytes: 8589934592  # 8 GiB
+    use_hugepages: false
+    shm_prefix: "pm"  # POSIX shm segments named /pm-<uuid>
+  disk:
+    root_path: "/var/lib/payload-manager/payloads"
+    capacity_bytes: 107374182400  # 100 GiB
+    fsync: true
+
+spill_workers:
+  threads: 4
+  retry_backoff: "1s"
+
+leases:
+  default_lease: "20s"
+  max_lease: "120s"
+
+logging:
+  level: "warn"
+  pattern: "%+"
+  include_trace_context: false
+
+observability:
+  metrics_enabled: false
+  tracing_enabled: false
+  logs_enabled: false

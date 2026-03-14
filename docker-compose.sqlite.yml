@@ -1,0 +1,16 @@
+services:
+  payload-manager:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    command: ["./payload-manager", "--config", "/app/conf/runtime-docker-sqlite.yaml"]
+    ipc: host
+    ports:
+      - "50052:50051"
+    volumes:
+      - ./config/runtime-docker-sqlite.yaml:/app/conf/runtime-docker-sqlite.yaml:ro
+      - payload-sqlite-data:/var/lib/payload-manager
+
+volumes:
+  payload-sqlite-data:
