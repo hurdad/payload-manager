@@ -43,6 +43,10 @@ target_sources(payload_manager_db PRIVATE
         sql/sql_params.hpp
         sql/sql_queries.hpp
         sql/migrations.hpp
+
+        # uuid utilities needed by SQLite repository
+        ../util/uuid.cpp
+        ../util/uuid.hpp
 )
 
 # ============================================================

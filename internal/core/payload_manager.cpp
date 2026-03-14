@@ -82,7 +82,9 @@ void ThrowIfDbError(const payload::db::Result& result, const std::string& contex
 
 db::model::PayloadRecord ToPayloadRecord(const PayloadDescriptor& descriptor) {
   db::model::PayloadRecord record;
-  record.id      = payload::util::ToString(payload::util::FromProto(descriptor.payload_id()));
+  record.id      = descriptor.payload_id().value().size() == 16
+                       ? payload::util::ToString(payload::util::FromProto(descriptor.payload_id()))
+                       : descriptor.payload_id().value();
   record.tier    = descriptor.tier();
   record.state   = descriptor.state();
   record.version = descriptor.version();
@@ -100,7 +102,11 @@ db::model::PayloadRecord ToPayloadRecord(const PayloadDescriptor& descriptor) {
 
 PayloadDescriptor ToPayloadDescriptor(const db::model::PayloadRecord& record) {
   PayloadDescriptor descriptor;
-  *descriptor.mutable_payload_id() = payload::util::ToProto(payload::util::FromString(record.id));
+  try {
+    *descriptor.mutable_payload_id() = payload::util::ToProto(payload::util::FromString(record.id));
+  } catch (...) {
+    descriptor.mutable_payload_id()->set_value(record.id);
+  }
   descriptor.set_tier(record.tier);
   descriptor.set_state(record.state);
   descriptor.set_version(record.version);
@@ -145,7 +151,10 @@ PayloadManager::PayloadManager(payload::storage::StorageFactory::TierMap storage
 }
 
 std::string PayloadManager::Key(const PayloadID& id) {
-  return payload::util::ToString(payload::util::FromProto(id));
+  if (id.value().size() == 16) {
+    return payload::util::ToString(payload::util::FromProto(id));
+  }
+  return id.value();
 }
 
 std::shared_ptr<std::shared_mutex> PayloadManager::PayloadMutex(const PayloadID& id) {
@@ -372,7 +381,11 @@ void PayloadManager::ExpireStale() {
 
   for (const auto& record : expired) {
     PayloadID id;
-    id.set_value(record.id);
+    try {
+      id = payload::util::ToProto(payload::util::FromString(record.id));
+    } catch (...) {
+      id.set_value(record.id);
+    }
     try {
       Delete(id, /*force=*/true);
     } catch (const std::exception&) {
