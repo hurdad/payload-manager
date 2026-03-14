@@ -1,0 +1,23 @@
+services:
+  payload-manager:
+    build:
+      context: .
+      dockerfile: Dockerfile.cuda
+    restart: unless-stopped
+    command: ["./payload-manager", "--config", "/app/conf/runtime-docker-gpu-sqlite.yaml"]
+    ipc: host
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    ports:
+      - "50053:50051"
+    volumes:
+      - ./config/runtime-docker-gpu-sqlite.yaml:/app/conf/runtime-docker-gpu-sqlite.yaml:ro
+      - payload-gpu-sqlite-data:/var/lib/payload-manager
+
+volumes:
+  payload-gpu-sqlite-data:
