@@ -115,7 +115,7 @@ auto ObserveRpc(std::string_view route, const StreamID* stream_id, const Payload
     span.SetAttribute("stream.name", stream_id->name());
   }
   if (payload_id) {
-    span.SetAttribute("payload.id", payload_id->value());
+    span.SetAttribute("payload.id", payload::util::PayloadIdToHex(*payload_id));
   }
 
   const auto started_at = std::chrono::steady_clock::now();
@@ -138,7 +138,7 @@ auto ObserveRpc(std::string_view route, const StreamID* stream_id, const Payload
     PAYLOAD_LOG_ERROR("RPC failed", {payload::observability::StringField("route", route), payload::observability::StringField("error", ex.what()),
                                      stream_id ? payload::observability::StringField("stream", stream_id->namespace_() + "/" + stream_id->name())
                                                : payload::observability::StringField("stream", ""),
-                                     payload_id ? payload::observability::StringField("payload_id", payload_id->value())
+                                     payload_id ? payload::observability::StringField("payload_id", payload::util::PayloadIdToHex(*payload_id))
                                                 : payload::observability::StringField("payload_id", "")});
     payload::observability::Metrics::Instance().RecordRequest(route, false);
     payload::observability::Metrics::Instance().ObserveRequestLatencyMs(

@@ -9,6 +9,7 @@
 #include "internal/observability/logging.hpp"
 #include "internal/observability/spans.hpp"
 #include "internal/util/errors.hpp"
+#include "internal/util/uuid.hpp"
 #include "payload/manager/v1.hpp"
 
 namespace payload::service {
@@ -21,7 +22,7 @@ template <typename Fn>
 auto ObserveRpc(std::string_view route, const PayloadID* payload_id, Fn&& fn) {
   payload::observability::SpanScope span(route);
   if (payload_id) {
-    span.SetAttribute("payload.id", payload_id->value());
+    span.SetAttribute("payload.id", payload::util::PayloadIdToHex(*payload_id));
   }
 
   const auto started_at = std::chrono::steady_clock::now();
@@ -42,7 +43,7 @@ auto ObserveRpc(std::string_view route, const PayloadID* payload_id, Fn&& fn) {
   } catch (const std::exception& ex) {
     span.RecordException(ex.what());
     PAYLOAD_LOG_ERROR("RPC failed", {payload::observability::StringField("route", route), payload::observability::StringField("error", ex.what()),
-                                     payload_id ? payload::observability::StringField("payload_id", payload_id->value())
+                                     payload_id ? payload::observability::StringField("payload_id", payload::util::PayloadIdToHex(*payload_id))
                                                 : payload::observability::StringField("payload_id", "")});
     payload::observability::Metrics::Instance().RecordRequest(route, false);
     payload::observability::Metrics::Instance().ObserveRequestLatencyMs(

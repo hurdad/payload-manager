@@ -73,4 +73,11 @@ UUID FromProto(const payload::manager::v1::LeaseID& p) {
   return id;
 }
 
+std::string PayloadIdToHex(const payload::manager::v1::PayloadID& id) {
+  if (id.value().size() == 16) {
+    return ToString(FromProto(id));
+  }
+  return id.value();
+}
+
 } // namespace payload::util
