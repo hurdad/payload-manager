@@ -176,8 +176,7 @@ class MutableCudaIpcBuffer final : public arrow::MutableBuffer {
   explicit MutableCudaIpcBuffer(std::shared_ptr<arrow::cuda::CudaBuffer> buffer)
       // Use address() rather than mutable_data(): CudaBuffer::mutable_data() returns
       // nullptr because is_cpu_ is false, but address() always returns the raw pointer.
-      : arrow::MutableBuffer(reinterpret_cast<uint8_t*>(buffer->address()), buffer->size()),
-        buffer_(std::move(buffer)) {
+      : arrow::MutableBuffer(reinterpret_cast<uint8_t*>(buffer->address()), buffer->size()), buffer_(std::move(buffer)) {
   }
 
  private:

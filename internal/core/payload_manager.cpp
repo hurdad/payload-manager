@@ -383,7 +383,10 @@ PayloadDescriptor PayloadManager::Allocate(uint64_t size_bytes, Tier preferred, 
   } catch (...) {
     // Roll back the storage allocation so bytes are not orphaned.
     if (storage_it != storage_.end() && storage_it->second) {
-      try { storage_it->second->Remove(desc.payload_id()); } catch (...) {}
+      try {
+        storage_it->second->Remove(desc.payload_id());
+      } catch (...) {
+      }
     }
     throw;
   }
@@ -426,8 +429,7 @@ void PayloadManager::ExpireStale() {
     try {
       Delete(id, /*force=*/true);
     } catch (const std::exception& e) {
-      PAYLOAD_LOG_WARN("expire stale: failed to delete expired payload (best effort)",
-                       "error", std::string(e.what()));
+      PAYLOAD_LOG_WARN("expire stale: failed to delete expired payload (best effort)", "error", std::string(e.what()));
     }
   }
 }

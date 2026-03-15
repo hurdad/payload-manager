@@ -1,4 +1,4 @@
-#include <cuda.h>   // CUDA driver API — same context layer Arrow CUDA uses internally
+#include <cuda.h> // CUDA driver API — same context layer Arrow CUDA uses internally
 
 #include <cstdint>
 #include <iostream>
@@ -40,12 +40,25 @@ int main(int argc, char** argv) {
   // context here so that cuMemcpy* calls below share the correct context.
   // This must happen before AllocateWritableBuffer() so the context is active
   // for the full lifetime of the opened IPC buffers.
-  if (!CuCheck(cuInit(0), "cuInit")) { OtelShutdown(); return 1; }
+  if (!CuCheck(cuInit(0), "cuInit")) {
+    OtelShutdown();
+    return 1;
+  }
   CUdevice cu_device{};
-  if (!CuCheck(cuDeviceGet(&cu_device, 0), "cuDeviceGet")) { OtelShutdown(); return 1; }
+  if (!CuCheck(cuDeviceGet(&cu_device, 0), "cuDeviceGet")) {
+    OtelShutdown();
+    return 1;
+  }
   CUcontext cu_ctx{};
-  if (!CuCheck(cuDevicePrimaryCtxRetain(&cu_ctx, cu_device), "cuDevicePrimaryCtxRetain")) { OtelShutdown(); return 1; }
-  if (!CuCheck(cuCtxSetCurrent(cu_ctx), "cuCtxSetCurrent")) { cuDevicePrimaryCtxRelease(cu_device); OtelShutdown(); return 1; }
+  if (!CuCheck(cuDevicePrimaryCtxRetain(&cu_ctx, cu_device), "cuDevicePrimaryCtxRetain")) {
+    OtelShutdown();
+    return 1;
+  }
+  if (!CuCheck(cuCtxSetCurrent(cu_ctx), "cuCtxSetCurrent")) {
+    cuDevicePrimaryCtxRelease(cu_device);
+    OtelShutdown();
+    return 1;
+  }
 
   // --- Allocate a payload on the GPU tier ---
   // The client opens the CUDA IPC handle via Arrow's driver-API context and
@@ -99,7 +112,7 @@ int main(int argc, char** argv) {
   // --- Copy GPU device memory → host for verification ---
   std::vector<uint8_t> host_dst(kSize);
   // buffer->data() returns nullptr for GPU buffers (is_cpu_=false); use address() instead.
-  const auto           dev_read = static_cast<CUdeviceptr>(rp.buffer->address());
+  const auto dev_read = static_cast<CUdeviceptr>(rp.buffer->address());
   if (!CuCheck(cuMemcpyDtoH(host_dst.data(), dev_read, kSize), "cuMemcpyDtoH")) {
     client.Release(rp.lease_id);
     cuDevicePrimaryCtxRelease(cu_device);
@@ -113,8 +126,7 @@ int main(int argc, char** argv) {
   for (uint64_t i = 0; i < kSize; ++i) {
     const uint8_t expected = static_cast<uint8_t>(i & 0xFFu);
     if (host_dst[i] != expected) {
-      std::cerr << "mismatch at byte " << i << ": expected " << static_cast<int>(expected)
-                << " got " << static_cast<int>(host_dst[i]) << '\n';
+      std::cerr << "mismatch at byte " << i << ": expected " << static_cast<int>(expected) << " got " << static_cast<int>(host_dst[i]) << '\n';
       ++mismatches;
     }
   }
