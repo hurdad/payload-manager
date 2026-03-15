@@ -49,6 +49,10 @@ static std::string ColUuid(sqlite3_stmt* st, int col) {
   return t ? reinterpret_cast<const char*>(t) : "";
 }
 
+// SQLite stores all integers as int64. Values above INT64_MAX are stored as
+// negative int64_t but round-trip correctly via ColU64's matching cast.
+// All current callers (timestamps in ms, sizes ≤ 128 GiB, stream offsets)
+// are well below INT64_MAX, so overflow is not a practical concern today.
 static void BindU64(sqlite3_stmt* st, int idx, uint64_t v) {
   sqlite3_bind_int64(st, idx, static_cast<sqlite3_int64>(v));
 }

@@ -1,26 +1,12 @@
 #include <cstdint>
-#include <iomanip>
 #include <iostream>
-#include <sstream>
 #include <string>
 
 #include "client/cpp/payload_manager_client.h"
+#include "example_util.hpp"
 #include "otel_tracer.hpp"
 #include "payload/manager/v1.hpp"
 #include "traced_channel.hpp"
-
-namespace {
-
-std::string UuidToHex(const std::string& uuid_bytes) {
-  std::ostringstream os;
-  for (size_t i = 0; i < uuid_bytes.size(); ++i) {
-    if (i == 4 || i == 6 || i == 8 || i == 10) os << '-';
-    os << std::hex << std::setw(2) << std::setfill('0') << static_cast<int>(static_cast<unsigned char>(uuid_bytes[i]));
-  }
-  return os.str();
-}
-
-} // namespace
 
 int main(int argc, char** argv) {
   // argv[1]: server endpoint    (default localhost:50051)
@@ -56,7 +42,7 @@ int main(int argc, char** argv) {
     return 1;
   }
 
-  std::cout << UuidToHex(payload_id.value()) << '\n';
+  std::cout << payload::examples::UuidToHex(payload_id.value()) << '\n';
 
   OtelEndSpan();
   OtelShutdown();

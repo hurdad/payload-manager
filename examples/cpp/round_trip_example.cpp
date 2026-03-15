@@ -1,31 +1,15 @@
 #include <algorithm>
 #include <cstdint>
 #include <cstring>
-#include <iomanip>
 #include <iostream>
 #include <memory>
-#include <sstream>
 #include <string>
 
 #include "client/cpp/payload_manager_client.h"
+#include "example_util.hpp"
 #include "otel_tracer.hpp"
 #include "payload/manager/v1.hpp"
 #include "traced_channel.hpp"
-
-namespace {
-
-std::string UuidToHex(const std::string& uuid_bytes) {
-  std::ostringstream os;
-  for (size_t i = 0; i < uuid_bytes.size(); ++i) {
-    if (i == 4 || i == 6 || i == 8 || i == 10) {
-      os << '-';
-    }
-    os << std::hex << std::setw(2) << std::setfill('0') << static_cast<int>(static_cast<unsigned char>(uuid_bytes[i]));
-  }
-  return os.str();
-}
-
-} // namespace
 
 int main(int argc, char** argv) {
   // argv[1]: server endpoint  (default localhost:50051)
@@ -43,6 +27,8 @@ int main(int argc, char** argv) {
   auto               writable     = client.AllocateWritableBuffer(kPayloadSize, payload::manager::v1::TIER_RAM);
   if (!writable.ok()) {
     std::cerr << "AllocateWritableBuffer failed: " << writable.status().ToString() << '\n';
+    OtelEndSpan();
+    OtelShutdown();
     return 1;
   }
 
@@ -52,10 +38,12 @@ int main(int argc, char** argv) {
   }
 
   const auto& payload_id    = writable_payload.descriptor.payload_id();
-  const auto  uuid_text     = UuidToHex(payload_id.value());
+  const auto  uuid_text     = payload::examples::UuidToHex(payload_id.value());
   auto        commit_status = client.CommitPayload(payload_id);
   if (!commit_status.ok()) {
     std::cerr << "CommitPayload failed: " << commit_status.ToString() << '\n';
+    OtelEndSpan();
+    OtelShutdown();
     return 1;
   }
 
@@ -63,6 +51,8 @@ int main(int argc, char** argv) {
   auto readable = client.AcquireReadableBuffer(payload_id);
   if (!readable.ok()) {
     std::cerr << "AcquireReadableBuffer failed: " << readable.status().ToString() << '\n';
+    OtelEndSpan();
+    OtelShutdown();
     return 1;
   }
 
@@ -80,6 +70,8 @@ int main(int argc, char** argv) {
   auto release_status = client.Release(readable_payload.lease_id);
   if (!release_status.ok()) {
     std::cerr << "Release failed: " << release_status.ToString() << '\n';
+    OtelEndSpan();
+    OtelShutdown();
     return 1;
   }
 

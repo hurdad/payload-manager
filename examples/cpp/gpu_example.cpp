@@ -1,27 +1,17 @@
 #include <cuda.h>   // CUDA driver API — same context layer Arrow CUDA uses internally
 
 #include <cstdint>
-#include <iomanip>
 #include <iostream>
-#include <sstream>
 #include <string>
 #include <vector>
 
 #include "client/cpp/payload_manager_client.h"
+#include "example_util.hpp"
 #include "otel_tracer.hpp"
 #include "payload/manager/v1.hpp"
 #include "traced_channel.hpp"
 
 namespace {
-
-std::string UuidToHex(const std::string& uuid_bytes) {
-  std::ostringstream os;
-  for (size_t i = 0; i < uuid_bytes.size(); ++i) {
-    if (i == 4 || i == 6 || i == 8 || i == 10) os << '-';
-    os << std::hex << std::setw(2) << std::setfill('0') << static_cast<int>(static_cast<unsigned char>(uuid_bytes[i]));
-  }
-  return os.str();
-}
 
 bool CuCheck(CUresult result, const char* op) {
   if (result == CUDA_SUCCESS) return true;
@@ -55,7 +45,7 @@ int main(int argc, char** argv) {
   if (!CuCheck(cuDeviceGet(&cu_device, 0), "cuDeviceGet")) { OtelShutdown(); return 1; }
   CUcontext cu_ctx{};
   if (!CuCheck(cuDevicePrimaryCtxRetain(&cu_ctx, cu_device), "cuDevicePrimaryCtxRetain")) { OtelShutdown(); return 1; }
-  if (!CuCheck(cuCtxSetCurrent(cu_ctx), "cuCtxSetCurrent")) { OtelShutdown(); return 1; }
+  if (!CuCheck(cuCtxSetCurrent(cu_ctx), "cuCtxSetCurrent")) { cuDevicePrimaryCtxRelease(cu_device); OtelShutdown(); return 1; }
 
   // --- Allocate a payload on the GPU tier ---
   // The client opens the CUDA IPC handle via Arrow's driver-API context and
@@ -63,6 +53,7 @@ int main(int argc, char** argv) {
   auto writable = client.AllocateWritableBuffer(kSize, payload::manager::v1::TIER_GPU);
   if (!writable.ok()) {
     std::cerr << "AllocateWritableBuffer(GPU) failed: " << writable.status().ToString() << '\n';
+    cuDevicePrimaryCtxRelease(cu_device);
     OtelShutdown();
     return 1;
   }
@@ -79,16 +70,18 @@ int main(int argc, char** argv) {
 
   const auto dev_write = reinterpret_cast<CUdeviceptr>(wp.buffer->mutable_data());
   if (!CuCheck(cuMemcpyHtoD(dev_write, host_src.data(), kSize), "cuMemcpyHtoD")) {
+    cuDevicePrimaryCtxRelease(cu_device);
     OtelShutdown();
     return 1;
   }
 
   // --- Commit so the payload is visible to readers ---
   const auto& payload_id    = wp.descriptor.payload_id();
-  const auto  uuid_text     = UuidToHex(payload_id.value());
+  const auto  uuid_text     = payload::examples::UuidToHex(payload_id.value());
   auto        commit_status = client.CommitPayload(payload_id);
   if (!commit_status.ok()) {
     std::cerr << "CommitPayload failed: " << commit_status.ToString() << '\n';
+    cuDevicePrimaryCtxRelease(cu_device);
     OtelShutdown();
     return 1;
   }
@@ -97,6 +90,7 @@ int main(int argc, char** argv) {
   auto readable = client.AcquireReadableBuffer(payload_id);
   if (!readable.ok()) {
     std::cerr << "AcquireReadableBuffer failed: " << readable.status().ToString() << '\n';
+    cuDevicePrimaryCtxRelease(cu_device);
     OtelShutdown();
     return 1;
   }
@@ -108,6 +102,7 @@ int main(int argc, char** argv) {
   const auto           dev_read = static_cast<CUdeviceptr>(rp.buffer->address());
   if (!CuCheck(cuMemcpyDtoH(host_dst.data(), dev_read, kSize), "cuMemcpyDtoH")) {
     client.Release(rp.lease_id);
+    cuDevicePrimaryCtxRelease(cu_device);
     OtelShutdown();
     return 1;
   }
@@ -134,11 +129,13 @@ int main(int argc, char** argv) {
   auto release_status = client.Release(rp.lease_id);
   if (!release_status.ok()) {
     std::cerr << "Release failed: " << release_status.ToString() << '\n';
+    cuDevicePrimaryCtxRelease(cu_device);
     OtelShutdown();
     return 1;
   }
 
   OtelEndSpan();
+  cuDevicePrimaryCtxRelease(cu_device);
   OtelShutdown();
   return mismatches == 0 ? 0 : 1;
 }

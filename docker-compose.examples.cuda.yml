@@ -15,6 +15,9 @@ services:
       payload-manager:
         condition: service_healthy
     ipc: host
+    # Required for cross-container CUDA IPC: cuIpcOpenMemHandle resolves the
+    # exporting process's PID via procfs; without a shared PID namespace the
+    # driver returns CUDA_ERROR_INVALID_CONTEXT even when ipc: host is set.
     pid: host
     deploy:
       resources:

@@ -376,9 +376,17 @@ PayloadDescriptor PayloadManager::Allocate(uint64_t size_bytes, Tier preferred, 
     record.expires_at_ms = now_ms + ttl_ms;
   }
 
-  auto tx = repository_->Begin();
-  ThrowIfDbError(repository_->InsertPayload(*tx, record), "allocate payload");
-  tx->Commit();
+  try {
+    auto tx = repository_->Begin();
+    ThrowIfDbError(repository_->InsertPayload(*tx, record), "allocate payload");
+    tx->Commit();
+  } catch (...) {
+    // Roll back the storage allocation so bytes are not orphaned.
+    if (storage_it != storage_.end() && storage_it->second) {
+      try { storage_it->second->Remove(desc.payload_id()); } catch (...) {}
+    }
+    throw;
+  }
 
   const auto key = Key(desc.payload_id());
   if (never_evict) {
@@ -417,8 +425,9 @@ void PayloadManager::ExpireStale() {
     }
     try {
       Delete(id, /*force=*/true);
-    } catch (const std::exception&) {
-      // Best effort; move on to next expired payload.
+    } catch (const std::exception& e) {
+      PAYLOAD_LOG_WARN("expire stale: failed to delete expired payload (best effort)",
+                       "error", std::string(e.what()));
     }
   }
 }
