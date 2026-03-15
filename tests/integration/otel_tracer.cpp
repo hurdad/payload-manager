@@ -2,6 +2,8 @@
 // No client / protobuf / gRPC service headers may be included in this TU.
 #include "otel_tracer.hpp"
 
+#ifdef ENABLE_OTEL
+
 #include <opentelemetry/context/propagation/global_propagator.h>
 #include <opentelemetry/exporters/otlp/otlp_grpc_exporter_factory.h>
 #include <opentelemetry/exporters/otlp/otlp_grpc_exporter_options.h>
@@ -108,3 +110,12 @@ void OtelEndSpan() {
   g_span->End();
   g_span = nullptr;
 }
+
+#else // !ENABLE_OTEL — stub implementations when OTel is disabled
+
+void OtelInit(const std::string&, const std::string&) {}
+void OtelShutdown() {}
+OtelSpanContext OtelStartSpan(const std::string&) { return {}; }
+void OtelEndSpan() {}
+
+#endif // ENABLE_OTEL

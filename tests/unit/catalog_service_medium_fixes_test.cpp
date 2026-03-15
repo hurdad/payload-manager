@@ -247,14 +247,14 @@ void TestListPayloadsTierFilter() {
   // List all — expect 2 payloads.
   payload::manager::v1::ListPayloadsRequest list_all;
   const auto                               all = f.service.ListPayloads(list_all);
-  assert(all.payload_descriptors_size() == 2 && "expected 2 payloads total");
+  assert(all.payloads_size() == 2 && "expected 2 payloads total");
 
   // List with tier_filter=TIER_RAM — expect 1 payload (the RAM one).
   payload::manager::v1::ListPayloadsRequest list_ram;
   list_ram.set_tier_filter(TIER_RAM);
   const auto ram_only = f.service.ListPayloads(list_ram);
-  assert(ram_only.payload_descriptors_size() == 1 && "expected 1 RAM payload");
-  assert(ram_only.payload_descriptors(0).payload_id().value() ==
+  assert(ram_only.payloads_size() == 1 && "expected 1 RAM payload");
+  assert(ram_only.payloads(0).id().value() ==
              ram_resp.payload_descriptor().payload_id().value() &&
          "wrong payload returned for RAM filter");
 
@@ -262,8 +262,8 @@ void TestListPayloadsTierFilter() {
   payload::manager::v1::ListPayloadsRequest list_disk;
   list_disk.set_tier_filter(TIER_DISK);
   const auto disk_only = f.service.ListPayloads(list_disk);
-  assert(disk_only.payload_descriptors_size() == 1 && "expected 1 DISK payload");
-  assert(disk_only.payload_descriptors(0).payload_id().value() ==
+  assert(disk_only.payloads_size() == 1 && "expected 1 DISK payload");
+  assert(disk_only.payloads(0).id().value() ==
              disk_resp.payload_descriptor().payload_id().value() &&
          "wrong payload returned for DISK filter");
 }
