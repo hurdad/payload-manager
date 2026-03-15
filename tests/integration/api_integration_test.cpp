@@ -4,6 +4,11 @@
 
   Set PAYLOAD_MANAGER_ENDPOINT to override the default "localhost:50051".
 
+  Each test function creates a fresh W3C traceparent (random trace-id + span-id)
+  and injects it into every outgoing gRPC call via a channel interceptor.
+  The server extracts the context and records child spans, so all RPCs within
+  one test appear together in Tempo under a single trace.
+
   Covered:
     1. RAM round-trip     – allocate, write via shm, commit, read via shm, verify bytes, delete
     2. Spill + promote    – RAM → disk → RAM, data survives both transitions
@@ -15,17 +20,23 @@
                            get committed, get range, cascade delete
 */
 
+#include <grpcpp/channel.h>
 #include <grpcpp/client_context.h>
 #include <grpcpp/create_channel.h>
 #include <grpcpp/security/credentials.h>
+#include <grpcpp/support/channel_arguments.h>
+#include <grpcpp/support/interceptor.h>
 
 #include <algorithm>
 #include <cassert>
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
+#include <iomanip>
 #include <iostream>
 #include <memory>
+#include <random>
+#include <sstream>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -35,6 +46,81 @@
 
 using namespace payload::manager::v1;
 using payload::manager::client::PayloadClient;
+
+// ---------------------------------------------------------------------------
+// W3C traceparent propagation — no OTel SDK required
+// ---------------------------------------------------------------------------
+//
+// Format: 00-<32 hex trace-id>-<16 hex parent-id>-01
+//
+// The server's OtelServerInterceptor calls GlobalTextMapPropagator::Extract()
+// on POST_RECV_INITIAL_METADATA, picks up the traceparent key, and attaches
+// the extracted context so every server-side span becomes a child of our
+// test span.
+
+namespace {
+
+std::string RandomHex(std::mt19937_64& rng, int bytes) {
+  std::ostringstream ss;
+  ss << std::hex << std::setfill('0');
+  for (int i = 0; i < bytes / 8; ++i) {
+    ss << std::setw(16) << rng();
+  }
+  // leftover bytes (for odd sizes)
+  for (int i = 0; i < bytes % 8; ++i) {
+    ss << std::setw(2) << (rng() & 0xFF);
+  }
+  return ss.str();
+}
+
+std::string MakeTraceparent(std::mt19937_64& rng) {
+  // 00-<16 bytes trace-id>-<8 bytes parent-id>-01
+  return "00-" + RandomHex(rng, 16) + "-" + RandomHex(rng, 8) + "-01";
+}
+
+// gRPC client interceptor: injects a fixed traceparent into every RPC.
+class TraceInjectInterceptor : public grpc::experimental::Interceptor {
+ public:
+  explicit TraceInjectInterceptor(std::string traceparent)
+      : traceparent_(std::move(traceparent)) {}
+
+  void Intercept(grpc::experimental::InterceptorBatchMethods* methods) override {
+    if (methods->QueryInterceptionHookPoint(
+            grpc::experimental::InterceptionHookPoints::PRE_SEND_INITIAL_METADATA)) {
+      methods->GetSendInitialMetadata()->emplace("traceparent", traceparent_);
+    }
+    methods->Proceed();
+  }
+
+ private:
+  std::string traceparent_;
+};
+
+class TraceInjectFactory : public grpc::experimental::ClientInterceptorFactoryInterface {
+ public:
+  explicit TraceInjectFactory(std::string traceparent)
+      : traceparent_(std::move(traceparent)) {}
+
+  grpc::experimental::Interceptor* CreateClientInterceptor(
+      grpc::experimental::ClientRpcInfo* /*info*/) override {
+    return new TraceInjectInterceptor(traceparent_);
+  }
+
+ private:
+  std::string traceparent_;
+};
+
+// Build a channel that injects the given traceparent into every RPC.
+std::shared_ptr<grpc::Channel> MakeTracedChannel(const std::string& endpoint,
+                                                  const std::string& traceparent) {
+  grpc::ChannelArguments args;
+  std::vector<std::unique_ptr<grpc::experimental::ClientInterceptorFactoryInterface>> factories;
+  factories.push_back(std::make_unique<TraceInjectFactory>(traceparent));
+  return grpc::experimental::CreateCustomChannelWithInterceptors(
+      endpoint, grpc::InsecureChannelCredentials(), args, std::move(factories));
+}
+
+} // namespace
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -69,8 +155,8 @@ namespace {
     }                                                                                                              \
   } while (0)
 
-void log(const char* test) {
-  std::cout << "  [run] " << test << '\n';
+void log(const char* test, const std::string& traceparent) {
+  std::cout << "  [run] " << test << "  trace=" << traceparent << '\n';
 }
 
 // Allocate, write a fill pattern, commit; returns the descriptor.
@@ -101,11 +187,12 @@ StreamID MakeStreamId(const std::string& name) {
 }
 
 // ---------------------------------------------------------------------------
-// Test cases
+// Test cases — each receives a fresh per-test PayloadClient whose channel
+// injects a unique traceparent so server spans are grouped per test in Tempo.
 // ---------------------------------------------------------------------------
 
-void TestRamRoundTrip(const PayloadClient& client) {
-  log("RAM round-trip: allocate → write → commit → read → verify → delete");
+void TestRamRoundTrip(const PayloadClient& client, const std::string& tp) {
+  log("RAM round-trip: allocate → write → commit → read → verify → delete", tp);
 
   constexpr uint64_t kSize = 256;
   constexpr uint8_t  kFill = 0xAB;
@@ -124,8 +211,8 @@ void TestRamRoundTrip(const PayloadClient& client) {
   DeletePayload(client, desc.payload_id());
 }
 
-void TestSpillAndPromote(const PayloadClient& client) {
-  log("Spill + Promote: RAM → disk → RAM, data survives");
+void TestSpillAndPromote(const PayloadClient& client, const std::string& tp) {
+  log("Spill + Promote: RAM → disk → RAM, data survives", tp);
 
   constexpr uint64_t kSize = 128;
   constexpr uint8_t  kFill = 0x7E;
@@ -133,7 +220,6 @@ void TestSpillAndPromote(const PayloadClient& client) {
   auto        desc = AllocateAndCommit(client, kSize, kFill);
   const auto& id   = desc.payload_id();
 
-  // Spill to disk
   SpillRequest spill_req;
   *spill_req.add_ids() = id;
   spill_req.set_fsync(false);
@@ -145,7 +231,6 @@ void TestSpillAndPromote(const PayloadClient& client) {
   }
   ASSERT_TRUE(spill_resp->results(0).ok());
 
-  // Promote back to RAM (explicit)
   PromoteRequest prom_req;
   *prom_req.mutable_id() = id;
   prom_req.set_target_tier(TIER_RAM);
@@ -153,7 +238,6 @@ void TestSpillAndPromote(const PayloadClient& client) {
   ASSERT_OK(prom_resp.status());
   ASSERT_EQ(prom_resp->payload_descriptor().tier(), TIER_RAM);
 
-  // Verify data survived the round-trip through disk
   auto rd = client.AcquireReadableBuffer(id);
   ASSERT_OK(rd.status());
   auto rp = rd.ValueOrDie();
@@ -166,27 +250,24 @@ void TestSpillAndPromote(const PayloadClient& client) {
   DeletePayload(client, id);
 }
 
-void TestPinBlocksSpill(const PayloadClient& client) {
-  log("Pin/Unpin: pinned payload resists spill; spill succeeds after unpin");
+void TestPinBlocksSpill(const PayloadClient& client, const std::string& tp) {
+  log("Pin/Unpin: pinned payload resists spill; spill succeeds after unpin", tp);
 
   auto        desc = AllocateAndCommit(client, 64, 0x11);
   const auto& id   = desc.payload_id();
 
-  // Pin
   PinRequest pin_req;
   *pin_req.mutable_id() = id;
   ASSERT_OK(client.Pin(pin_req));
 
-  // Spill should fail or be skipped for a pinned payload
   SpillRequest spill_req;
   *spill_req.add_ids() = id;
   spill_req.set_fsync(false);
   auto spill_resp = client.Spill(spill_req);
   ASSERT_OK(spill_resp.status());
   ASSERT_EQ(spill_resp->results_size(), 1);
-  ASSERT_TRUE(!spill_resp->results(0).ok()); // must be blocked
+  ASSERT_TRUE(!spill_resp->results(0).ok());
 
-  // Unpin, then spill should succeed
   UnpinRequest unpin_req;
   *unpin_req.mutable_id() = id;
   ASSERT_OK(client.Unpin(unpin_req));
@@ -202,13 +283,12 @@ void TestPinBlocksSpill(const PayloadClient& client) {
   DeletePayload(client, id);
 }
 
-void TestMetadata(const PayloadClient& client) {
-  log("Metadata: upsert, replace, append event");
+void TestMetadata(const PayloadClient& client, const std::string& tp) {
+  log("Metadata: upsert, replace, append event", tp);
 
   auto        desc = AllocateAndCommit(client, 32, 0x00);
   const auto& id   = desc.payload_id();
 
-  // Initial upsert
   UpdatePayloadMetadataRequest upsert_req;
   *upsert_req.mutable_id() = id;
   upsert_req.mutable_metadata()->set_data(R"({"stage":"raw"})");
@@ -218,7 +298,6 @@ void TestMetadata(const PayloadClient& client) {
   ASSERT_OK(upsert_resp.status());
   ASSERT_EQ(upsert_resp->metadata().data(), R"({"stage":"raw"})");
 
-  // Replace
   UpdatePayloadMetadataRequest replace_req;
   *replace_req.mutable_id() = id;
   replace_req.mutable_metadata()->set_data(R"({"stage":"processed","version":2})");
@@ -228,7 +307,6 @@ void TestMetadata(const PayloadClient& client) {
   ASSERT_OK(replace_resp.status());
   ASSERT_EQ(replace_resp->metadata().schema(), "v2");
 
-  // Append an immutable event
   AppendPayloadMetadataEventRequest event_req;
   *event_req.mutable_id() = id;
   event_req.mutable_metadata()->set_data(R"({"action":"validated"})");
@@ -240,8 +318,8 @@ void TestMetadata(const PayloadClient& client) {
   DeletePayload(client, id);
 }
 
-void TestLineage(const PayloadClient& client) {
-  log("Lineage: two payloads → add edge → traverse graph");
+void TestLineage(const PayloadClient& client, const std::string& tp) {
+  log("Lineage: two payloads → add edge → traverse graph", tp);
 
   auto        parent_desc = AllocateAndCommit(client, 32, 0x01);
   auto        child_desc  = AllocateAndCommit(client, 32, 0x02);
@@ -256,7 +334,6 @@ void TestLineage(const PayloadClient& client) {
   edge->set_role("source");
   ASSERT_OK(client.AddLineage(add_req));
 
-  // Query upstream lineage from the child — should return the parent edge
   GetLineageRequest get_req;
   *get_req.mutable_id() = child_id;
   get_req.set_upstream(true);
@@ -267,9 +344,7 @@ void TestLineage(const PayloadClient& client) {
 
   bool found = false;
   for (const auto& e : get_resp->edges()) {
-    if (e.operation() == "transform") {
-      found = true;
-    }
+    if (e.operation() == "transform") found = true;
   }
   ASSERT_TRUE(found);
 
@@ -277,8 +352,8 @@ void TestLineage(const PayloadClient& client) {
   DeletePayload(client, parent_id);
 }
 
-void TestStats(const PayloadClient& client) {
-  log("Stats: RAM payload count tracks allocate/delete");
+void TestStats(const PayloadClient& client, const std::string& tp) {
+  log("Stats: RAM payload count tracks allocate/delete", tp);
 
   auto before = client.Stats(StatsRequest{});
   ASSERT_OK(before.status());
@@ -288,40 +363,34 @@ void TestStats(const PayloadClient& client) {
 
   auto during = client.Stats(StatsRequest{});
   ASSERT_OK(during.status());
-  uint64_t ram_during = during->payloads_ram();
-  ASSERT_TRUE(ram_during > ram_before);
+  ASSERT_TRUE(during->payloads_ram() > ram_before);
 
   DeletePayload(client, desc.payload_id());
 
   auto after = client.Stats(StatsRequest{});
   ASSERT_OK(after.status());
-  uint64_t ram_after = after->payloads_ram();
-  ASSERT_EQ(ram_after, ram_before);
+  ASSERT_EQ(after->payloads_ram(), ram_before);
 }
 
-void TestStream(const PayloadClient& client) {
-  log("Stream: create → append → read → subscribe → commit → get committed → range → delete cascade");
+void TestStream(const PayloadClient& client, const std::string& tp) {
+  log("Stream: create → append → read → subscribe → commit → get committed → range → delete cascade", tp);
 
   const auto stream = MakeStreamId("api-integration-stream");
 
-  // Ensure clean start
   {
     DeleteStreamRequest pre_del;
     *pre_del.mutable_stream() = stream;
-    client.DeleteStream(pre_del); // ignore error
+    (void)client.DeleteStream(pre_del);
   }
 
-  // Create
   CreateStreamRequest create_req;
   *create_req.mutable_stream() = stream;
   create_req.set_retention_max_entries(1000);
   ASSERT_OK(client.CreateStream(create_req));
 
-  // Allocate two payloads to reference from stream entries
   auto p0 = AllocateAndCommit(client, 8, 0xA0);
   auto p1 = AllocateAndCommit(client, 8, 0xB0);
 
-  // Append two entries
   AppendRequest append_req;
   *append_req.mutable_stream() = stream;
   {
@@ -342,7 +411,6 @@ void TestStream(const PayloadClient& client) {
   int64_t last_offset  = static_cast<int64_t>(append_resp->last_offset());
   ASSERT_EQ(last_offset - first_offset, 1);
 
-  // Read all entries
   ReadRequest read_req;
   *read_req.mutable_stream() = stream;
   read_req.set_start_offset(first_offset);
@@ -352,7 +420,6 @@ void TestStream(const PayloadClient& client) {
   ASSERT_EQ(read_resp->entries_size(), 2);
   ASSERT_EQ(read_resp->entries(0).offset(), first_offset);
 
-  // Subscribe — read one entry then cancel
   grpc::ClientContext sub_ctx;
   SubscribeRequest    sub_req;
   *sub_req.mutable_stream() = stream;
@@ -360,21 +427,18 @@ void TestStream(const PayloadClient& client) {
   sub_req.set_max_inflight(1);
   auto              reader = client.Subscribe(sub_req, &sub_ctx);
   SubscribeResponse sub_resp;
-  bool              got = reader->Read(&sub_resp);
-  ASSERT_TRUE(got);
+  ASSERT_TRUE(reader->Read(&sub_resp));
   ASSERT_EQ(sub_resp.entry().offset(), first_offset);
   sub_ctx.TryCancel();
   auto sub_status = reader->Finish();
   ASSERT_TRUE(sub_status.ok() || sub_status.error_code() == grpc::StatusCode::CANCELLED);
 
-  // Commit consumer offset
   CommitRequest commit_req;
   *commit_req.mutable_stream() = stream;
   commit_req.set_consumer_group("test-group");
   commit_req.set_offset(last_offset);
   ASSERT_OK(client.Commit(commit_req));
 
-  // Get committed
   GetCommittedRequest gc_req;
   *gc_req.mutable_stream() = stream;
   gc_req.set_consumer_group("test-group");
@@ -382,7 +446,6 @@ void TestStream(const PayloadClient& client) {
   ASSERT_OK(gc_resp.status());
   ASSERT_EQ(gc_resp->offset(), last_offset);
 
-  // GetRange
   GetRangeRequest range_req;
   *range_req.mutable_stream() = stream;
   range_req.set_start_offset(first_offset);
@@ -391,17 +454,19 @@ void TestStream(const PayloadClient& client) {
   ASSERT_OK(range_resp.status());
   ASSERT_EQ(range_resp->entries_size(), 2);
 
-  // Delete stream — entries and consumer offsets must cascade
   DeleteStreamRequest del_req;
   *del_req.mutable_stream() = stream;
   ASSERT_OK(client.DeleteStream(del_req));
 
-  // Payloads survive stream deletion
   DeletePayload(client, p0.payload_id());
   DeletePayload(client, p1.payload_id());
 }
 
 } // namespace
+
+// ---------------------------------------------------------------------------
+// Main
+// ---------------------------------------------------------------------------
 
 int main(int argc, char** argv) {
   const char*       env_endpoint = std::getenv("PAYLOAD_MANAGER_ENDPOINT");
@@ -413,15 +478,23 @@ int main(int argc, char** argv) {
 
   std::cout << "api_integration_test: connecting to " << endpoint << '\n';
 
-  PayloadClient client(grpc::CreateChannel(endpoint, grpc::InsecureChannelCredentials()));
+  std::mt19937_64 rng(std::random_device{}());
 
-  TestRamRoundTrip(client);
-  TestSpillAndPromote(client);
-  TestPinBlocksSpill(client);
-  TestMetadata(client);
-  TestLineage(client);
-  TestStats(client);
-  TestStream(client);
+  // Each test gets its own channel (and thus its own traceparent injected into
+  // every RPC) so the server spans for each test form a distinct trace in Tempo.
+  auto run = [&](const char* name, auto fn) {
+    std::string tp = MakeTraceparent(rng);
+    PayloadClient client(MakeTracedChannel(endpoint, tp));
+    fn(client, tp);
+  };
+
+  run("TestRamRoundTrip",    TestRamRoundTrip);
+  run("TestSpillAndPromote", TestSpillAndPromote);
+  run("TestPinBlocksSpill",  TestPinBlocksSpill);
+  run("TestMetadata",        TestMetadata);
+  run("TestLineage",         TestLineage);
+  run("TestStats",           TestStats);
+  run("TestStream",          TestStream);
 
   std::cout << "api_integration_test: pass\n";
   return 0;
