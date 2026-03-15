@@ -22,7 +22,7 @@ Result PgRepository::Translate(const std::exception& e) {
 Result PgRepository::InsertPayload(Transaction& t, const model::PayloadRecord& r) {
   try {
     TX(t).Work().exec_prepared("insert_payload", r.id, (int)r.tier, (int)r.state, r.size_bytes, r.version, r.expires_at_ms, (int)r.persist,
-                               r.eviction_priority, r.spill_target);
+                               r.eviction_priority, r.spill_target, r.created_at_ms);
     return Result::Ok();
   } catch (const std::exception& e) {
     return Translate(e);
@@ -44,15 +44,24 @@ std::optional<model::PayloadRecord> PgRepository::GetPayload(Transaction& t, con
     r.persist           = res[0][6].as<int>() != 0;
     r.eviction_priority = res[0][7].as<int>();
     r.spill_target      = res[0][8].as<int>();
+    r.created_at_ms     = res[0][9].is_null() ? 0 : res[0][9].as<uint64_t>();
     return r;
   } catch (const std::exception& e) {
     throw std::runtime_error(std::string("GetPayload failed: ") + e.what());
   }
 }
 
-std::vector<model::PayloadRecord> PgRepository::ListPayloads(Transaction& t) {
+std::vector<model::PayloadRecord> PgRepository::ListPayloads(Transaction& t, payload::manager::v1::Tier tier_filter) {
   try {
-    auto res = TX(t).Work().exec("SELECT id,tier,state,size_bytes,version,expires_at_ms,persist,eviction_priority,spill_target FROM payload;");
+    pqxx::result res;
+    if (tier_filter != payload::manager::v1::TIER_UNSPECIFIED) {
+      res = TX(t).Work().exec_params(
+          "SELECT id,tier,state,size_bytes,version,expires_at_ms,persist,eviction_priority,spill_target,created_at_ms FROM payload WHERE tier=$1;",
+          static_cast<int>(tier_filter));
+    } else {
+      res = TX(t).Work().exec(
+          "SELECT id,tier,state,size_bytes,version,expires_at_ms,persist,eviction_priority,spill_target,created_at_ms FROM payload;");
+    }
 
     std::vector<model::PayloadRecord> records;
     records.reserve(res.size());
@@ -67,6 +76,7 @@ std::vector<model::PayloadRecord> PgRepository::ListPayloads(Transaction& t) {
       r.persist           = row[6].as<int>() != 0;
       r.eviction_priority = row[7].as<int>();
       r.spill_target      = row[8].as<int>();
+      r.created_at_ms     = row[9].is_null() ? 0 : row[9].as<uint64_t>();
       records.push_back(std::move(r));
     }
     return records;
@@ -87,7 +97,7 @@ Result PgRepository::UpdatePayload(Transaction& t, const model::PayloadRecord& r
 std::vector<model::PayloadRecord> PgRepository::ListExpiredPayloads(Transaction& t, uint64_t now_ms) {
   try {
     auto res = TX(t).Work().exec_params(
-        "SELECT id,tier,state,size_bytes,version,expires_at_ms,persist,eviction_priority,spill_target FROM payload"
+        "SELECT id,tier,state,size_bytes,version,expires_at_ms,persist,eviction_priority,spill_target,created_at_ms FROM payload"
         " WHERE expires_at_ms > 0 AND expires_at_ms <= $1;",
         now_ms);
 
@@ -104,6 +114,7 @@ std::vector<model::PayloadRecord> PgRepository::ListExpiredPayloads(Transaction&
       r.persist           = row[6].as<int>() != 0;
       r.eviction_priority = row[7].as<int>();
       r.spill_target      = row[8].as<int>();
+      r.created_at_ms     = row[9].is_null() ? 0 : row[9].as<uint64_t>();
       records.push_back(std::move(r));
     }
     return records;

@@ -11,6 +11,7 @@
 #include "internal/db/memory/memory_repository.hpp"
 #include "internal/lease/lease_manager.hpp"
 #include "internal/storage/storage_backend.hpp"
+#include "internal/util/errors.hpp"
 
 namespace {
 
@@ -91,8 +92,9 @@ class LoggingRepository final : public payload::db::Repository {
   std::optional<payload::db::model::PayloadRecord> GetPayload(payload::db::Transaction& t, const std::string& id) override {
     return inner_->GetPayload(Unwrap(t), id);
   }
-  std::vector<payload::db::model::PayloadRecord> ListPayloads(payload::db::Transaction& t) override {
-    return inner_->ListPayloads(Unwrap(t));
+  std::vector<payload::db::model::PayloadRecord> ListPayloads(payload::db::Transaction& t,
+      payload::manager::v1::Tier tier_filter = payload::manager::v1::TIER_UNSPECIFIED) override {
+    return inner_->ListPayloads(Unwrap(t), tier_filter);
   }
   payload::db::Result UpdatePayload(payload::db::Transaction& t, const payload::db::model::PayloadRecord& r) override {
     return inner_->UpdatePayload(Unwrap(t), r);
@@ -403,10 +405,10 @@ void TestAllocateZeroBytesThrows() {
   bool threw = false;
   try {
     (void)manager.Allocate(0, TIER_RAM);
-  } catch (const std::invalid_argument&) {
+  } catch (const payload::util::InvalidArgument&) {
     threw = true;
   }
-  assert(threw && "Allocate(0) must throw std::invalid_argument");
+  assert(threw && "Allocate(0) must throw payload::util::InvalidArgument");
 }
 
 // ---------------------------------------------------------------------------

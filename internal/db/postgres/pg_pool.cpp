@@ -40,12 +40,12 @@ std::shared_ptr<pqxx::connection> PgPool::Acquire() {
 
 void PgPool::PrepareStatements(pqxx::connection& conn) {
   conn.prepare("get_payload",
-               "SELECT id, tier, state, size_bytes, version, expires_at_ms, persist, eviction_priority, spill_target "
+               "SELECT id, tier, state, size_bytes, version, expires_at_ms, persist, eviction_priority, spill_target, created_at_ms "
                "FROM payload WHERE id=$1");
 
   conn.prepare("insert_payload",
-               "INSERT INTO payload(id,tier,state,size_bytes,version,expires_at_ms,persist,eviction_priority,spill_target) "
-               "VALUES($1,$2,$3,$4,$5,NULLIF($6::bigint,0),$7,$8,$9)");
+               "INSERT INTO payload(id,tier,state,size_bytes,version,expires_at_ms,persist,eviction_priority,spill_target,created_at_ms) "
+               "VALUES($1,$2,$3,$4,$5,NULLIF($6::bigint,0),$7,$8,$9,NULLIF($10::bigint,0))");
 
   conn.prepare("update_payload",
                "UPDATE payload SET tier=$2,state=$3,size_bytes=$4,version=$5,expires_at_ms=NULLIF($6::bigint,0),"

@@ -41,4 +41,10 @@ class ResourceExhausted : public std::runtime_error {
   }
 };
 
+class InvalidArgument : public std::runtime_error {
+ public:
+  explicit InvalidArgument(const std::string& msg) : std::runtime_error(msg) {
+  }
+};
+
 } // namespace payload::util

@@ -50,7 +50,8 @@ class Repository {
 
   virtual std::optional<model::PayloadRecord> GetPayload(Transaction&, const std::string& id) = 0;
 
-  virtual std::vector<model::PayloadRecord> ListPayloads(Transaction&) = 0;
+  virtual std::vector<model::PayloadRecord> ListPayloads(Transaction&,
+                                                         payload::manager::v1::Tier tier_filter = payload::manager::v1::TIER_UNSPECIFIED) = 0;
 
   virtual Result UpdatePayload(Transaction&, const model::PayloadRecord&) = 0;
 

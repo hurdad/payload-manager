@@ -8,7 +8,6 @@
 #include "internal/core/payload_manager.hpp"
 #include "internal/db/api/repository.hpp"
 #include "internal/db/memory/memory_repository.hpp"
-#include "internal/expiration/expiration_worker.hpp"
 #include "internal/grpc/admin_server.hpp"
 #include "internal/grpc/catalog_server.hpp"
 #include "internal/grpc/data_server.hpp"
@@ -106,11 +105,12 @@ void BootstrapPostgresSchema(const std::string& conninfo) {
   tx.exec(
       "CREATE TABLE IF NOT EXISTS payload (id UUID PRIMARY KEY, tier SMALLINT NOT NULL, state SMALLINT NOT NULL, size_bytes BIGINT NOT NULL, version "
       "BIGINT NOT NULL, expires_at_ms BIGINT, persist SMALLINT NOT NULL DEFAULT 0, eviction_priority SMALLINT NOT NULL DEFAULT 0, spill_target "
-      "SMALLINT NOT NULL DEFAULT 0);");
+      "SMALLINT NOT NULL DEFAULT 0, created_at_ms BIGINT NOT NULL DEFAULT 0);");
   // Migrate existing databases that predate the eviction policy columns.
   tx.exec("ALTER TABLE payload ADD COLUMN IF NOT EXISTS persist SMALLINT NOT NULL DEFAULT 0;");
   tx.exec("ALTER TABLE payload ADD COLUMN IF NOT EXISTS eviction_priority SMALLINT NOT NULL DEFAULT 0;");
   tx.exec("ALTER TABLE payload ADD COLUMN IF NOT EXISTS spill_target SMALLINT NOT NULL DEFAULT 0;");
+  tx.exec("ALTER TABLE payload ADD COLUMN IF NOT EXISTS created_at_ms BIGINT NOT NULL DEFAULT 0;");
   // Migrate id columns from TEXT to UUID if needed (no-op when already UUID).
   tx.exec(
       "DO $$ BEGIN "
@@ -269,19 +269,33 @@ Application Build(const payload::runtime::config::RuntimeConfig& config) {
   }
 
   auto tiering_policy = std::make_shared<tiering::TieringPolicy>(
-      metadata_cache, [pm = payload_manager.get()](const manager::v1::PayloadID& id) { return !pm->IsEvictionExempt(id); });
+      metadata_cache,
+      // RAM eviction: only consider payloads currently resident in RAM.
+      [pm = payload_manager.get()](const manager::v1::PayloadID& id) {
+        if (pm->IsEvictionExempt(id)) return false;
+        try {
+          return pm->ResolveSnapshot(id).tier() == manager::v1::TIER_RAM;
+        } catch (...) {
+          return false;
+        }
+      },
+      // GPU eviction: only consider payloads currently resident on GPU.
+      [pm = payload_manager.get()](const manager::v1::PayloadID& id) {
+        if (pm->IsEvictionExempt(id)) return false;
+        try {
+          return pm->ResolveSnapshot(id).tier() == manager::v1::TIER_GPU;
+        } catch (...) {
+          return false;
+        }
+      });
 
   auto tiering_manager = std::make_shared<tiering::TieringManager>(tiering_policy, spill_scheduler, payload_manager, pressure_state);
   tiering_manager->Start();
 
   // ------------------------------------------------------------------
-  // Expiration worker
-  // ------------------------------------------------------------------
-  auto expiration_worker = std::make_shared<expiration::ExpirationWorker>(payload_manager);
-  expiration_worker->Start();
-
-  // ------------------------------------------------------------------
   // Services
+  // Note: expiration is handled by TieringManager::Loop (calls ExpireStale
+  // every 100 ms), so a separate ExpirationWorker is not needed here.
   // ------------------------------------------------------------------
   service::ServiceContext ctx;
   ctx.manager               = payload_manager;
@@ -309,7 +323,6 @@ Application Build(const payload::runtime::config::RuntimeConfig& config) {
   // TieringManager is stopped first so it stops enqueuing new tasks before
   // the spill workers drain and exit.
   app.background_workers.push_back(tiering_manager);
-  app.background_workers.push_back(expiration_worker);
   for (auto& w : spill_worker_pool) {
     app.background_workers.push_back(w);
   }

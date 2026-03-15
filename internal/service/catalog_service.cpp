@@ -4,7 +4,6 @@
 #include <queue>
 #include <stdexcept>
 #include <thread>
-#include <type_traits>
 #include <unordered_set>
 
 #include "internal/core/payload_manager.hpp"
@@ -17,6 +16,7 @@
 #include "internal/metadata/metadata_cache.hpp"
 #include "internal/observability/logging.hpp"
 #include "internal/observability/spans.hpp"
+#include "internal/service/observe_rpc.hpp"
 #include "internal/spill/spill_scheduler.hpp"
 #include "internal/spill/spill_task.hpp"
 #include "internal/util/errors.hpp"
@@ -30,11 +30,22 @@ using namespace payload::manager::v1;
 
 namespace {
 
-void ThrowIfDbError(const payload::db::Result& result, const std::string& prefix) {
+void ThrowIfDbError(const payload::db::Result& result, const std::string& context) {
   if (result) {
     return;
   }
-  throw std::runtime_error(prefix + ": " + result.message);
+
+  const auto message = result.message.empty() ? context : context + ": " + result.message;
+  switch (result.code) {
+    case payload::db::ErrorCode::AlreadyExists:
+      throw payload::util::AlreadyExists(message);
+    case payload::db::ErrorCode::NotFound:
+      throw payload::util::NotFound(message);
+    case payload::db::ErrorCode::Conflict:
+      throw payload::util::InvalidState(message);
+    default:
+      throw std::runtime_error(message);
+  }
 }
 
 LineageEdge ToLineageEdge(const payload::db::model::LineageRecord& record) {
@@ -44,40 +55,6 @@ LineageEdge ToLineageEdge(const payload::db::model::LineageRecord& record) {
   edge.set_role(record.role);
   edge.set_parameters(record.parameters);
   return edge;
-}
-
-template <typename Fn>
-auto ObserveRpc(std::string_view route, const PayloadID* payload_id, Fn&& fn) {
-  payload::observability::SpanScope span(route);
-  if (payload_id) {
-    span.SetAttribute("payload.id", payload::util::PayloadIdToHex(*payload_id));
-  }
-
-  const auto started_at = std::chrono::steady_clock::now();
-  try {
-    if constexpr (std::is_void_v<std::invoke_result_t<Fn>>) {
-      fn();
-      payload::observability::Metrics::Instance().RecordRequest(route, true);
-      payload::observability::Metrics::Instance().ObserveRequestLatencyMs(
-          route, std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - started_at).count());
-      return;
-    } else {
-      auto result = fn();
-      payload::observability::Metrics::Instance().RecordRequest(route, true);
-      payload::observability::Metrics::Instance().ObserveRequestLatencyMs(
-          route, std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - started_at).count());
-      return result;
-    }
-  } catch (const std::exception& ex) {
-    span.RecordException(ex.what());
-    PAYLOAD_LOG_ERROR("RPC failed", {payload::observability::StringField("route", route), payload::observability::StringField("error", ex.what()),
-                                     payload_id ? payload::observability::StringField("payload_id", payload::util::PayloadIdToHex(*payload_id))
-                                                : payload::observability::StringField("payload_id", "")});
-    payload::observability::Metrics::Instance().RecordRequest(route, false);
-    payload::observability::Metrics::Instance().ObserveRequestLatencyMs(
-        route, std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - started_at).count());
-    throw;
-  }
 }
 
 } // namespace
@@ -321,13 +298,10 @@ ListPayloadsResponse CatalogService::ListPayloads(const ListPayloadsRequest& req
     ListPayloadsResponse resp;
 
     auto tx      = ctx_.repository->Begin();
-    auto records = ctx_.repository->ListPayloads(*tx);
+    auto records = ctx_.repository->ListPayloads(*tx, req.tier_filter());
+    tx->Commit();
 
     for (const auto& r : records) {
-      if (req.tier_filter() != TIER_UNSPECIFIED && r.tier != req.tier_filter()) {
-        continue;
-      }
-
       auto* entry = resp.add_payloads();
 
       PayloadID proto_id;

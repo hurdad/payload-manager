@@ -3,19 +3,16 @@
 #include <google/protobuf/struct.pb.h>
 #include <google/protobuf/util/json_util.h>
 
-#include <chrono>
-#include <functional>
 #include <limits>
 #include <optional>
 #include <stdexcept>
-#include <type_traits>
 
 #include "internal/db/api/repository.hpp"
 #include "internal/db/model/stream_consumer_offset_record.hpp"
 #include "internal/db/model/stream_entry_record.hpp"
 #include "internal/db/model/stream_record.hpp"
 #include "internal/observability/logging.hpp"
-#include "internal/observability/spans.hpp"
+#include "internal/service/observe_rpc.hpp"
 #include "internal/util/errors.hpp"
 #include "internal/util/time.hpp"
 #include "internal/util/uuid.hpp"
@@ -105,46 +102,6 @@ payload::db::model::StreamRecord GetStreamOrThrow(payload::db::Repository& repo,
     throw payload::util::NotFound(op + ": stream not found; create the stream before retrying");
   }
   return *stream_record;
-}
-
-template <typename Fn>
-auto ObserveRpc(std::string_view route, const StreamID* stream_id, const PayloadID* payload_id, Fn&& fn) {
-  payload::observability::SpanScope span(route);
-  if (stream_id) {
-    span.SetAttribute("stream.namespace", stream_id->namespace_());
-    span.SetAttribute("stream.name", stream_id->name());
-  }
-  if (payload_id) {
-    span.SetAttribute("payload.id", payload::util::PayloadIdToHex(*payload_id));
-  }
-
-  const auto started_at = std::chrono::steady_clock::now();
-  try {
-    if constexpr (std::is_void_v<std::invoke_result_t<Fn>>) {
-      fn();
-      payload::observability::Metrics::Instance().RecordRequest(route, true);
-      payload::observability::Metrics::Instance().ObserveRequestLatencyMs(
-          route, std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - started_at).count());
-      return;
-    } else {
-      auto result = fn();
-      payload::observability::Metrics::Instance().RecordRequest(route, true);
-      payload::observability::Metrics::Instance().ObserveRequestLatencyMs(
-          route, std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - started_at).count());
-      return result;
-    }
-  } catch (const std::exception& ex) {
-    span.RecordException(ex.what());
-    PAYLOAD_LOG_ERROR("RPC failed", {payload::observability::StringField("route", route), payload::observability::StringField("error", ex.what()),
-                                     stream_id ? payload::observability::StringField("stream", stream_id->namespace_() + "/" + stream_id->name())
-                                               : payload::observability::StringField("stream", ""),
-                                     payload_id ? payload::observability::StringField("payload_id", payload::util::PayloadIdToHex(*payload_id))
-                                                : payload::observability::StringField("payload_id", "")});
-    payload::observability::Metrics::Instance().RecordRequest(route, false);
-    payload::observability::Metrics::Instance().ObserveRequestLatencyMs(
-        route, std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - started_at).count());
-    throw;
-  }
 }
 
 } // namespace

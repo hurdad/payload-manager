@@ -135,6 +135,40 @@ void TestDeleteStreamMissingNameReturnsFailedPrecondition() {
   assert(status.error_code() == ::grpc::StatusCode::FAILED_PRECONDITION);
 }
 
+// Fix 3: Allocate with zero bytes must return INVALID_ARGUMENT (not INTERNAL).
+void TestAllocateZeroBytesReturnsInvalidArgument() {
+  auto                         ctx             = BuildServiceContext();
+  auto                         catalog_service = std::make_shared<payload::service::CatalogService>(ctx);
+  payload::grpc::CatalogServer server(catalog_service);
+
+  payload::manager::v1::AllocatePayloadRequest req;
+  req.set_size_bytes(0);
+  req.set_preferred_tier(TIER_RAM);
+
+  payload::manager::v1::AllocatePayloadResponse resp;
+  ::grpc::ServerContext                         grpc_ctx;
+
+  const auto status = server.AllocatePayload(&grpc_ctx, &req, &resp);
+  assert(status.error_code() == ::grpc::StatusCode::INVALID_ARGUMENT);
+}
+
+// Fix 3: Allocate with oversized bytes (> 128 GiB) must return INVALID_ARGUMENT.
+void TestAllocateOversizedBytesReturnsInvalidArgument() {
+  auto                         ctx             = BuildServiceContext();
+  auto                         catalog_service = std::make_shared<payload::service::CatalogService>(ctx);
+  payload::grpc::CatalogServer server(catalog_service);
+
+  payload::manager::v1::AllocatePayloadRequest req;
+  req.set_size_bytes(static_cast<uint64_t>(128) * 1024 * 1024 * 1024 + 1);
+  req.set_preferred_tier(TIER_RAM);
+
+  payload::manager::v1::AllocatePayloadResponse resp;
+  ::grpc::ServerContext                         grpc_ctx;
+
+  const auto status = server.AllocatePayload(&grpc_ctx, &req, &resp);
+  assert(status.error_code() == ::grpc::StatusCode::INVALID_ARGUMENT);
+}
+
 } // namespace
 
 int main() {
@@ -144,6 +178,8 @@ int main() {
   TestPinMissingPayloadReturnsNotFound();
   TestCreateStreamMissingNameReturnsFailedPrecondition();
   TestDeleteStreamMissingNameReturnsFailedPrecondition();
+  TestAllocateZeroBytesReturnsInvalidArgument();
+  TestAllocateOversizedBytesReturnsInvalidArgument();
 
   std::cout << "payload_manager_unit_grpc_status: pass\n";
   return 0;

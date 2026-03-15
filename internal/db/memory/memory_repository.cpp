@@ -47,11 +47,14 @@ std::optional<model::PayloadRecord> MemoryRepository::GetPayload(Transaction& t,
   return it->second;
 }
 
-std::vector<model::PayloadRecord> MemoryRepository::ListPayloads(Transaction& t) {
+std::vector<model::PayloadRecord> MemoryRepository::ListPayloads(Transaction& t, payload::manager::v1::Tier tier_filter) {
   const auto&                       s = TX(t).View();
   std::vector<model::PayloadRecord> records;
   records.reserve(s.payloads.size());
   for (const auto& [_, record] : s.payloads) {
+    if (tier_filter != payload::manager::v1::TIER_UNSPECIFIED && record.tier != tier_filter) {
+      continue;
+    }
     records.push_back(record);
   }
   return records;

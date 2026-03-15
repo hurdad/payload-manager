@@ -22,6 +22,9 @@ namespace payload::grpc {
   if (dynamic_cast<const ResourceExhausted*>(&e)) {
     return {::grpc::StatusCode::RESOURCE_EXHAUSTED, e.what()};
   }
+  if (dynamic_cast<const InvalidArgument*>(&e)) {
+    return {::grpc::StatusCode::INVALID_ARGUMENT, e.what()};
+  }
 
   return {::grpc::StatusCode::INTERNAL, e.what()};
 }

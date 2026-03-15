@@ -221,6 +221,53 @@ void TestSpillUsesPerPayloadTarget() {
   assert(!resp.results(0).error_message().empty());
 }
 
+// Fix 10: ListPayloads with a tier filter only returns payloads on that tier.
+void TestListPayloadsTierFilter() {
+  Fixture f;
+
+  // Allocate + commit a RAM payload.
+  AllocatePayloadRequest ram_req;
+  ram_req.set_size_bytes(64);
+  ram_req.set_preferred_tier(TIER_RAM);
+  const auto ram_resp = f.service.Allocate(ram_req);
+  payload::manager::v1::CommitPayloadRequest commit_ram;
+  *commit_ram.mutable_id() = ram_resp.payload_descriptor().payload_id();
+  f.service.Commit(commit_ram);
+
+  // Allocate + commit a DISK payload (spill RAM→DISK then spill again isn't
+  // necessary; allocate directly on DISK).
+  AllocatePayloadRequest disk_req;
+  disk_req.set_size_bytes(64);
+  disk_req.set_preferred_tier(TIER_DISK);
+  const auto disk_resp = f.service.Allocate(disk_req);
+  payload::manager::v1::CommitPayloadRequest commit_disk;
+  *commit_disk.mutable_id() = disk_resp.payload_descriptor().payload_id();
+  f.service.Commit(commit_disk);
+
+  // List all — expect 2 payloads.
+  payload::manager::v1::ListPayloadsRequest list_all;
+  const auto                               all = f.service.ListPayloads(list_all);
+  assert(all.payload_descriptors_size() == 2 && "expected 2 payloads total");
+
+  // List with tier_filter=TIER_RAM — expect 1 payload (the RAM one).
+  payload::manager::v1::ListPayloadsRequest list_ram;
+  list_ram.set_tier_filter(TIER_RAM);
+  const auto ram_only = f.service.ListPayloads(list_ram);
+  assert(ram_only.payload_descriptors_size() == 1 && "expected 1 RAM payload");
+  assert(ram_only.payload_descriptors(0).payload_id().value() ==
+             ram_resp.payload_descriptor().payload_id().value() &&
+         "wrong payload returned for RAM filter");
+
+  // List with tier_filter=TIER_DISK — expect 1 payload (the DISK one).
+  payload::manager::v1::ListPayloadsRequest list_disk;
+  list_disk.set_tier_filter(TIER_DISK);
+  const auto disk_only = f.service.ListPayloads(list_disk);
+  assert(disk_only.payload_descriptors_size() == 1 && "expected 1 DISK payload");
+  assert(disk_only.payload_descriptors(0).payload_id().value() ==
+             disk_resp.payload_descriptor().payload_id().value() &&
+         "wrong payload returned for DISK filter");
+}
+
 } // namespace
 
 int main() {
@@ -229,6 +276,7 @@ int main() {
   TestPromoteUnspecifiedTierThrows();
   TestSpillDefaultTargetIsDisk();
   TestSpillUsesPerPayloadTarget();
+  TestListPayloadsTierFilter();
 
   std::cout << "catalog_service_medium_fixes: pass\n";
   return 0;

@@ -260,12 +260,14 @@ void PayloadManager::PopulateLocation(PayloadDescriptor* descriptor) {
       return;
     }
     case TIER_OBJECT: {
+      // Object storage is exposed via DiskLocation (path-based); the descriptor's
+      // tier field distinguishes TIER_OBJECT from TIER_DISK at the client side.
       const auto   size = backend->Size(id);
-      DiskLocation object;
-      object.set_length_bytes(size);
-      object.set_offset_bytes(0);
-      object.set_path(Key(id) + ".bin");
-      *descriptor->mutable_disk() = object;
+      DiskLocation disk;
+      disk.set_length_bytes(size);
+      disk.set_offset_bytes(0);
+      disk.set_path(Key(id) + ".bin");
+      *descriptor->mutable_disk() = disk;
       return;
     }
     case TIER_GPU: {
@@ -304,11 +306,11 @@ void PayloadManager::PopulateLocation(PayloadDescriptor* descriptor) {
 PayloadDescriptor PayloadManager::Allocate(uint64_t size_bytes, Tier preferred, uint64_t ttl_ms, bool persist,
                                            const payload::manager::core::v1::EvictionPolicy& eviction_policy) {
   if (size_bytes == 0) {
-    throw std::invalid_argument("allocate payload: size_bytes must be greater than zero");
+    throw payload::util::InvalidArgument("allocate payload: size_bytes must be greater than zero");
   }
   constexpr uint64_t kMaxPayloadBytes = uint64_t{128} * 1024 * 1024 * 1024; // 128 GiB
   if (size_bytes > kMaxPayloadBytes) {
-    throw std::invalid_argument("allocate payload: size_bytes exceeds maximum allowed size (128 GiB)");
+    throw payload::util::InvalidArgument("allocate payload: size_bytes exceeds maximum allowed size (128 GiB)");
   }
 
   PayloadDescriptor desc;
@@ -531,11 +533,16 @@ PayloadDescriptor PayloadManager::ResolveSnapshot(const PayloadID& id) {
   return descriptor;
 }
 
-AcquireReadLeaseResponse PayloadManager::AcquireReadLease(const PayloadID& id, Tier min_tier, uint64_t min_duration_ms) {
+AcquireReadLeaseResponse PayloadManager::AcquireReadLease(const PayloadID& id, Tier min_tier, uint64_t min_duration_ms,
+                                                          payload::manager::core::v1::PromotionPolicy promotion_policy) {
   std::lock_guard<std::mutex> delete_lock(delete_mutex_);
 
   auto desc = ResolveSnapshot(id);
   if (min_tier != TIER_UNSPECIFIED && PlacementEngine::IsHigherTier(min_tier, desc.tier())) {
+    if (promotion_policy == payload::manager::core::v1::PROMOTION_POLICY_BEST_EFFORT) {
+      throw payload::util::InvalidState(
+          "acquire lease: best-effort promotion cannot satisfy min_tier; lower min_tier or change promotion policy to BLOCKING");
+    }
     desc = PromoteUnlocked(id, min_tier);
   }
   if (!IsReadableState(desc.state())) {
@@ -671,6 +678,11 @@ void PayloadManager::HydrateCaches() {
   // The in-memory LeaseTable is empty after a restart; without this bump a
   // client could re-acquire a lease and receive the same version it already
   // cached, with no signal that placement may have changed during downtime.
+  //
+  // Note: this version bump runs in a second transaction after the initial
+  // ListPayloads snapshot.  Payloads allocated concurrently between the two
+  // transactions are not bumped, but that is harmless — those payloads are
+  // brand new and carry no pre-restart cached descriptors.
   {
     PAYLOAD_LOG_WARN("startup: in-memory lease table cleared; bumping payload versions to invalidate pre-restart descriptors");
     auto bump_tx = repository_->Begin();

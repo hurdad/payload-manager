@@ -41,8 +41,9 @@ class PayloadManager {
   std::unordered_map<int, uint64_t> GetTierBytes() const;
 
   payload::manager::v1::PayloadDescriptor        ResolveSnapshot(const payload::manager::v1::PayloadID& id);
-  payload::manager::v1::AcquireReadLeaseResponse AcquireReadLease(const payload::manager::v1::PayloadID& id, payload::manager::v1::Tier min_tier,
-                                                                  uint64_t min_duration_ms);
+  payload::manager::v1::AcquireReadLeaseResponse AcquireReadLease(
+      const payload::manager::v1::PayloadID& id, payload::manager::v1::Tier min_tier, uint64_t min_duration_ms,
+      payload::manager::core::v1::PromotionPolicy promotion_policy = payload::manager::core::v1::PROMOTION_POLICY_UNSPECIFIED);
 
   void HydrateCaches();
 
