@@ -64,7 +64,8 @@ services:
     restart: unless-stopped
     command: ["-config.file=/etc/tempo/tempo.yaml"]
     ports:
-      - "3200:3200"  # Tempo UI / query
+      - "3200:3200"  # Tempo HTTP UI / query
+      - "9095:9095"  # Tempo gRPC query (used by Grafana 11.x streaming search)
       - "4327:4317"  # OTLP gRPC (offset to avoid collision with alloy)
     volumes:
       - ./grafana/tempo/tempo.yaml:/etc/tempo/tempo.yaml:ro

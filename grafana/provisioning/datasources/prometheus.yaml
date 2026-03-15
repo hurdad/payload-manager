@@ -25,3 +25,5 @@ datasources:
         datasourceUid: ""
       serviceMap:
         datasourceUid: prometheus
+      grpcPort: 9095
+      streamingEnabled: true
