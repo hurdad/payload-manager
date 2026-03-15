@@ -290,7 +290,8 @@ void Metrics::RecordRequest(std::string_view route, bool success) {
   }
 
   if (g_metrics_options.route_labels_enabled) {
-    const std::initializer_list<AttributePair> attributes = {{"route", std::string(route)}, {"success", success}};
+    const opentelemetry::nostd::string_view   route_sv(route.data(), route.size());
+    const std::initializer_list<AttributePair> attributes = {{"route", route_sv}, {"success", success}};
     AddWithAttributes(impl_->request_count, static_cast<std::uint64_t>(1), attributes);
     return;
   }
@@ -305,7 +306,8 @@ void Metrics::ObserveRequestLatencyMs(std::string_view route, double latency_ms)
   }
 
   if (g_metrics_options.route_labels_enabled) {
-    const std::initializer_list<AttributePair> attributes = {{"route", std::string(route)}};
+    const opentelemetry::nostd::string_view    route_sv(route.data(), route.size());
+    const std::initializer_list<AttributePair> attributes = {{"route", route_sv}};
     RecordWithAttributes(impl_->request_latency_ms, latency_ms, attributes);
     return;
   }
@@ -318,7 +320,8 @@ void Metrics::ObserveSpillDurationMs(std::string_view op, double duration_ms) {
     return;
   }
 
-  const std::initializer_list<AttributePair> attributes = {{"op", std::string(op)}};
+  const opentelemetry::nostd::string_view    op_sv(op.data(), op.size());
+  const std::initializer_list<AttributePair> attributes = {{"op", op_sv}};
   RecordWithAttributes(impl_->spill_duration_ms, duration_ms, attributes);
 }
 
@@ -327,7 +330,8 @@ void Metrics::RecordSpillBytes(std::string_view op, std::uint64_t bytes) {
     return;
   }
 
-  const std::initializer_list<AttributePair> attributes = {{"op", std::string(op)}};
+  const opentelemetry::nostd::string_view    op_sv(op.data(), op.size());
+  const std::initializer_list<AttributePair> attributes = {{"op", op_sv}};
   AddWithAttributes(impl_->spill_bytes_total, bytes, attributes);
 }
 
@@ -336,7 +340,8 @@ void Metrics::RecordAllocationFailure(std::string_view tier) {
     return;
   }
 
-  const std::initializer_list<AttributePair> attributes = {{"tier", std::string(tier)}};
+  const opentelemetry::nostd::string_view    tier_sv(tier.data(), tier.size());
+  const std::initializer_list<AttributePair> attributes = {{"tier", tier_sv}};
   AddWithAttributes(impl_->allocation_failure_count, static_cast<std::uint64_t>(1), attributes);
 }
 
