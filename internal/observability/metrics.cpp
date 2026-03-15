@@ -290,7 +290,7 @@ void Metrics::RecordRequest(std::string_view route, bool success) {
   }
 
   if (g_metrics_options.route_labels_enabled) {
-    const opentelemetry::nostd::string_view   route_sv(route.data(), route.size());
+    const opentelemetry::nostd::string_view    route_sv(route.data(), route.size());
     const std::initializer_list<AttributePair> attributes = {{"route", route_sv}, {"success", success}};
     AddWithAttributes(impl_->request_count, static_cast<std::uint64_t>(1), attributes);
     return;

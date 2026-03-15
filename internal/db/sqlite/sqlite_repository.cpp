@@ -570,10 +570,8 @@ Result SqliteRepository::AppendStreamEntries(Transaction& t, uint64_t stream_id,
     BindUuid(ins_st, 3, e.payload_uuid);
     BindU64(ins_st, 4, e.event_time_ms);
     if (e.append_time_ms == 0) {
-      e.append_time_ms = static_cast<uint64_t>(
-          std::chrono::duration_cast<std::chrono::milliseconds>(
-              std::chrono::system_clock::now().time_since_epoch())
-              .count());
+      e.append_time_ms =
+          static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count());
     }
     BindU64(ins_st, 5, e.append_time_ms);
     BindU64(ins_st, 6, e.duration_ns);
