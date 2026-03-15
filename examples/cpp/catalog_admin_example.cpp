@@ -32,7 +32,7 @@ int main(int argc, char** argv) {
   const std::string otlp_ep = argc > 2 ? argv[2] : "localhost:4317";
 
   OtelInit(otlp_ep, "cpp-examples");
-  auto channel = StartSpanAndMakeChannel(target, "catalog_admin_example");
+  auto                                    channel = StartSpanAndMakeChannel(target, "catalog_admin_example");
   payload::manager::client::PayloadClient client(channel);
 
   // Allocate a short-lived RAM payload to exercise tiering/catalog APIs

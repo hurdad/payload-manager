@@ -22,7 +22,7 @@ int main(int argc, char** argv) {
   const std::string otlp_ep = argc > 3 ? argv[3] : "localhost:4317";
 
   OtelInit(otlp_ep, "cpp-examples");
-  auto channel = StartSpanAndMakeChannel(target, "read_example");
+  auto                                    channel = StartSpanAndMakeChannel(target, "read_example");
   payload::manager::client::PayloadClient client(channel);
 
   auto payload_id_result = payload::manager::client::PayloadClient::PayloadIdFromUuid(uuid);
@@ -51,8 +51,7 @@ int main(int argc, char** argv) {
   for (int64_t i = 0; i < size; ++i) {
     const uint8_t expected = static_cast<uint8_t>(i & 0xFFu);
     if (data[i] != expected) {
-      std::cerr << "mismatch at byte " << i << ": expected " << static_cast<int>(expected)
-                << " got " << static_cast<int>(data[i]) << '\n';
+      std::cerr << "mismatch at byte " << i << ": expected " << static_cast<int>(expected) << " got " << static_cast<int>(data[i]) << '\n';
       ++mismatches;
     }
   }

@@ -424,41 +424,25 @@ int main(int argc, char** argv) {
       return 2;
     }
 
-    std::cout << std::left
-              << std::setw(38) << "UUID"
-              << std::setw(6)  << "TIER"
-              << std::setw(12) << "STATE"
-              << std::setw(14) << "SIZE"
-              << std::setw(10) << "AGE(s)"
-              << std::setw(8)  << "LEASES"
-              << "\n";
+    std::cout << std::left << std::setw(38) << "UUID" << std::setw(6) << "TIER" << std::setw(12) << "STATE" << std::setw(14) << "SIZE"
+              << std::setw(10) << "AGE(s)" << std::setw(8) << "LEASES" << "\n";
 
-    const uint64_t now_ms = static_cast<uint64_t>(
-        std::chrono::duration_cast<std::chrono::milliseconds>(
-            std::chrono::system_clock::now().time_since_epoch()).count());
+    const uint64_t now_ms =
+        static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count());
 
     static const char* kTierName[]  = {"?", "gpu", "ram", "disk", "obj"};
-    static const char* kStateName[] = {"?", "allocated", "active", "spilling",
-                                       "durable", "evicting", "deleting", "expired", "deleted"};
+    static const char* kStateName[] = {"?", "allocated", "active", "spilling", "durable", "evicting", "deleting", "expired", "deleted"};
 
     for (const auto& p : resp.payloads()) {
       const std::string uuid = ToUuidString(p.id().value());
 
-      int tier_idx  = (p.tier()  >= 0 && p.tier()  < 5) ? p.tier()  : 0;
+      int tier_idx  = (p.tier() >= 0 && p.tier() < 5) ? p.tier() : 0;
       int state_idx = (p.state() >= 0 && p.state() < 9) ? p.state() : 0;
 
-      const std::string age = p.created_at_ms() > 0
-          ? std::to_string((now_ms - p.created_at_ms()) / 1000)
-          : "?";
+      const std::string age = p.created_at_ms() > 0 ? std::to_string((now_ms - p.created_at_ms()) / 1000) : "?";
 
-      std::cout << std::left
-                << std::setw(38) << uuid
-                << std::setw(6)  << kTierName[tier_idx]
-                << std::setw(12) << kStateName[state_idx]
-                << std::setw(14) << p.size_bytes()
-                << std::setw(10) << age
-                << std::setw(8)  << p.active_leases()
-                << "\n";
+      std::cout << std::left << std::setw(38) << uuid << std::setw(6) << kTierName[tier_idx] << std::setw(12) << kStateName[state_idx]
+                << std::setw(14) << p.size_bytes() << std::setw(10) << age << std::setw(8) << p.active_leases() << "\n";
     }
 
     std::cout << resp.payloads_size() << " payload(s)\n";

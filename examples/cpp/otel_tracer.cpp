@@ -47,33 +47,30 @@ void OtelInit(const std::string& grpc_endpoint, const std::string& service_name)
   otlp::OtlpGrpcExporterOptions opts;
   opts.endpoint            = grpc_endpoint;
   opts.use_ssl_credentials = false;
-  auto exporter = otlp::OtlpGrpcExporterFactory::Create(opts);
+  auto exporter            = otlp::OtlpGrpcExporterFactory::Create(opts);
 
   // SimpleSpanProcessor exports each span synchronously on End() — ensures
   // all root spans are flushed without needing a batch timeout.
   auto processor = sdktrace::SimpleSpanProcessorFactory::Create(std::move(exporter));
 
   auto res = resource::Resource::Create({
-      {"service.name",    service_name},
+      {"service.name", service_name},
       {"service.version", std::string("1.0.0")},
   });
 
-  g_sdk_provider = std::shared_ptr<sdktrace::TracerProvider>(
-      sdktrace::TracerProviderFactory::Create(std::move(processor), res));
+  g_sdk_provider = std::shared_ptr<sdktrace::TracerProvider>(sdktrace::TracerProviderFactory::Create(std::move(processor), res));
 
-  trace_api::Provider::SetTracerProvider(
-      opentelemetry::nostd::shared_ptr<trace_api::TracerProvider>(g_sdk_provider));
+  trace_api::Provider::SetTracerProvider(opentelemetry::nostd::shared_ptr<trace_api::TracerProvider>(g_sdk_provider));
 
   prop::GlobalTextMapPropagator::SetGlobalPropagator(
-      opentelemetry::nostd::shared_ptr<prop::TextMapPropagator>(
-          new opentelemetry::trace::propagation::HttpTraceContext()));
+      opentelemetry::nostd::shared_ptr<prop::TextMapPropagator>(new opentelemetry::trace::propagation::HttpTraceContext()));
 
   g_tracer = g_sdk_provider->GetTracer(service_name, "1.0.0");
 }
 
 void OtelShutdown() {
-  g_span  = nullptr;
-  g_scope = nullptr;
+  g_span   = nullptr;
+  g_scope  = nullptr;
   g_tracer = nullptr;
   if (g_sdk_provider) {
     g_sdk_provider->ForceFlush();
@@ -109,5 +106,5 @@ void OtelEndSpan() {
   if (!g_span) return;
   g_scope.reset();
   g_span->End();
-  g_span  = nullptr;
+  g_span = nullptr;
 }

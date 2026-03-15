@@ -140,8 +140,9 @@ Result SqliteRepository::InsertPayload(Transaction& t, const model::PayloadRecor
 std::optional<model::PayloadRecord> SqliteRepository::GetPayload(Transaction& t, const std::string& id) {
   auto* db = TX(t).Handle();
 
-  const char*   sql = "SELECT id,tier,state,size_bytes,version,expires_at_ms,persist,eviction_priority,spill_target,created_at_ms FROM payload WHERE id=?;";
-  sqlite3_stmt* st  = nullptr;
+  const char* sql =
+      "SELECT id,tier,state,size_bytes,version,expires_at_ms,persist,eviction_priority,spill_target,created_at_ms FROM payload WHERE id=?;";
+  sqlite3_stmt* st = nullptr;
   if (sqlite3_prepare_v2(db, sql, -1, &st, nullptr) != SQLITE_OK) return std::nullopt;
 
   BindUuid(st, 1, id);

@@ -29,11 +29,11 @@ inline std::string MakeTraceparent(const OtelSpanContext& ctx) {
 // Injects a fixed W3C traceparent into every outgoing RPC's initial metadata.
 class TraceInjectInterceptor : public grpc::experimental::Interceptor {
  public:
-  explicit TraceInjectInterceptor(std::string tp) : tp_(std::move(tp)) {}
+  explicit TraceInjectInterceptor(std::string tp) : tp_(std::move(tp)) {
+  }
 
   void Intercept(grpc::experimental::InterceptorBatchMethods* methods) override {
-    if (methods->QueryInterceptionHookPoint(
-            grpc::experimental::InterceptionHookPoints::PRE_SEND_INITIAL_METADATA)) {
+    if (methods->QueryInterceptionHookPoint(grpc::experimental::InterceptionHookPoints::PRE_SEND_INITIAL_METADATA)) {
       methods->GetSendInitialMetadata()->emplace("traceparent", tp_);
     }
     methods->Proceed();
@@ -45,10 +45,10 @@ class TraceInjectInterceptor : public grpc::experimental::Interceptor {
 
 class TraceInjectFactory : public grpc::experimental::ClientInterceptorFactoryInterface {
  public:
-  explicit TraceInjectFactory(std::string tp) : tp_(std::move(tp)) {}
+  explicit TraceInjectFactory(std::string tp) : tp_(std::move(tp)) {
+  }
 
-  grpc::experimental::Interceptor* CreateClientInterceptor(
-      grpc::experimental::ClientRpcInfo*) override {
+  grpc::experimental::Interceptor* CreateClientInterceptor(grpc::experimental::ClientRpcInfo*) override {
     return new TraceInjectInterceptor(tp_);
   }
 
@@ -57,20 +57,17 @@ class TraceInjectFactory : public grpc::experimental::ClientInterceptorFactoryIn
 };
 
 // Returns a gRPC channel that injects traceparent into every RPC.
-inline std::shared_ptr<grpc::Channel> MakeTracedChannel(const std::string& endpoint,
-                                                         const std::string& traceparent) {
-  grpc::ChannelArguments args;
+inline std::shared_ptr<grpc::Channel> MakeTracedChannel(const std::string& endpoint, const std::string& traceparent) {
+  grpc::ChannelArguments                                                              args;
   std::vector<std::unique_ptr<grpc::experimental::ClientInterceptorFactoryInterface>> factories;
   factories.push_back(std::make_unique<TraceInjectFactory>(traceparent));
-  return grpc::experimental::CreateCustomChannelWithInterceptors(
-      endpoint, grpc::InsecureChannelCredentials(), args, std::move(factories));
+  return grpc::experimental::CreateCustomChannelWithInterceptors(endpoint, grpc::InsecureChannelCredentials(), args, std::move(factories));
 }
 
 // Start a named root span and return a traced channel carrying its traceparent.
 // Falls back to a plain channel if the span context is invalid (e.g. OtelInit
 // was called with an empty endpoint).
-inline std::shared_ptr<grpc::Channel> StartSpanAndMakeChannel(const std::string& endpoint,
-                                                               const std::string& span_name) {
+inline std::shared_ptr<grpc::Channel> StartSpanAndMakeChannel(const std::string& endpoint, const std::string& span_name) {
   auto ctx = OtelStartSpan(span_name);
   if (!ctx.valid) {
     return grpc::CreateChannel(endpoint, grpc::InsecureChannelCredentials());
@@ -81,8 +78,7 @@ inline std::shared_ptr<grpc::Channel> StartSpanAndMakeChannel(const std::string&
 #else // !ENABLE_OTEL
 
 // No tracing: start a (no-op) span and return a plain channel.
-inline std::shared_ptr<grpc::Channel> StartSpanAndMakeChannel(const std::string& endpoint,
-                                                               const std::string& /*span_name*/) {
+inline std::shared_ptr<grpc::Channel> StartSpanAndMakeChannel(const std::string& endpoint, const std::string& /*span_name*/) {
   OtelStartSpan(/*no-op*/ "");
   return grpc::CreateChannel(endpoint, grpc::InsecureChannelCredentials());
 }

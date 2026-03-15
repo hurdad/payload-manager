@@ -8,8 +8,8 @@
 #include <string>
 
 struct OtelSpanContext {
-  std::string trace_id_hex;  // 32 lowercase hex chars (16 bytes)
-  std::string span_id_hex;   // 16 lowercase hex chars (8 bytes)
+  std::string trace_id_hex; // 32 lowercase hex chars (16 bytes)
+  std::string span_id_hex;  // 16 lowercase hex chars (8 bytes)
   bool        valid = false;
 };
 
@@ -18,8 +18,7 @@ struct OtelSpanContext {
 // Initialize OTel with an OTLP gRPC exporter.
 // endpoint: "host:port", e.g. "localhost:4317". No-op if empty.
 // service_name: value of the resource attribute service.name.
-void OtelInit(const std::string& grpc_endpoint,
-              const std::string& service_name = "payload-manager-client");
+void OtelInit(const std::string& grpc_endpoint, const std::string& service_name = "payload-manager-client");
 
 // Flush pending spans and shut down the tracer provider.
 void OtelShutdown();
@@ -32,9 +31,14 @@ void OtelEndSpan();
 
 #else // !ENABLE_OTEL — inline no-ops
 
-inline void            OtelInit(const std::string&, const std::string& = {}) {}
-inline void            OtelShutdown() {}
-inline OtelSpanContext OtelStartSpan(const std::string&) { return {}; }
-inline void            OtelEndSpan() {}
+inline void OtelInit(const std::string&, const std::string& = {}) {
+}
+inline void OtelShutdown() {
+}
+inline OtelSpanContext OtelStartSpan(const std::string&) {
+  return {};
+}
+inline void OtelEndSpan() {
+}
 
 #endif // ENABLE_OTEL

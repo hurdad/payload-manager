@@ -15,8 +15,7 @@ std::string UuidToHex(const std::string& uuid_bytes) {
   std::ostringstream os;
   for (size_t i = 0; i < uuid_bytes.size(); ++i) {
     if (i == 4 || i == 6 || i == 8 || i == 10) os << '-';
-    os << std::hex << std::setw(2) << std::setfill('0')
-       << static_cast<int>(static_cast<unsigned char>(uuid_bytes[i]));
+    os << std::hex << std::setw(2) << std::setfill('0') << static_cast<int>(static_cast<unsigned char>(uuid_bytes[i]));
   }
   return os.str();
 }
@@ -29,10 +28,10 @@ int main(int argc, char** argv) {
   // argv[3]: OTLP gRPC endpoint (default localhost:4317, empty to disable)
   const std::string target     = argc > 1 ? argv[1] : "localhost:50051";
   const uint64_t    size_bytes = argc > 2 ? static_cast<uint64_t>(std::stoull(argv[2])) : 100ULL * 1024 * 1024;
-  const std::string otlp_ep   = argc > 3 ? argv[3] : "localhost:4317";
+  const std::string otlp_ep    = argc > 3 ? argv[3] : "localhost:4317";
 
   OtelInit(otlp_ep, "cpp-examples");
-  auto channel = StartSpanAndMakeChannel(target, "allocate_example");
+  auto                                    channel = StartSpanAndMakeChannel(target, "allocate_example");
   payload::manager::client::PayloadClient client(channel);
 
   auto writable = client.AllocateWritableBuffer(size_bytes, payload::manager::v1::TIER_RAM);

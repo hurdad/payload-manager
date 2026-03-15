@@ -144,10 +144,9 @@ std::unique_ptr<sdkmetrics::ViewRegistry> MakeViewRegistry() {
   auto add_hist_view = [&](const std::string& instrument_name) {
     auto agg_cfg         = std::make_shared<sdkmetrics::HistogramAggregationConfig>();
     agg_cfg->boundaries_ = kMsBuckets;
-    view_registry->AddView(
-        std::make_unique<sdkmetrics::InstrumentSelector>(sdkmetrics::InstrumentType::kHistogram, instrument_name, "ms"),
-        std::make_unique<sdkmetrics::MeterSelector>("payload-manager", "0.1.0", ""),
-        std::make_unique<sdkmetrics::View>(instrument_name, "", sdkmetrics::AggregationType::kHistogram, agg_cfg));
+    view_registry->AddView(std::make_unique<sdkmetrics::InstrumentSelector>(sdkmetrics::InstrumentType::kHistogram, instrument_name, "ms"),
+                           std::make_unique<sdkmetrics::MeterSelector>("payload-manager", "0.1.0", ""),
+                           std::make_unique<sdkmetrics::View>(instrument_name, "", sdkmetrics::AggregationType::kHistogram, agg_cfg));
   };
 
   add_hist_view("payload.request.latency_ms");
@@ -417,8 +416,8 @@ void Metrics::SetTierPayloadCount(std::string_view tier, std::uint64_t count) {
   }
 
   std::lock_guard<std::mutex> lock(impl_->tier_count_mutex);
-  impl_->tier_count_values[std::string(tier)] = static_cast<std::int64_t>(
-      std::min(count, static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max())));
+  impl_->tier_count_values[std::string(tier)] =
+      static_cast<std::int64_t>(std::min(count, static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max())));
 }
 
 } // namespace payload::observability

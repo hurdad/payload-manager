@@ -15,7 +15,7 @@ int main(int argc, char** argv) {
   const std::string otlp_ep = argc > 2 ? argv[2] : "localhost:4317";
 
   OtelInit(otlp_ep, "cpp-examples");
-  auto channel = StartSpanAndMakeChannel(target, "stats_example");
+  auto                                    channel = StartSpanAndMakeChannel(target, "stats_example");
   payload::manager::client::PayloadClient client(channel);
 
   // Stats returns a tier-wise summary of payload counts and byte usage.

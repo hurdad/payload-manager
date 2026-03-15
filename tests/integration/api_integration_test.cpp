@@ -25,8 +25,6 @@
                            get committed, get range, cascade delete
 */
 
-#include "otel_tracer.hpp"
-
 #include <grpcpp/channel.h>
 #include <grpcpp/client_context.h>
 #include <grpcpp/create_channel.h>
@@ -48,6 +46,7 @@
 #include <vector>
 
 #include "client/cpp/payload_manager_client.h"
+#include "otel_tracer.hpp"
 #include "payload/manager/v1.hpp"
 
 using namespace payload::manager::v1;
@@ -66,11 +65,11 @@ std::string MakeTraceparent(const OtelSpanContext& ctx) {
 // Injects a fixed W3C traceparent into the initial metadata of every RPC.
 class TraceInjectInterceptor : public grpc::experimental::Interceptor {
  public:
-  explicit TraceInjectInterceptor(std::string tp) : tp_(std::move(tp)) {}
+  explicit TraceInjectInterceptor(std::string tp) : tp_(std::move(tp)) {
+  }
 
   void Intercept(grpc::experimental::InterceptorBatchMethods* methods) override {
-    if (methods->QueryInterceptionHookPoint(
-            grpc::experimental::InterceptionHookPoints::PRE_SEND_INITIAL_METADATA)) {
+    if (methods->QueryInterceptionHookPoint(grpc::experimental::InterceptionHookPoints::PRE_SEND_INITIAL_METADATA)) {
       methods->GetSendInitialMetadata()->emplace("traceparent", tp_);
     }
     methods->Proceed();
@@ -82,10 +81,10 @@ class TraceInjectInterceptor : public grpc::experimental::Interceptor {
 
 class TraceInjectFactory : public grpc::experimental::ClientInterceptorFactoryInterface {
  public:
-  explicit TraceInjectFactory(std::string tp) : tp_(std::move(tp)) {}
+  explicit TraceInjectFactory(std::string tp) : tp_(std::move(tp)) {
+  }
 
-  grpc::experimental::Interceptor* CreateClientInterceptor(
-      grpc::experimental::ClientRpcInfo*) override {
+  grpc::experimental::Interceptor* CreateClientInterceptor(grpc::experimental::ClientRpcInfo*) override {
     return new TraceInjectInterceptor(tp_);
   }
 
@@ -93,13 +92,11 @@ class TraceInjectFactory : public grpc::experimental::ClientInterceptorFactoryIn
   std::string tp_;
 };
 
-std::shared_ptr<grpc::Channel> MakeTracedChannel(const std::string& endpoint,
-                                                  const std::string& traceparent) {
-  grpc::ChannelArguments args;
+std::shared_ptr<grpc::Channel> MakeTracedChannel(const std::string& endpoint, const std::string& traceparent) {
+  grpc::ChannelArguments                                                              args;
   std::vector<std::unique_ptr<grpc::experimental::ClientInterceptorFactoryInterface>> factories;
   factories.push_back(std::make_unique<TraceInjectFactory>(traceparent));
-  return grpc::experimental::CreateCustomChannelWithInterceptors(
-      endpoint, grpc::InsecureChannelCredentials(), args, std::move(factories));
+  return grpc::experimental::CreateCustomChannelWithInterceptors(endpoint, grpc::InsecureChannelCredentials(), args, std::move(factories));
 }
 
 } // namespace
@@ -345,12 +342,12 @@ void TestListPayloads(const PayloadClient& client, const std::string& tp) {
 
   // Snapshot counts before we touch anything.
   ListPayloadsRequest all_req;
-  auto before = client.ListPayloads(all_req);
+  auto                before = client.ListPayloads(all_req);
   ASSERT_OK(before.status());
   size_t count_before = static_cast<size_t>(before->payloads_size());
 
   // Allocate two RAM payloads.
-  auto ram0 = AllocateAndCommit(client, 64,  0xAA);
+  auto ram0 = AllocateAndCommit(client, 64, 0xAA);
   auto ram1 = AllocateAndCommit(client, 128, 0xBB);
 
   // Unfiltered list must now contain at least 2 more entries.
@@ -370,8 +367,7 @@ void TestListPayloads(const PayloadClient& client, const std::string& tp) {
 
   // Summary fields must be plausible.
   for (const auto& s : after->payloads()) {
-    if (s.id().value() != ram0.payload_id().value() &&
-        s.id().value() != ram1.payload_id().value()) continue;
+    if (s.id().value() != ram0.payload_id().value() && s.id().value() != ram1.payload_id().value()) continue;
     ASSERT_TRUE(s.size_bytes() > 0);
     // state must be active (committed payloads are PAYLOAD_STATE_ACTIVE)
     ASSERT_EQ(static_cast<int>(s.state()), static_cast<int>(PAYLOAD_STATE_ACTIVE));
@@ -497,7 +493,7 @@ void TestStream(const PayloadClient& client, const std::string& tp) {
 // ---------------------------------------------------------------------------
 
 int main(int argc, char** argv) {
-  const char*       env_ep  = std::getenv("PAYLOAD_MANAGER_ENDPOINT");
+  const char*       env_ep   = std::getenv("PAYLOAD_MANAGER_ENDPOINT");
   const std::string endpoint = (argc > 1) ? argv[1] : (env_ep ? env_ep : "");
   if (endpoint.empty()) {
     std::cout << "api_integration_test: skip (set PAYLOAD_MANAGER_ENDPOINT to run)\n";
@@ -518,23 +514,21 @@ int main(int argc, char** argv) {
   //   4. Run test under that channel
   //   5. End root span (exported via OTel batch processor)
   auto run = [&](const char* name, auto fn) {
-    auto ctx = OtelStartSpan(name);
-    std::string tp = ctx.valid ? MakeTraceparent(ctx) : "";
-    PayloadClient client(tp.empty()
-        ? grpc::CreateChannel(endpoint, grpc::InsecureChannelCredentials())
-        : MakeTracedChannel(endpoint, tp));
+    auto          ctx = OtelStartSpan(name);
+    std::string   tp  = ctx.valid ? MakeTraceparent(ctx) : "";
+    PayloadClient client(tp.empty() ? grpc::CreateChannel(endpoint, grpc::InsecureChannelCredentials()) : MakeTracedChannel(endpoint, tp));
     fn(client, tp);
     OtelEndSpan();
   };
 
-  run("TestRamRoundTrip",    TestRamRoundTrip);
+  run("TestRamRoundTrip", TestRamRoundTrip);
   run("TestSpillAndPromote", TestSpillAndPromote);
-  run("TestPinBlocksSpill",  TestPinBlocksSpill);
-  run("TestMetadata",        TestMetadata);
-  run("TestLineage",         TestLineage);
-  run("TestStats",           TestStats);
-  run("TestListPayloads",    TestListPayloads);
-  run("TestStream",          TestStream);
+  run("TestPinBlocksSpill", TestPinBlocksSpill);
+  run("TestMetadata", TestMetadata);
+  run("TestLineage", TestLineage);
+  run("TestStats", TestStats);
+  run("TestListPayloads", TestListPayloads);
+  run("TestStream", TestStream);
 
   std::cout << "api_integration_test: pass\n";
   OtelShutdown();
