@@ -135,7 +135,7 @@ namespace {
   } while (0)
 
 void log(const char* test, const std::string& traceparent) {
-  std::cout << "  [run] " << test << "  trace=" << traceparent.substr(3, 32) << '\n';
+  std::cout << "  [run] " << test << "  trace=" << (traceparent.size() > 3 ? traceparent.substr(3, 32) : "(no-otel)") << '\n';
 }
 
 PayloadDescriptor AllocateAndCommit(const PayloadClient& client, uint64_t size_bytes, uint8_t fill) {

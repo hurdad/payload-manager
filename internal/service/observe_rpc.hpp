@@ -49,8 +49,7 @@ auto ObserveRpc(std::string_view route, const payload::manager::v1::PayloadID* p
 }
 
 template <typename Fn>
-auto ObserveRpc(std::string_view route, const payload::manager::v1::StreamID* stream_id,
-                const payload::manager::v1::PayloadID* payload_id, Fn&& fn) {
+auto ObserveRpc(std::string_view route, const payload::manager::v1::StreamID* stream_id, const payload::manager::v1::PayloadID* payload_id, Fn&& fn) {
   payload::observability::SpanScope span(route);
   if (stream_id) {
     span.SetAttribute("stream.namespace", stream_id->namespace_());

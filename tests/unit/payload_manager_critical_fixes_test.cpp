@@ -92,8 +92,8 @@ class LoggingRepository final : public payload::db::Repository {
   std::optional<payload::db::model::PayloadRecord> GetPayload(payload::db::Transaction& t, const std::string& id) override {
     return inner_->GetPayload(Unwrap(t), id);
   }
-  std::vector<payload::db::model::PayloadRecord> ListPayloads(payload::db::Transaction& t,
-      payload::manager::v1::Tier tier_filter = payload::manager::v1::TIER_UNSPECIFIED) override {
+  std::vector<payload::db::model::PayloadRecord> ListPayloads(
+      payload::db::Transaction& t, payload::manager::v1::Tier tier_filter = payload::manager::v1::TIER_UNSPECIFIED) override {
     return inner_->ListPayloads(Unwrap(t), tier_filter);
   }
   payload::db::Result UpdatePayload(payload::db::Transaction& t, const payload::db::model::PayloadRecord& r) override {

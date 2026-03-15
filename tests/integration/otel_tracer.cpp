@@ -113,9 +113,14 @@ void OtelEndSpan() {
 
 #else // !ENABLE_OTEL — stub implementations when OTel is disabled
 
-void OtelInit(const std::string&, const std::string&) {}
-void OtelShutdown() {}
-OtelSpanContext OtelStartSpan(const std::string&) { return {}; }
-void OtelEndSpan() {}
+void OtelInit(const std::string&, const std::string&) {
+}
+void OtelShutdown() {
+}
+OtelSpanContext OtelStartSpan(const std::string&) {
+  return {};
+}
+void OtelEndSpan() {
+}
 
 #endif // ENABLE_OTEL

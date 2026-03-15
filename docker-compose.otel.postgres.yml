@@ -12,17 +12,17 @@ services:
       timeout: 5s
       retries: 5
     volumes:
-      - postgres-data:/var/lib/postgresql/data
+      - postgres-otel-data:/var/lib/postgresql/data
 
   payload-manager:
     build:
       context: .
-      dockerfile: Dockerfile
+      dockerfile: Dockerfile.otel
     restart: unless-stopped
     depends_on:
       postgres:
         condition: service_healthy
-    command: ["./payload-manager", "--config", "/app/conf/runtime-docker-no-otel-postgres.yaml"]
+    command: ["./payload-manager", "--config", "/app/conf/runtime-docker-postgres.yaml"]
     healthcheck:
       test: ["CMD-SHELL", "bash -c '</dev/tcp/localhost/50051'"]
       interval: 5s
@@ -31,11 +31,11 @@ services:
       start_period: 10s
     ipc: host
     ports:
-      - "50051:50051"
+      - "50055:50051"
     volumes:
-      - ./config/runtime-docker-no-otel-postgres.yaml:/app/conf/runtime-docker-no-otel-postgres.yaml:ro
-      - payload-data:/var/lib/payload-manager
+      - ./config/runtime-docker-postgres.yaml:/app/conf/runtime-docker-postgres.yaml:ro
+      - payload-otel-data:/var/lib/payload-manager
 
 volumes:
-  postgres-data:
-  payload-data:
+  postgres-otel-data:
+  payload-otel-data:

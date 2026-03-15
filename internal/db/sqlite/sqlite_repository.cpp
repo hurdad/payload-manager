@@ -172,10 +172,10 @@ std::optional<model::PayloadRecord> SqliteRepository::GetPayload(Transaction& t,
 std::vector<model::PayloadRecord> SqliteRepository::ListPayloads(Transaction& t, payload::manager::v1::Tier tier_filter) {
   auto* db = TX(t).Handle();
 
-  const bool    filter = (tier_filter != payload::manager::v1::TIER_UNSPECIFIED);
-  const char*   sql    = filter
-                             ? "SELECT id,tier,state,size_bytes,version,expires_at_ms,persist,eviction_priority,spill_target,created_at_ms FROM payload WHERE tier=?;"
-                             : "SELECT id,tier,state,size_bytes,version,expires_at_ms,persist,eviction_priority,spill_target,created_at_ms FROM payload;";
+  const bool  filter = (tier_filter != payload::manager::v1::TIER_UNSPECIFIED);
+  const char* sql =
+      filter ? "SELECT id,tier,state,size_bytes,version,expires_at_ms,persist,eviction_priority,spill_target,created_at_ms FROM payload WHERE tier=?;"
+             : "SELECT id,tier,state,size_bytes,version,expires_at_ms,persist,eviction_priority,spill_target,created_at_ms FROM payload;";
   sqlite3_stmt* st = nullptr;
   if (sqlite3_prepare_v2(db, sql, -1, &st, nullptr) != SQLITE_OK) return {};
   if (filter) {

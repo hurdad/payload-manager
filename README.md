@@ -89,31 +89,64 @@ cmake --build build-otel
 
 ## Docker
 
-Build matrix:
+### Dockerfiles
 
-| Component | CPU-focused mode | CUDA-capable mode |
-| --- | --- | --- |
-| payload-manager image | `Dockerfile` | `Dockerfile.cuda` |
-| C++ client | default build (`-DPAYLOAD_MANAGER_CLIENT_ENABLE_CUDA=OFF`) | build with `-DPAYLOAD_MANAGER_CLIENT_ENABLE_CUDA=ON` |
-| Python client | default install (`pip install ./client/python`) | explicit CUDA intent (`pip install './client/python[cuda]'`) |
-
-Build the production image:
+| Dockerfile | OTEL | GPU | Use |
+|---|---|---|---|
+| `Dockerfile` | Off | Off | Lightweight production image |
+| `Dockerfile.otel` | On | Off | Production image with OpenTelemetry |
+| `Dockerfile.cuda` | On | On | GPU-capable image with OpenTelemetry |
 
 ```bash
+# No-OTEL image (default)
 docker build -t payload-manager:latest .
-```
 
-Build the CUDA-capable production image:
+# OTEL-enabled image
+docker build -f Dockerfile.otel -t payload-manager:otel .
 
-```bash
+# GPU + OTEL image
 docker build -f Dockerfile.cuda -t payload-manager:cuda .
-```
 
-Build the `payloadctl` image:
-
-```bash
+# payloadctl CLI image
 docker build -f Dockerfile.payloadctl -t payloadctl:latest .
 ```
+
+### Docker Compose
+
+Full compose matrix — pick one backend × feature combination:
+
+| Compose file | Database | OTEL | GPU | Host port |
+|---|---|---|---|---|
+| `docker-compose.sqlite.yml` | SQLite | Off | Off | 50052 |
+| `docker-compose.postgres.yml` | Postgres | Off | Off | 50051 |
+| `docker-compose.otel.sqlite.yml` | SQLite | On | Off | 50054 |
+| `docker-compose.otel.postgres.yml` | Postgres | On | Off | 50055 |
+| `docker-compose.gpu.sqlite.yml` | SQLite | On | On | 50053 |
+| `docker-compose.gpu.postgres.yml` | Postgres | On | On | 50056 |
+
+```bash
+# SQLite, no OTEL
+docker compose -f docker-compose.sqlite.yml up --build
+
+# Postgres, no OTEL
+docker compose -f docker-compose.postgres.yml up --build
+
+# SQLite + OTEL (add observability stack)
+docker compose -f docker-compose.otel.sqlite.yml -f docker-compose.observability.yml up --build
+
+# Postgres + OTEL (add observability stack)
+docker compose -f docker-compose.otel.postgres.yml -f docker-compose.observability.yml up --build
+
+# GPU + SQLite + OTEL (add observability stack)
+docker compose -f docker-compose.gpu.sqlite.yml -f docker-compose.observability.yml up --build
+
+# GPU + Postgres + OTEL (add observability stack)
+docker compose -f docker-compose.gpu.postgres.yml -f docker-compose.observability.yml up --build
+```
+
+The `docker-compose.observability.yml` overlay adds Grafana Alloy (OTLP receiver), Prometheus, Grafana (`:3000`), and Tempo. It should only be layered on OTEL-enabled compose files.
+
+### payloadctl
 
 `payloadctl` supports tiering advisory commands that are useful during placement tuning and spill control:
 
@@ -133,14 +166,6 @@ Behavior notes:
 - `prefetch` is best-effort and idempotent; it does not guarantee immediate movement.
 - `pin` blocks spill while active. Use a finite `duration_ms` for bounded pinning windows.
 - `unpin` is safe to call repeatedly and is a no-op when no pin exists.
-
-Run the service with PostgreSQL using Docker Compose:
-
-```bash
-docker compose up --build
-```
-
-Compose uses `docker-compose.yml` and the Docker-ready config file `config/runtime-docker-postgres.yaml`.
 
 ## Clients (CPU vs CUDA)
 

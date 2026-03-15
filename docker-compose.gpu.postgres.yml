@@ -1,0 +1,42 @@
+services:
+  postgres:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: payload
+      POSTGRES_PASSWORD: payload
+      POSTGRES_DB: payload_manager
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U payload -d payload_manager"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    volumes:
+      - postgres-gpu-data:/var/lib/postgresql/data
+
+  payload-manager:
+    build:
+      context: .
+      dockerfile: Dockerfile.cuda
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: ["./payload-manager", "--config", "/app/conf/runtime-docker-gpu-postgres.yaml"]
+    ipc: host
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    ports:
+      - "50056:50051"
+    volumes:
+      - ./config/runtime-docker-gpu-postgres.yaml:/app/conf/runtime-docker-gpu-postgres.yaml:ro
+      - payload-gpu-postgres-data:/var/lib/payload-manager
+
+volumes:
+  postgres-gpu-data:
+  payload-gpu-postgres-data:

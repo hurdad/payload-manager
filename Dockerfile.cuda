@@ -47,7 +47,7 @@ RUN cmake -S ./src -B /workspace/build -G Ninja -DCMAKE_BUILD_TYPE=Release \
     -DPAYLOAD_MANAGER_BUILD_EXAMPLES=OFF \
     -DPAYLOAD_MANAGER_BUILD_PAYLOADCTL=OFF \
     && cmake --build /workspace/build \
-    && ctest --test-dir /workspace/build --output-on-failure \
+    && ctest --test-dir /workspace/build --output-on-failure -E payload_manager_integration_api \
     && cmake --build /workspace/build --target payload-manager
 
 
@@ -68,6 +68,7 @@ RUN apt-get update \
     && apt-get update \
     && apt-get install -y --no-install-recommends \
         ca-certificates \
+        sqlite3 \
         libarrow2300 \
         libarrow-cuda2300 \
         libprotobuf32t64 \

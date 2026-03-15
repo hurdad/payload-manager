@@ -41,12 +41,10 @@ RUN cmake -S ./src -B /workspace/build -G Ninja -DCMAKE_BUILD_TYPE=Release \
     -DPAYLOAD_MANAGER_ENABLE_OTEL=OFF \
     -DBUILD_TESTING=ON \
     -DPAYLOAD_MANAGER_BUILD_SERVICE=ON \
-    -DPAYLOAD_MANAGER_BUILD_CLIENT=OFF \
+    -DPAYLOAD_MANAGER_BUILD_CLIENT=ON \
     -DPAYLOAD_MANAGER_BUILD_EXAMPLES=OFF \
     -DPAYLOAD_MANAGER_BUILD_PAYLOADCTL=OFF \
-    && cmake --build /workspace/build \
-    && ctest --test-dir /workspace/build --output-on-failure -E payload_manager_integration_api \
-    && cmake --build /workspace/build --target payload-manager
+    && cmake --build /workspace/build --target payload_manager_integration_api
 
 
 FROM ubuntu:24.04 AS runtime
@@ -65,17 +63,13 @@ RUN apt-get update \
     && rm apache-arrow-apt-source-latest-$(lsb_release --codename --short).deb \
     && apt-get update \
     && apt-get install -y --no-install-recommends \
-        ca-certificates \
-        sqlite3 \
         libarrow2300 \
         libprotobuf32t64 \
         libgrpc++1.51t64 \
         libgrpc29t64 \
-        libyaml-cpp0.8 \
-        libpqxx-7.8t64 \
-        libsqlite3-0 \
         libspdlog1.12 \
-        libcurl4t64 \
     && rm -rf /var/lib/apt/lists/*
 
-COPY --from=builder /workspace/build/bin/payload-manager ./payload-manager
+COPY --from=builder /workspace/build/tests/integration/payload_manager_integration_api ./payload_manager_integration_api
+
+ENTRYPOINT ["./payload_manager_integration_api"]

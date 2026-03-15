@@ -229,7 +229,7 @@ void TestListPayloadsTierFilter() {
   AllocatePayloadRequest ram_req;
   ram_req.set_size_bytes(64);
   ram_req.set_preferred_tier(TIER_RAM);
-  const auto ram_resp = f.service.Allocate(ram_req);
+  const auto                                 ram_resp = f.service.Allocate(ram_req);
   payload::manager::v1::CommitPayloadRequest commit_ram;
   *commit_ram.mutable_id() = ram_resp.payload_descriptor().payload_id();
   f.service.Commit(commit_ram);
@@ -239,14 +239,14 @@ void TestListPayloadsTierFilter() {
   AllocatePayloadRequest disk_req;
   disk_req.set_size_bytes(64);
   disk_req.set_preferred_tier(TIER_DISK);
-  const auto disk_resp = f.service.Allocate(disk_req);
+  const auto                                 disk_resp = f.service.Allocate(disk_req);
   payload::manager::v1::CommitPayloadRequest commit_disk;
   *commit_disk.mutable_id() = disk_resp.payload_descriptor().payload_id();
   f.service.Commit(commit_disk);
 
   // List all — expect 2 payloads.
   payload::manager::v1::ListPayloadsRequest list_all;
-  const auto                               all = f.service.ListPayloads(list_all);
+  const auto                                all = f.service.ListPayloads(list_all);
   assert(all.payloads_size() == 2 && "expected 2 payloads total");
 
   // List with tier_filter=TIER_RAM — expect 1 payload (the RAM one).
@@ -254,18 +254,14 @@ void TestListPayloadsTierFilter() {
   list_ram.set_tier_filter(TIER_RAM);
   const auto ram_only = f.service.ListPayloads(list_ram);
   assert(ram_only.payloads_size() == 1 && "expected 1 RAM payload");
-  assert(ram_only.payloads(0).id().value() ==
-             ram_resp.payload_descriptor().payload_id().value() &&
-         "wrong payload returned for RAM filter");
+  assert(ram_only.payloads(0).id().value() == ram_resp.payload_descriptor().payload_id().value() && "wrong payload returned for RAM filter");
 
   // List with tier_filter=TIER_DISK — expect 1 payload (the DISK one).
   payload::manager::v1::ListPayloadsRequest list_disk;
   list_disk.set_tier_filter(TIER_DISK);
   const auto disk_only = f.service.ListPayloads(list_disk);
   assert(disk_only.payloads_size() == 1 && "expected 1 DISK payload");
-  assert(disk_only.payloads(0).id().value() ==
-             disk_resp.payload_descriptor().payload_id().value() &&
-         "wrong payload returned for DISK filter");
+  assert(disk_only.payloads(0).id().value() == disk_resp.payload_descriptor().payload_id().value() && "wrong payload returned for DISK filter");
 }
 
 } // namespace
