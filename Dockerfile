@@ -66,8 +66,10 @@ RUN apt-get update \
     && apt-get update \
     && apt-get install -y --no-install-recommends \
         ca-certificates \
+        sqlite3 \
         libarrow2300 \
         libprotobuf32t64 \
+
         libgrpc++1.51t64 \
         libgrpc29t64 \
         libyaml-cpp0.8 \

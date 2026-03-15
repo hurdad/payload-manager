@@ -1070,18 +1070,7 @@
             "uid": "tempo"
           },
           "queryType": "traceqlSearch",
-          "filters": [
-            {
-              "id": "service-name",
-              "operator": "=",
-              "scope": "resource",
-              "tag": "service.name",
-              "value": [
-                "payload-manager"
-              ],
-              "valueType": "string"
-            }
-          ],
+          "filters": [],
           "limit": 20,
           "tableType": "traces",
           "refId": "A"
