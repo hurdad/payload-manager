@@ -5,7 +5,14 @@ services:
       dockerfile: Dockerfile.cuda
     restart: unless-stopped
     command: ["./payload-manager", "--config", "/app/conf/runtime-docker-gpu-sqlite.yaml"]
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c '</dev/tcp/localhost/50051'"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 10s
     ipc: host
+    pid: host
     deploy:
       resources:
         reservations:
