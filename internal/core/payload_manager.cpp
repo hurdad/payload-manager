@@ -57,6 +57,21 @@ void PayloadManager::UpdateTierBytes(Tier tier, int64_t delta) {
   payload::observability::Metrics::Instance().SetTierOccupancyBytes(TierName(tier), bytes);
 }
 
+void PayloadManager::UpdateTierCount(Tier tier, int64_t delta) {
+  uint64_t count = 0;
+  {
+    std::lock_guard<std::mutex> lock(tier_count_guard_);
+    auto&                       val = tier_count_[static_cast<int>(tier)];
+    if (delta < 0 && static_cast<uint64_t>(-delta) > val) {
+      val = 0;
+    } else {
+      val = static_cast<uint64_t>(static_cast<int64_t>(val) + delta);
+    }
+    count = val;
+  }
+  payload::observability::Metrics::Instance().SetTierPayloadCount(TierName(tier), count);
+}
+
 namespace {
 
 bool IsReadableState(PayloadState state) {
@@ -353,8 +368,10 @@ PayloadDescriptor PayloadManager::Allocate(uint64_t size_bytes, Tier preferred, 
   record.spill_target   = static_cast<int>(spill_tier);
 
   // persist overrides TTL: a persisted payload never auto-expires.
+  const auto now_ms    = payload::util::ToUnixMillis(payload::util::Now());
+  record.created_at_ms = now_ms;
   if (!never_evict && ttl_ms > 0) {
-    record.expires_at_ms = payload::util::ToUnixMillis(payload::util::Now()) + ttl_ms;
+    record.expires_at_ms = now_ms + ttl_ms;
   }
 
   auto tx = repository_->Begin();
@@ -373,6 +390,7 @@ PayloadDescriptor PayloadManager::Allocate(uint64_t size_bytes, Tier preferred, 
 
   CacheSnapshot(desc);
   UpdateTierBytes(preferred, static_cast<int64_t>(size_bytes));
+  UpdateTierCount(preferred, 1);
   return desc;
 }
 
@@ -480,6 +498,7 @@ void PayloadManager::Delete(const PayloadID& id, bool force) {
     }
 
     UpdateTierBytes(payload_tier, -static_cast<int64_t>(payload_size));
+    UpdateTierCount(payload_tier, -1);
   } // payload_lock released
 
   // Prune the per-payload mutex now that the payload is fully deleted.
@@ -614,6 +633,8 @@ PayloadDescriptor PayloadManager::PromoteUnlocked(const PayloadID& id, Tier targ
   if (source_tier != target) {
     UpdateTierBytes(source_tier, -static_cast<int64_t>(record->size_bytes));
     UpdateTierBytes(target, static_cast<int64_t>(record->size_bytes));
+    UpdateTierCount(source_tier, -1);
+    UpdateTierCount(target, 1);
   }
   return descriptor;
 }
@@ -682,8 +703,10 @@ void PayloadManager::HydrateCaches() {
   }
 
   std::unordered_map<int, uint64_t> new_tier_bytes;
+  std::unordered_map<int, uint64_t> new_tier_count;
   for (const auto& record : records) {
     new_tier_bytes[static_cast<int>(record.tier)] += record.size_bytes;
+    new_tier_count[static_cast<int>(record.tier)] += 1;
   }
   std::unordered_map<int, uint64_t> tier_snapshot;
   {
@@ -691,8 +714,17 @@ void PayloadManager::HydrateCaches() {
     tier_bytes_   = std::move(new_tier_bytes);
     tier_snapshot = tier_bytes_;
   }
+  std::unordered_map<int, uint64_t> count_snapshot;
+  {
+    std::lock_guard<std::mutex> lock(tier_count_guard_);
+    tier_count_    = std::move(new_tier_count);
+    count_snapshot = tier_count_;
+  }
   for (const auto& [tier_int, bytes] : tier_snapshot) {
     payload::observability::Metrics::Instance().SetTierOccupancyBytes(TierName(static_cast<Tier>(tier_int)), bytes);
+  }
+  for (const auto& [tier_int, count] : count_snapshot) {
+    payload::observability::Metrics::Instance().SetTierPayloadCount(TierName(static_cast<Tier>(tier_int)), count);
   }
 }
 
@@ -756,6 +788,8 @@ void PayloadManager::ExecuteSpill(const PayloadID& id, Tier target, bool fsync) 
     payload::observability::Metrics::Instance().RecordSpillBytes("background", record->size_bytes);
     UpdateTierBytes(source_tier, -static_cast<int64_t>(record->size_bytes));
     UpdateTierBytes(target, static_cast<int64_t>(record->size_bytes));
+    UpdateTierCount(source_tier, -1);
+    UpdateTierCount(target, 1);
   }
 }
 

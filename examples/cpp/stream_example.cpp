@@ -1,6 +1,4 @@
 #include <grpcpp/client_context.h>
-#include <grpcpp/create_channel.h>
-#include <grpcpp/security/credentials.h>
 
 #include <cstdint>
 #include <iomanip>
@@ -10,7 +8,9 @@
 #include <string>
 
 #include "client/cpp/payload_manager_client.h"
+#include "otel_tracer.hpp"
 #include "payload/manager/v1.hpp"
+#include "traced_channel.hpp"
 
 namespace {
 
@@ -35,10 +35,14 @@ payload::manager::v1::StreamID MakeStreamId() {
 } // namespace
 
 int main(int argc, char** argv) {
-  // Optional endpoint argument keeps the example portable across environments.
-  const std::string target = argc > 1 ? argv[1] : "localhost:50051";
+  // argv[1]: server endpoint  (default localhost:50051)
+  // argv[2]: OTLP gRPC endpoint (default localhost:4317, empty to disable)
+  const std::string target  = argc > 1 ? argv[1] : "localhost:50051";
+  const std::string otlp_ep = argc > 2 ? argv[2] : "localhost:4317";
 
-  payload::manager::client::PayloadClient client(grpc::CreateChannel(target, grpc::InsecureChannelCredentials()));
+  OtelInit(otlp_ep, "cpp-examples");
+  auto channel = StartSpanAndMakeChannel(target, "stream_example");
+  payload::manager::client::PayloadClient client(channel);
 
   // Create and commit a payload that stream entries will reference by ID.
   auto writable = client.AllocateWritableBuffer(8, payload::manager::v1::TIER_RAM);
@@ -170,5 +174,7 @@ int main(int argc, char** argv) {
   std::cout << "Stream API calls completed for stream " << stream.namespace_() << "/" << stream.name()
             << ", read entries=" << read_response->entries_size() << ", range entries=" << range_response->entries_size()
             << ", subscribe_received=" << (got_entry ? "yes" : "no") << ", committed_offset=" << committed_response->offset() << '\n';
+  OtelEndSpan();
+  OtelShutdown();
   return 0;
 }

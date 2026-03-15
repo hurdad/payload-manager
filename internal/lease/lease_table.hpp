@@ -15,7 +15,8 @@ class LeaseTable {
 
   void Remove(const payload::manager::v1::LeaseID& lease_id);
 
-  bool HasActive(const payload::manager::v1::PayloadID& id);
+  bool     HasActive(const payload::manager::v1::PayloadID& id);
+  uint32_t CountActive(const payload::manager::v1::PayloadID& id);
 
   void RemoveAll(const payload::manager::v1::PayloadID& id);
 

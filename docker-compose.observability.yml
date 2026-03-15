@@ -20,6 +20,7 @@ services:
       - --stability.level=generally-available
     ports:
       - "4317:4317"   # OTLP gRPC
+      - "4318:4318"   # OTLP HTTP (used by integration test for root span export)
       - "12345:12345" # Alloy UI
     volumes:
       - ./grafana/alloy/config.alloy:/etc/alloy/config.alloy:ro

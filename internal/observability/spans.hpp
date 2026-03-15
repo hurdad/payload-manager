@@ -63,6 +63,7 @@ class Metrics {
   void ObserveSpillDurationMs(std::string_view op, double duration_ms);
   void RecordSpillBytes(std::string_view op, std::uint64_t bytes);
   void SetTierOccupancyBytes(std::string_view tier, std::uint64_t bytes);
+  void SetTierPayloadCount(std::string_view tier, std::uint64_t count);
   void RecordAllocationFailure(std::string_view tier);
   void SetSpillQueueDepth(std::size_t depth);
 
@@ -143,6 +144,9 @@ inline void Metrics::RecordSpillBytes(std::string_view, std::uint64_t) {
 }
 
 inline void Metrics::SetTierOccupancyBytes(std::string_view, std::uint64_t) {
+}
+
+inline void Metrics::SetTierPayloadCount(std::string_view, std::uint64_t) {
 }
 
 inline void Metrics::RecordAllocationFailure(std::string_view) {

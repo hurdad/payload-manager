@@ -90,6 +90,28 @@ bool LeaseTable::HasActive(const payload::manager::v1::PayloadID& id) {
   return has_active;
 }
 
+uint32_t LeaseTable::CountActive(const payload::manager::v1::PayloadID& id) {
+  std::lock_guard lock(mutex_);
+
+  const auto now         = Clock::now();
+  const auto payload_key = Key(id);
+  uint32_t   count       = 0;
+
+  auto range = by_payload_.equal_range(payload_key);
+  for (auto it = range.first; it != range.second;) {
+    auto lease_it = leases_.find(it->second);
+    if (lease_it == leases_.end() || IsExpired(lease_it->second, now) || Key(lease_it->second.payload_id) != payload_key) {
+      if (lease_it != leases_.end()) leases_.erase(lease_it);
+      it = by_payload_.erase(it);
+      continue;
+    }
+    ++count;
+    ++it;
+  }
+
+  return count;
+}
+
 void LeaseTable::RemoveAll(const payload::manager::v1::PayloadID& id) {
   std::lock_guard lock(mutex_);
 

@@ -1,6 +1,8 @@
 #include <grpcpp/grpcpp.h>
 
+#include <chrono>
 #include <cstdlib>
+#include <iomanip>
 #include <iostream>
 #include <memory>
 #include <optional>
@@ -26,7 +28,8 @@ static void Usage() {
             << "  payloadctl <addr> prefetch <uuid> <tier=ram|disk|gpu>\n"
             << "  payloadctl <addr> pin <uuid> [duration_ms]\n"
             << "  payloadctl <addr> unpin <uuid>\n"
-            << "  payloadctl <addr> stats\n";
+            << "  payloadctl <addr> stats\n"
+            << "  payloadctl <addr> list [tier=ram|disk|gpu]\n";
 }
 
 static int HexNibble(char c) {
@@ -396,6 +399,69 @@ int main(int argc, char** argv) {
     std::cout << "ram=" << resp.payloads_ram() << "\n";
     std::cout << "disk=" << resp.payloads_disk() << "\n";
     std::cout << "gpu=" << resp.payloads_gpu() << "\n";
+    return 0;
+  }
+
+  // ------------------------------------------------------------
+
+  if (cmd == "list") {
+    ListPayloadsRequest req;
+    if (argc >= 4) {
+      auto parsed = ParseTier(argv[3]);
+      if (!parsed.has_value()) {
+        std::cerr << "unsupported tier: " << argv[3] << "\n";
+        return 1;
+      }
+      req.set_tier_filter(parsed.value());
+    }
+
+    ListPayloadsResponse resp;
+
+    auto status = catalog_stub->ListPayloads(&ctx, req, &resp);
+
+    if (!status.ok()) {
+      std::cerr << status.error_message() << "\n";
+      return 2;
+    }
+
+    std::cout << std::left
+              << std::setw(38) << "UUID"
+              << std::setw(6)  << "TIER"
+              << std::setw(12) << "STATE"
+              << std::setw(14) << "SIZE"
+              << std::setw(10) << "AGE(s)"
+              << std::setw(8)  << "LEASES"
+              << "\n";
+
+    const uint64_t now_ms = static_cast<uint64_t>(
+        std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::system_clock::now().time_since_epoch()).count());
+
+    static const char* kTierName[]  = {"?", "gpu", "ram", "disk", "obj"};
+    static const char* kStateName[] = {"?", "allocated", "active", "spilling",
+                                       "durable", "evicting", "deleting", "expired", "deleted"};
+
+    for (const auto& p : resp.payloads()) {
+      const std::string uuid = ToUuidString(p.id().value());
+
+      int tier_idx  = (p.tier()  >= 0 && p.tier()  < 5) ? p.tier()  : 0;
+      int state_idx = (p.state() >= 0 && p.state() < 9) ? p.state() : 0;
+
+      const std::string age = p.created_at_ms() > 0
+          ? std::to_string((now_ms - p.created_at_ms()) / 1000)
+          : "?";
+
+      std::cout << std::left
+                << std::setw(38) << uuid
+                << std::setw(6)  << kTierName[tier_idx]
+                << std::setw(12) << kStateName[state_idx]
+                << std::setw(14) << p.size_bytes()
+                << std::setw(10) << age
+                << std::setw(8)  << p.active_leases()
+                << "\n";
+    }
+
+    std::cout << resp.payloads_size() << " payload(s)\n";
     return 0;
   }
 

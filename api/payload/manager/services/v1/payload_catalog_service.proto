@@ -130,4 +130,16 @@ service PayloadCatalogService {
   */
   rpc AppendPayloadMetadataEvent(payload.manager.catalog.v1.AppendPayloadMetadataEventRequest)
       returns (payload.manager.catalog.v1.AppendPayloadMetadataEventResponse);
+
+
+  // ---------------------------------------------------------------------------
+  // Listing
+  // ---------------------------------------------------------------------------
+
+  /*
+    Returns a summary row for every payload known to the service.
+    Optionally filtered by tier.
+  */
+  rpc ListPayloads(payload.manager.runtime.v1.ListPayloadsRequest)
+      returns (payload.manager.runtime.v1.ListPayloadsResponse);
 }

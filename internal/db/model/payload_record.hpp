@@ -29,6 +29,9 @@ struct PayloadRecord {
   // Monotonic placement/state version
   uint64_t version = 0;
 
+  // Wall-clock creation time (ms since epoch); 0 if not recorded (legacy rows).
+  uint64_t created_at_ms = 0;
+
   // Optional expiration (0 = none)
   uint64_t expires_at_ms = 0;
 

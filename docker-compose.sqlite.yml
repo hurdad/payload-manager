@@ -4,6 +4,7 @@ services:
       context: .
       dockerfile: Dockerfile
     restart: unless-stopped
+    hostname: payload-manager
     command: ["./payload-manager", "--config", "/app/conf/runtime-docker-sqlite.yaml"]
     ipc: host
     ports:

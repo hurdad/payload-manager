@@ -99,11 +99,14 @@ class PayloadManager {
   mutable std::mutex                                          spill_targets_guard_;
   std::unordered_map<std::string, payload::manager::v1::Tier> spill_targets_;
 
-  // Per-tier byte totals for occupancy metrics.
+  // Per-tier byte totals and payload counts for occupancy metrics.
   mutable std::mutex                tier_bytes_guard_;
   std::unordered_map<int, uint64_t> tier_bytes_;
+  mutable std::mutex                tier_count_guard_;
+  std::unordered_map<int, uint64_t> tier_count_;
 
   void UpdateTierBytes(payload::manager::v1::Tier tier, int64_t delta);
+  void UpdateTierCount(payload::manager::v1::Tier tier, int64_t delta);
 };
 
 } // namespace payload::core

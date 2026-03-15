@@ -1,13 +1,12 @@
-#include <grpcpp/create_channel.h>
-#include <grpcpp/security/credentials.h>
-
 #include <cstdint>
 #include <iostream>
 #include <memory>
 #include <string>
 
 #include "client/cpp/payload_manager_client.h"
+#include "otel_tracer.hpp"
 #include "payload/manager/v1.hpp"
+#include "traced_channel.hpp"
 
 namespace {
 
@@ -29,10 +28,14 @@ std::string UuidToHex(const std::string& uuid_bytes) {
 } // namespace
 
 int main(int argc, char** argv) {
-  // Endpoint can be passed on the command line for non-default deployments.
-  const std::string target = argc > 1 ? argv[1] : "localhost:50051";
+  // argv[1]: server endpoint  (default localhost:50051)
+  // argv[2]: OTLP gRPC endpoint (default localhost:4317, empty to disable)
+  const std::string target  = argc > 1 ? argv[1] : "localhost:50051";
+  const std::string otlp_ep = argc > 2 ? argv[2] : "localhost:4317";
 
-  payload::manager::client::PayloadClient client(grpc::CreateChannel(target, grpc::InsecureChannelCredentials()));
+  OtelInit(otlp_ep, "cpp-examples");
+  auto channel = StartSpanAndMakeChannel(target, "metadata_example");
+  payload::manager::client::PayloadClient client(channel);
 
   // Create a payload first; metadata APIs reference payload UUIDs.
   auto writable = client.AllocateWritableBuffer(8, payload::manager::v1::TIER_RAM);
@@ -85,5 +88,7 @@ int main(int argc, char** argv) {
   }
 
   std::cout << "Metadata updated for payload " << uuid_text << '\n';
+  OtelEndSpan();
+  OtelShutdown();
   return 0;
 }

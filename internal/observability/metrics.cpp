@@ -31,6 +31,11 @@
 #else
 #include <opentelemetry/sdk/metrics/export/periodic_exporting_metric_reader.h>
 #endif
+#include <opentelemetry/sdk/metrics/aggregation/aggregation_config.h>
+#include <opentelemetry/sdk/metrics/instruments.h>
+#include <opentelemetry/sdk/metrics/view/instrument_selector.h>
+#include <opentelemetry/sdk/metrics/view/meter_selector.h>
+#include <opentelemetry/sdk/metrics/view/view.h>
 #include <opentelemetry/sdk/resource/resource.h>
 
 #include "config/config.pb.h"
@@ -127,6 +132,29 @@ void RecordWithAttributes(const opentelemetry::nostd::shared_ptr<Instrument>& in
   }
 }
 
+// Histogram bucket boundaries capped at 1 s (1000 ms) for request-latency
+// and spill-duration metrics.  Prometheus heatmap panels in Grafana reflect
+// these boundaries as the y-axis range.
+std::unique_ptr<sdkmetrics::ViewRegistry> MakeViewRegistry() {
+  auto view_registry = std::make_unique<sdkmetrics::ViewRegistry>();
+
+  // Sub-millisecond through 1 s, logarithmically spaced.
+  const std::vector<double> kMsBuckets = {0.5, 1, 2, 5, 10, 20, 50, 100, 200, 500, 1000};
+
+  auto add_hist_view = [&](const std::string& instrument_name) {
+    auto agg_cfg         = std::make_shared<sdkmetrics::HistogramAggregationConfig>();
+    agg_cfg->boundaries_ = kMsBuckets;
+    view_registry->AddView(
+        std::make_unique<sdkmetrics::InstrumentSelector>(sdkmetrics::InstrumentType::kHistogram, instrument_name, "ms"),
+        std::make_unique<sdkmetrics::MeterSelector>("payload-manager", "0.1.0", ""),
+        std::make_unique<sdkmetrics::View>(instrument_name, "", sdkmetrics::AggregationType::kHistogram, agg_cfg));
+  };
+
+  add_hist_view("payload.request.latency_ms");
+  add_hist_view("payload.spill.duration_ms");
+  return view_registry;
+}
+
 } // namespace
 
 struct Metrics::Impl {
@@ -137,11 +165,14 @@ struct Metrics::Impl {
   opentelemetry::nostd::shared_ptr<metrics_api::Histogram<double>>      spill_duration_ms;
   opentelemetry::nostd::shared_ptr<metrics_api::Counter<std::uint64_t>> spill_bytes_total;
   opentelemetry::nostd::shared_ptr<metrics_api::ObservableInstrument>   tier_occupancy_gauge;
+  opentelemetry::nostd::shared_ptr<metrics_api::ObservableInstrument>   tier_count_gauge;
   opentelemetry::nostd::shared_ptr<metrics_api::Counter<std::uint64_t>> allocation_failure_count;
   opentelemetry::nostd::shared_ptr<metrics_api::ObservableInstrument>   spill_queue_depth_gauge;
 
   std::mutex                                    tier_occupancy_mutex;
   std::unordered_map<std::string, std::int64_t> tier_occupancy_values;
+  std::mutex                                    tier_count_mutex;
+  std::unordered_map<std::string, std::int64_t> tier_count_values;
   std::atomic<std::int64_t>                     spill_queue_depth{0};
 };
 
@@ -169,7 +200,7 @@ bool InitializeMetrics(const OtlpConfig& config) {
 #endif
 
   auto resource = BuildResource(config);
-  g_provider    = std::make_shared<sdkmetrics::MeterProvider>(std::unique_ptr<sdkmetrics::ViewRegistry>(new sdkmetrics::ViewRegistry()), resource);
+  g_provider    = std::make_shared<sdkmetrics::MeterProvider>(MakeViewRegistry(), resource);
   ConfigureResource(*g_provider, resource);
   AddMetricReaderCompat(g_provider, std::move(reader));
 
@@ -219,7 +250,7 @@ bool InitializeMetrics(const payload::runtime::config::RuntimeConfig& config) {
 #endif
 
   auto resource = BuildResource(otlp_config);
-  g_provider    = std::make_shared<sdkmetrics::MeterProvider>(std::unique_ptr<sdkmetrics::ViewRegistry>(new sdkmetrics::ViewRegistry()), resource);
+  g_provider    = std::make_shared<sdkmetrics::MeterProvider>(MakeViewRegistry(), resource);
   ConfigureResource(*g_provider, resource);
   AddMetricReaderCompat(g_provider, std::move(reader));
 
@@ -254,6 +285,7 @@ Metrics::Metrics() : impl_(std::make_unique<Impl>()) {
   impl_->allocation_failure_count =
       impl_->meter->CreateUInt64Counter("payload.allocation.failure_count", "1", "Total number of allocation failures due to tier capacity");
   impl_->tier_occupancy_gauge    = impl_->meter->CreateInt64ObservableGauge("payload.tier.occupancy_bytes", "Current tier occupancy in bytes", "By");
+  impl_->tier_count_gauge        = impl_->meter->CreateInt64ObservableGauge("payload.tier.payload_count", "Number of payloads per tier", "1");
   impl_->spill_queue_depth_gauge = impl_->meter->CreateInt64ObservableGauge("payload.spill.queue_depth", "Number of payloads queued for spill", "1");
   impl_->spill_queue_depth_gauge->AddCallback(
       [](metrics_api::ObserverResult result, void* state) {
@@ -273,6 +305,21 @@ Metrics::Metrics() : impl_(std::make_unique<Impl>()) {
             int_result->Observe(bytes, attributes);
           } else {
             int_result->Observe(bytes);
+          }
+        }
+      },
+      impl_.get());
+  impl_->tier_count_gauge->AddCallback(
+      [](metrics_api::ObserverResult result, void* state) {
+        auto*                       impl = static_cast<Impl*>(state);
+        std::lock_guard<std::mutex> lock(impl->tier_count_mutex);
+        auto int_result = opentelemetry::nostd::get<opentelemetry::nostd::shared_ptr<metrics_api::ObserverResultT<std::int64_t>>>(result);
+        for (const auto& [tier, count] : impl->tier_count_values) {
+          if (g_metrics_options.tier_labels_enabled) {
+            const std::initializer_list<AttributePair> attributes = {{"tier", tier}};
+            int_result->Observe(count, attributes);
+          } else {
+            int_result->Observe(count);
           }
         }
       },
@@ -362,6 +409,16 @@ void Metrics::SetTierOccupancyBytes(std::string_view tier, std::uint64_t bytes) 
   impl_->tier_occupancy_values[std::string(tier)] = bytes <= static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max())
                                                         ? static_cast<std::int64_t>(bytes)
                                                         : std::numeric_limits<std::int64_t>::max();
+}
+
+void Metrics::SetTierPayloadCount(std::string_view tier, std::uint64_t count) {
+  if (!impl_ || !impl_->tier_count_gauge || !g_metrics_options.tier_occupancy_metrics_enabled) {
+    return;
+  }
+
+  std::lock_guard<std::mutex> lock(impl_->tier_count_mutex);
+  impl_->tier_count_values[std::string(tier)] = static_cast<std::int64_t>(
+      std::min(count, static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max())));
 }
 
 } // namespace payload::observability

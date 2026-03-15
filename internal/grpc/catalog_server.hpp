@@ -43,6 +43,9 @@ class CatalogServer final : public payload::manager::v1::PayloadCatalogService::
   ::grpc::Status AppendPayloadMetadataEvent(::grpc::ServerContext*, const payload::manager::v1::AppendPayloadMetadataEventRequest*,
                                             payload::manager::v1::AppendPayloadMetadataEventResponse*) override;
 
+  ::grpc::Status ListPayloads(::grpc::ServerContext*, const payload::manager::v1::ListPayloadsRequest*,
+                              payload::manager::v1::ListPayloadsResponse*) override;
+
  private:
   std::shared_ptr<payload::service::CatalogService> service_;
 };

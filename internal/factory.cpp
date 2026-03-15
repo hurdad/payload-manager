@@ -61,7 +61,7 @@ void BootstrapSqliteSchema(const std::shared_ptr<db::sqlite::SqliteDB>& sqlite_d
   static const std::vector<std::string> kBootstrapSql = {
       "CREATE TABLE IF NOT EXISTS payload (id BLOB PRIMARY KEY, tier INTEGER NOT NULL, state INTEGER NOT NULL, size_bytes INTEGER NOT NULL, version "
       "INTEGER NOT NULL, expires_at_ms INTEGER, persist INTEGER NOT NULL DEFAULT 0, eviction_priority INTEGER NOT NULL DEFAULT 0, spill_target "
-      "INTEGER NOT NULL DEFAULT 0);",
+      "INTEGER NOT NULL DEFAULT 0, created_at_ms INTEGER NOT NULL DEFAULT (unixepoch() * 1000));",
       "CREATE TABLE IF NOT EXISTS payload_metadata (id BLOB PRIMARY KEY, json TEXT NOT NULL, schema TEXT, updated_at_ms INTEGER NOT NULL, FOREIGN "
       "KEY(id) REFERENCES payload(id) ON DELETE CASCADE);",
       "CREATE TABLE IF NOT EXISTS payload_lineage (parent_id BLOB NOT NULL, child_id BLOB NOT NULL, operation TEXT, role TEXT, parameters TEXT, "
@@ -88,6 +88,7 @@ void BootstrapSqliteSchema(const std::shared_ptr<db::sqlite::SqliteDB>& sqlite_d
   TryExecSqlite(sqlite_db, "ALTER TABLE payload ADD COLUMN persist INTEGER NOT NULL DEFAULT 0;");
   TryExecSqlite(sqlite_db, "ALTER TABLE payload ADD COLUMN eviction_priority INTEGER NOT NULL DEFAULT 0;");
   TryExecSqlite(sqlite_db, "ALTER TABLE payload ADD COLUMN spill_target INTEGER NOT NULL DEFAULT 0;");
+  TryExecSqlite(sqlite_db, "ALTER TABLE payload ADD COLUMN created_at_ms INTEGER NOT NULL DEFAULT (unixepoch() * 1000);");
 
   sqlite_db->Exec("SELECT id,tier,state,size_bytes,version FROM payload LIMIT 1;");
   sqlite_db->Exec("SELECT id,json,schema,updated_at_ms FROM payload_metadata LIMIT 1;");

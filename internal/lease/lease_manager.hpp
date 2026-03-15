@@ -21,7 +21,8 @@ class LeaseManager {
 
   void Release(const payload::manager::v1::LeaseID& lease_id);
 
-  bool HasActiveLeases(const payload::manager::v1::PayloadID& id);
+  bool     HasActiveLeases(const payload::manager::v1::PayloadID& id);
+  uint32_t CountActiveLeases(const payload::manager::v1::PayloadID& id);
 
   void InvalidateAll(const payload::manager::v1::PayloadID& id);
 

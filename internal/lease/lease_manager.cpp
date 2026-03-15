@@ -39,6 +39,10 @@ bool LeaseManager::HasActiveLeases(const payload::manager::v1::PayloadID& id) {
   return table_.HasActive(id);
 }
 
+uint32_t LeaseManager::CountActiveLeases(const payload::manager::v1::PayloadID& id) {
+  return table_.CountActive(id);
+}
+
 void LeaseManager::InvalidateAll(const payload::manager::v1::PayloadID& id) {
   table_.RemoveAll(id);
 }

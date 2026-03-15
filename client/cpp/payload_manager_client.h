@@ -103,6 +103,9 @@ class PayloadClient {
   arrow::Result<payload::manager::v1::AppendPayloadMetadataEventResponse> AppendPayloadMetadataEvent(
       const payload::manager::v1::AppendPayloadMetadataEventRequest& request) const;
 
+  /// List all payloads with summary info (tier, state, size, age, lease count).
+  arrow::Result<payload::manager::v1::ListPayloadsResponse> ListPayloads(const payload::manager::v1::ListPayloadsRequest& request) const;
+
   /// Fetch service stats.
   arrow::Result<payload::manager::v1::StatsResponse> Stats(const payload::manager::v1::StatsRequest& request) const;
 

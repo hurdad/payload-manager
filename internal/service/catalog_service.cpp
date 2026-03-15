@@ -316,4 +316,37 @@ AppendPayloadMetadataEventResponse CatalogService::AppendMetadataEvent(const App
   });
 }
 
+ListPayloadsResponse CatalogService::ListPayloads(const ListPayloadsRequest& req) {
+  return ObserveRpc("CatalogService.ListPayloads", nullptr, [&] {
+    ListPayloadsResponse resp;
+
+    auto tx      = ctx_.repository->Begin();
+    auto records = ctx_.repository->ListPayloads(*tx);
+
+    for (const auto& r : records) {
+      if (req.tier_filter() != TIER_UNSPECIFIED && r.tier != req.tier_filter()) {
+        continue;
+      }
+
+      auto* entry = resp.add_payloads();
+
+      PayloadID proto_id;
+      proto_id.set_value(payload::util::FromString(r.id).data(), 16);
+      *entry->mutable_id() = proto_id;
+
+      entry->set_tier(r.tier);
+      entry->set_state(r.state);
+      entry->set_size_bytes(r.size_bytes);
+      entry->set_created_at_ms(r.created_at_ms);
+      entry->set_expires_at_ms(r.expires_at_ms);
+
+      if (ctx_.lease_mgr) {
+        entry->set_active_leases(ctx_.lease_mgr->CountActiveLeases(proto_id));
+      }
+    }
+
+    return resp;
+  });
+}
+
 } // namespace payload::service

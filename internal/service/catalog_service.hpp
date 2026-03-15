@@ -34,6 +34,8 @@ class CatalogService {
 
   payload::manager::v1::AppendPayloadMetadataEventResponse AppendMetadataEvent(const payload::manager::v1::AppendPayloadMetadataEventRequest& req);
 
+  payload::manager::v1::ListPayloadsResponse ListPayloads(const payload::manager::v1::ListPayloadsRequest& req);
+
  private:
   ServiceContext ctx_;
 };

@@ -37,3 +37,23 @@ message DeleteRequest {
   payload.manager.core.v1.PayloadID id = 1;
   bool force = 2;
 }
+
+// Summary row returned by ListPayloads.
+message PayloadSummary {
+  payload.manager.core.v1.PayloadID  id             = 1;
+  payload.manager.core.v1.Tier       tier           = 2;
+  payload.manager.core.v1.PayloadState state        = 3;
+  uint64                              size_bytes     = 4;
+  uint64                              created_at_ms  = 5; // 0 = unknown (legacy row)
+  uint64                              expires_at_ms  = 6; // 0 = no expiration
+  uint32                              active_leases  = 7;
+}
+
+message ListPayloadsRequest {
+  // Optional tier filter; TIER_UNSPECIFIED means return all tiers.
+  payload.manager.core.v1.Tier tier_filter = 1;
+}
+
+message ListPayloadsResponse {
+  repeated PayloadSummary payloads = 1;
+}

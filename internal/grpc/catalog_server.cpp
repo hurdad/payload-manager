@@ -123,4 +123,14 @@ CatalogServer::CatalogServer(std::shared_ptr<payload::service::CatalogService> s
   }
 }
 
+::grpc::Status CatalogServer::ListPayloads(::grpc::ServerContext*, const payload::manager::v1::ListPayloadsRequest* req,
+                                          payload::manager::v1::ListPayloadsResponse* resp) {
+  try {
+    *resp = service_->ListPayloads(*req);
+    return ::grpc::Status::OK;
+  } catch (const std::exception& e) {
+    return ToStatus(e);
+  }
+}
+
 } // namespace payload::grpc

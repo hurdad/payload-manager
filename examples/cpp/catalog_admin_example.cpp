@@ -1,6 +1,3 @@
-#include <grpcpp/create_channel.h>
-#include <grpcpp/security/credentials.h>
-
 #include <cstdint>
 #include <iomanip>
 #include <iostream>
@@ -9,7 +6,9 @@
 #include <string>
 
 #include "client/cpp/payload_manager_client.h"
+#include "otel_tracer.hpp"
 #include "payload/manager/v1.hpp"
+#include "traced_channel.hpp"
 
 namespace {
 
@@ -27,11 +26,14 @@ std::string UuidToHex(const std::string& uuid_bytes) {
 } // namespace
 
 int main(int argc, char** argv) {
-  // Optional target parameter allows this admin walkthrough to run against any
-  // reachable Payload Manager endpoint.
-  const std::string target = argc > 1 ? argv[1] : "localhost:50051";
+  // argv[1]: server endpoint  (default localhost:50051)
+  // argv[2]: OTLP gRPC endpoint (default localhost:4317, empty to disable)
+  const std::string target  = argc > 1 ? argv[1] : "localhost:50051";
+  const std::string otlp_ep = argc > 2 ? argv[2] : "localhost:4317";
 
-  payload::manager::client::PayloadClient client(grpc::CreateChannel(target, grpc::InsecureChannelCredentials()));
+  OtelInit(otlp_ep, "cpp-examples");
+  auto channel = StartSpanAndMakeChannel(target, "catalog_admin_example");
+  payload::manager::client::PayloadClient client(channel);
 
   // Allocate a short-lived RAM payload to exercise tiering/catalog APIs
   // without leaving persistent demo data behind.
@@ -75,7 +77,7 @@ int main(int argc, char** argv) {
 
   payload::manager::v1::SpillRequest spill_request;
   *spill_request.add_ids() = payload_id;
-  spill_request.set_policy(payload::manager::v1::SPILL_POLICY_BEST_EFFORT);
+  spill_request.set_policy(payload::manager::v1::SPILL_POLICY_BLOCKING);
   spill_request.set_wait_for_leases(true);
 
   auto spill = client.Spill(spill_request);
@@ -123,5 +125,7 @@ int main(int argc, char** argv) {
 
   std::cout << "Catalog/Admin API calls completed for payload " << uuid_text << " (lineage edges returned=" << lineage.ValueOrDie().edges_size()
             << ")\n";
+  OtelEndSpan();
+  OtelShutdown();
   return 0;
 }

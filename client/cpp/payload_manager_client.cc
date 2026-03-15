@@ -432,6 +432,16 @@ arrow::Result<payload::manager::v1::AppendPayloadMetadataEventResponse> PayloadC
   return response;
 }
 
+arrow::Result<payload::manager::v1::ListPayloadsResponse> PayloadClient::ListPayloads(
+    const payload::manager::v1::ListPayloadsRequest& request) const {
+  payload::manager::v1::ListPayloadsResponse response;
+  grpc::ClientContext                        ctx;
+  InjectTraceContext(ctx);
+
+  ARROW_RETURN_NOT_OK(GrpcToArrow(catalog_stub_->ListPayloads(&ctx, request, &response), "ListPayloads"));
+  return response;
+}
+
 arrow::Result<payload::manager::v1::StatsResponse> PayloadClient::Stats(const payload::manager::v1::StatsRequest& request) const {
   payload::manager::v1::StatsResponse response;
   grpc::ClientContext                 ctx;

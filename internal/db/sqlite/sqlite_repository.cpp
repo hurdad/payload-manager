@@ -107,8 +107,8 @@ Result SqliteRepository::InsertPayload(Transaction& t, const model::PayloadRecor
   auto* db = TX(t).Handle();
 
   const char* sql =
-      "INSERT INTO payload(id,tier,state,size_bytes,version,expires_at_ms,persist,eviction_priority,spill_target)"
-      " VALUES(?,?,?,?,?,?,?,?,?);";
+      "INSERT INTO payload(id,tier,state,size_bytes,version,expires_at_ms,persist,eviction_priority,spill_target,created_at_ms)"
+      " VALUES(?,?,?,?,?,?,?,?,?,?);";
   sqlite3_stmt* st = nullptr;
   if (sqlite3_prepare_v2(db, sql, -1, &st, nullptr) != SQLITE_OK) return Result::Err(ErrorCode::InternalError, sqlite3_errmsg(db));
 
@@ -125,6 +125,11 @@ Result SqliteRepository::InsertPayload(Transaction& t, const model::PayloadRecor
   BindI32(st, 7, r.persist ? 1 : 0);
   BindI32(st, 8, r.eviction_priority);
   BindI32(st, 9, r.spill_target);
+  if (r.created_at_ms > 0) {
+    BindU64(st, 10, r.created_at_ms);
+  } else {
+    sqlite3_bind_null(st, 10);
+  }
 
   int rc = sqlite3_step(st);
   sqlite3_finalize(st);
@@ -135,7 +140,7 @@ Result SqliteRepository::InsertPayload(Transaction& t, const model::PayloadRecor
 std::optional<model::PayloadRecord> SqliteRepository::GetPayload(Transaction& t, const std::string& id) {
   auto* db = TX(t).Handle();
 
-  const char*   sql = "SELECT id,tier,state,size_bytes,version,expires_at_ms,persist,eviction_priority,spill_target FROM payload WHERE id=?;";
+  const char*   sql = "SELECT id,tier,state,size_bytes,version,expires_at_ms,persist,eviction_priority,spill_target,created_at_ms FROM payload WHERE id=?;";
   sqlite3_stmt* st  = nullptr;
   if (sqlite3_prepare_v2(db, sql, -1, &st, nullptr) != SQLITE_OK) return std::nullopt;
 
@@ -157,6 +162,7 @@ std::optional<model::PayloadRecord> SqliteRepository::GetPayload(Transaction& t,
   r.persist           = ColI32(st, 6) != 0;
   r.eviction_priority = ColI32(st, 7);
   r.spill_target      = ColI32(st, 8);
+  r.created_at_ms     = sqlite3_column_type(st, 9) != SQLITE_NULL ? ColU64(st, 9) : 0;
 
   sqlite3_finalize(st);
   return r;
@@ -165,7 +171,7 @@ std::optional<model::PayloadRecord> SqliteRepository::GetPayload(Transaction& t,
 std::vector<model::PayloadRecord> SqliteRepository::ListPayloads(Transaction& t) {
   auto* db = TX(t).Handle();
 
-  const char*   sql = "SELECT id,tier,state,size_bytes,version,expires_at_ms,persist,eviction_priority,spill_target FROM payload;";
+  const char*   sql = "SELECT id,tier,state,size_bytes,version,expires_at_ms,persist,eviction_priority,spill_target,created_at_ms FROM payload;";
   sqlite3_stmt* st  = nullptr;
   if (sqlite3_prepare_v2(db, sql, -1, &st, nullptr) != SQLITE_OK) return {};
 
@@ -181,6 +187,7 @@ std::vector<model::PayloadRecord> SqliteRepository::ListPayloads(Transaction& t)
     r.persist           = ColI32(st, 6) != 0;
     r.eviction_priority = ColI32(st, 7);
     r.spill_target      = ColI32(st, 8);
+    r.created_at_ms     = sqlite3_column_type(st, 9) != SQLITE_NULL ? ColU64(st, 9) : 0;
     records.push_back(std::move(r));
   }
 
@@ -220,7 +227,7 @@ std::vector<model::PayloadRecord> SqliteRepository::ListExpiredPayloads(Transact
   auto* db = TX(t).Handle();
 
   const char* sql =
-      "SELECT id,tier,state,size_bytes,version,expires_at_ms,persist,eviction_priority,spill_target"
+      "SELECT id,tier,state,size_bytes,version,expires_at_ms,persist,eviction_priority,spill_target,created_at_ms"
       " FROM payload WHERE expires_at_ms > 0 AND expires_at_ms <= ?;";
   sqlite3_stmt* st = nullptr;
   if (sqlite3_prepare_v2(db, sql, -1, &st, nullptr) != SQLITE_OK) return {};
@@ -239,6 +246,7 @@ std::vector<model::PayloadRecord> SqliteRepository::ListExpiredPayloads(Transact
     r.persist           = ColI32(st, 6) != 0;
     r.eviction_priority = ColI32(st, 7);
     r.spill_target      = ColI32(st, 8);
+    r.created_at_ms     = sqlite3_column_type(st, 9) != SQLITE_NULL ? ColU64(st, 9) : 0;
     records.push_back(std::move(r));
   }
 
