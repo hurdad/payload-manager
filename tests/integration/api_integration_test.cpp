@@ -14,14 +14,17 @@
 
   Covered:
     1. RAM round-trip     – allocate, write via shm, commit, read via shm, verify bytes, delete
-    2. Spill + promote    – RAM → disk → RAM, data survives both transitions
-    3. Pin / unpin        – pinned payload resists spill; spill succeeds after unpin
-    4. Metadata           – upsert, replace, append event
-    5. Lineage            – add edges, traverse graph
-    6. Stats              – RAM payload count tracks allocate/delete
-    7. ListPayloads       – unfiltered list grows on allocate; tier filter
+    2. Disk round-trip    – allocate, write via mmap file, commit, read back, verify bytes, delete
+    3. GPU round-trip     – allocate, commit, verify descriptor, read lease, delete
+                           (compiled in only when PAYLOAD_CLIENT_ARROW_CUDA=1)
+    4. Spill + promote    – RAM → disk → RAM, data survives both transitions
+    5. Pin / unpin        – pinned payload resists spill; spill succeeds after unpin
+    6. Metadata           – upsert, replace, append event
+    7. Lineage            – add edges, traverse graph
+    8. Stats              – RAM payload count tracks allocate/delete
+    9. ListPayloads       – unfiltered list grows on allocate; tier filter
                            returns only RAM entries; deleted payloads vanish
-    8. Stream             – create, append, read, subscribe, commit offset,
+   10. Stream             – create, append, read, subscribe, commit offset,
                            get committed, get range, cascade delete
 */
 
@@ -166,6 +169,65 @@ StreamID MakeStreamId(const std::string& name) {
 // ---------------------------------------------------------------------------
 // Test cases
 // ---------------------------------------------------------------------------
+
+void TestDiskRoundTrip(const PayloadClient& client, const std::string& tp) {
+  log("Disk round-trip: allocate → write via mmap → commit → read → verify → delete", tp);
+
+  constexpr uint64_t kSize = 256;
+  constexpr uint8_t  kFill = 0xCD;
+
+  auto wr = client.AllocateWritableBuffer(kSize, TIER_DISK);
+  ASSERT_OK(wr.status());
+  auto wp = wr.ValueOrDie();
+  ASSERT_TRUE(wp.buffer != nullptr);
+  ASSERT_EQ(static_cast<uint64_t>(wp.buffer->size()), kSize);
+  ASSERT_TRUE(wp.descriptor.has_disk());
+  ASSERT_EQ(wp.descriptor.tier(), TIER_DISK);
+  std::memset(wp.buffer->mutable_data(), kFill, static_cast<size_t>(kSize));
+
+  ASSERT_OK(client.CommitPayload(wp.descriptor.payload_id()));
+
+  auto rd = client.AcquireReadableBuffer(wp.descriptor.payload_id());
+  ASSERT_OK(rd.status());
+  auto rp = rd.ValueOrDie();
+  ASSERT_EQ(static_cast<uint64_t>(rp.buffer->size()), kSize);
+  for (uint64_t i = 0; i < kSize; ++i) ASSERT_EQ(rp.buffer->data()[i], kFill);
+  ASSERT_OK(client.Release(rp.lease_id));
+
+  DeletePayload(client, wp.descriptor.payload_id());
+}
+
+#if PAYLOAD_CLIENT_ARROW_CUDA
+void TestGpuRoundTrip(const PayloadClient& client, const std::string& tp) {
+  log("GPU round-trip: allocate → commit → verify descriptor → read lease → delete", tp);
+
+  constexpr uint64_t kSize = 256;
+
+  auto wr = client.AllocateWritableBuffer(kSize, TIER_GPU);
+  if (!wr.ok()) {
+    // GPU tier not configured on this server; skip gracefully.
+    std::cout << "  [skip] GPU not available: " << wr.status().ToString() << '\n';
+    return;
+  }
+  auto wp = wr.ValueOrDie();
+  ASSERT_TRUE(wp.buffer != nullptr);
+  ASSERT_EQ(static_cast<uint64_t>(wp.buffer->size()), kSize);
+  ASSERT_TRUE(wp.descriptor.has_gpu());
+  ASSERT_EQ(wp.descriptor.tier(), TIER_GPU);
+  // GPU buffer is device memory — host-side data write requires CUDA APIs.
+  // Lifecycle correctness (alloc → commit → lease → release → delete) is
+  // validated here; data-plane verification belongs in CUDA-specific tests.
+  ASSERT_OK(client.CommitPayload(wp.descriptor.payload_id()));
+
+  auto rd = client.AcquireReadableBuffer(wp.descriptor.payload_id());
+  ASSERT_OK(rd.status());
+  auto rp = rd.ValueOrDie();
+  ASSERT_EQ(static_cast<uint64_t>(rp.buffer->size()), kSize);
+  ASSERT_OK(client.Release(rp.lease_id));
+
+  DeletePayload(client, wp.descriptor.payload_id());
+}
+#endif // PAYLOAD_CLIENT_ARROW_CUDA
 
 void TestRamRoundTrip(const PayloadClient& client, const std::string& tp) {
   log("RAM round-trip: allocate → write → commit → read → verify → delete", tp);
@@ -522,6 +584,10 @@ int main(int argc, char** argv) {
   };
 
   run("TestRamRoundTrip", TestRamRoundTrip);
+  run("TestDiskRoundTrip", TestDiskRoundTrip);
+#if PAYLOAD_CLIENT_ARROW_CUDA
+  run("TestGpuRoundTrip", TestGpuRoundTrip);
+#endif
   run("TestSpillAndPromote", TestSpillAndPromote);
   run("TestPinBlocksSpill", TestPinBlocksSpill);
   run("TestMetadata", TestMetadata);

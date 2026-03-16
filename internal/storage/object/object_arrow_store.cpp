@@ -2,6 +2,7 @@
 
 #include <arrow/io/interfaces.h>
 #include <arrow/result.h>
+#include <google/protobuf/util/json_util.h>
 
 #include "internal/storage/common/arrow_utils.hpp"
 #include "internal/storage/common/path_utils.hpp"
@@ -19,7 +20,8 @@ ObjectArrowStore::ObjectArrowStore(std::shared_ptr<arrow::fs::FileSystem> fs, st
 /*
   Object key layout:
 
-      <root_path>/<uuid>.bin
+      <root_path>/<uuid>.bin       — payload data
+      <root_path>/<uuid>.meta.json — sidecar metadata
 */
 std::string ObjectArrowStore::ObjectPath(const PayloadID& id) const {
   common::ValidatePayloadId(id.value());
@@ -27,6 +29,14 @@ std::string ObjectArrowStore::ObjectPath(const PayloadID& id) const {
     return root_path_ + id.value() + ".bin";
   }
   return root_path_ + "/" + id.value() + ".bin";
+}
+
+std::string ObjectArrowStore::SidecarObjectPath(const PayloadID& id) const {
+  common::ValidatePayloadId(id.value());
+  if (!root_path_.empty() && root_path_.back() == '/') {
+    return root_path_ + id.value() + ".meta.json";
+  }
+  return root_path_ + "/" + id.value() + ".meta.json";
 }
 
 /*
@@ -62,10 +72,31 @@ void ObjectArrowStore::Write(const PayloadID& id, const std::shared_ptr<arrow::B
 }
 
 /*
-  Delete object
+  Delete object and sidecar (sidecar removal is best-effort).
 */
 void ObjectArrowStore::Remove(const PayloadID& id) {
   Unwrap(fs_->DeleteFile(ObjectPath(id)));
+  (void)fs_->DeleteFile(SidecarObjectPath(id));
+}
+
+/*
+  Write <uuid>.meta.json to object storage.
+*/
+void ObjectArrowStore::WriteSidecar(const PayloadID& id, const payload::manager::catalog::v1::PayloadArchiveMetadata& meta) {
+  google::protobuf::util::JsonPrintOptions opts;
+  opts.add_whitespace                = true;
+  opts.always_print_primitive_fields = false;
+
+  std::string json;
+  auto        status = google::protobuf::util::MessageToJsonString(meta, &json, opts);
+  if (!status.ok()) {
+    throw std::runtime_error("WriteSidecar: serialization failed: " + status.ToString());
+  }
+
+  const auto path = SidecarObjectPath(id);
+  auto       out  = Unwrap(fs_->OpenOutputStream(path));
+  Unwrap(out->Write(json.data(), static_cast<int64_t>(json.size())));
+  Unwrap(out->Close());
 }
 
 } // namespace payload::storage

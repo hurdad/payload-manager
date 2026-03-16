@@ -86,6 +86,17 @@ class StorageBackend {
   virtual void Remove(const payload::manager::v1::PayloadID& id) = 0;
 
   // ------------------------------------------------------------------
+  // Sidecar metadata
+  // ------------------------------------------------------------------
+  /*
+    Write a JSON sidecar (<uuid>.meta.json) alongside the payload data.
+
+    Only implemented by durable tiers (disk, object).  RAM/GPU ignore it.
+  */
+  virtual void WriteSidecar(const payload::manager::v1::PayloadID&, const payload::manager::catalog::v1::PayloadArchiveMetadata&) {
+  }
+
+  // ------------------------------------------------------------------
   // Tier type
   // ------------------------------------------------------------------
   virtual payload::manager::v1::Tier TierType() const = 0;

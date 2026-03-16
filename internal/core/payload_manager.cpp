@@ -1,5 +1,7 @@
 #include "payload_manager.hpp"
 
+#include <google/protobuf/util/json_util.h>
+
 #include <mutex>
 #include <stdexcept>
 
@@ -158,6 +160,64 @@ PayloadDescriptor ToPayloadDescriptor(const db::model::PayloadRecord& record, co
     }
   }
   return descriptor;
+}
+
+// ---------------------------------------------------------------------------
+// Sidecar helper
+// ---------------------------------------------------------------------------
+
+/*
+  Build a PayloadArchiveMetadata from the DB record, its resolved descriptor,
+  and optional parent lineage.  Used to write the .meta.json sidecar when a
+  payload lands on a durable tier (disk or object).
+*/
+payload::manager::catalog::v1::PayloadArchiveMetadata BuildArchiveMetadata(const payload::db::model::PayloadRecord&       record,
+                                                                           const payload::manager::v1::PayloadDescriptor& descriptor,
+                                                                           payload::db::Repository&                       repo) {
+  using namespace payload::manager::catalog::v1;
+
+  PayloadArchiveMetadata meta;
+  *meta.mutable_uuid() = descriptor.payload_id();
+  meta.set_metadata_version(1);
+
+  if (record.created_at_ms > 0) {
+    auto* ts = meta.mutable_created_at();
+    ts->set_seconds(static_cast<int64_t>(record.created_at_ms / 1000));
+    ts->set_nanos(static_cast<int32_t>((record.created_at_ms % 1000) * 1'000'000));
+  }
+
+  const auto now_ms = payload::util::ToUnixMillis(payload::util::Now());
+  {
+    auto* ts = meta.mutable_archived_at();
+    ts->set_seconds(static_cast<int64_t>(now_ms / 1000));
+    ts->set_nanos(static_cast<int32_t>((now_ms % 1000) * 1'000'000));
+  }
+
+  *meta.mutable_payload_descriptor() = descriptor;
+  meta.mutable_compression()->set_type(COMPRESSION_NONE);
+
+  // Parent lineage edges.
+  auto tx      = repo.Begin();
+  auto parents = repo.GetParents(*tx, record.id);
+  for (const auto& edge : parents) {
+    auto* e = meta.add_lineage();
+    e->set_operation(edge.operation);
+    e->set_role(edge.role);
+    payload::manager::v1::PayloadID parent_id;
+    parent_id.set_value(edge.parent_id);
+    *e->mutable_parent() = parent_id;
+    if (!edge.parameters.empty()) {
+      e->set_parameters(edge.parameters);
+    }
+  }
+
+  // User metadata (dataset / schema fields).
+  auto user_meta = repo.GetMetadata(*tx, record.id);
+  if (user_meta.has_value()) {
+    if (!user_meta->schema.empty()) meta.set_dataset(user_meta->schema);
+  }
+
+  return meta;
 }
 
 } // namespace
@@ -438,6 +498,18 @@ PayloadDescriptor PayloadManager::Commit(const PayloadID& id) {
   auto       hydrated   = descriptor;
   PopulateLocation(&hydrated);
   CacheSnapshot(hydrated);
+
+  // Write sidecar for durable tiers (disk, object) on commit.
+  const auto storage_it = storage_.find(record->tier);
+  if (storage_it != storage_.end() && storage_it->second) {
+    try {
+      auto meta = BuildArchiveMetadata(*record, hydrated, *repository_);
+      storage_it->second->WriteSidecar(id, meta);
+    } catch (const std::exception& e) {
+      payload::observability::LogWarn(std::string("commit: sidecar write failed: ") + e.what());
+    }
+  }
+
   return hydrated;
 }
 
@@ -778,6 +850,19 @@ void PayloadManager::ExecuteSpill(const PayloadID& id, Tier target, bool fsync) 
 
     auto buffer = src_it->second->Read(id);
     dst_it->second->Write(id, buffer, fsync);
+
+    // Write sidecar alongside the newly-spilled data.
+    try {
+      record->tier    = target; // temp: descriptor needs correct tier
+      auto descriptor = ToPayloadDescriptor(*record, shm_prefix_);
+      PopulateLocation(&descriptor);
+      auto meta = BuildArchiveMetadata(*record, descriptor, *repository_);
+      dst_it->second->WriteSidecar(id, meta);
+      record->tier = source_tier; // restore before DB update below
+    } catch (const std::exception& e) {
+      record->tier = source_tier;
+      payload::observability::LogWarn(std::string("spill: sidecar write failed: ") + e.what());
+    }
   }
 
   record->tier = target;

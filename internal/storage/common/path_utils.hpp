@@ -25,4 +25,9 @@ inline std::filesystem::path PayloadPath(const std::filesystem::path& root, cons
   return root / (payload_id + ".bin");
 }
 
+inline std::filesystem::path SidecarPath(const std::filesystem::path& root, const std::string& payload_id) {
+  ValidatePayloadId(payload_id);
+  return root / (payload_id + ".meta.json");
+}
+
 } // namespace payload::storage::common

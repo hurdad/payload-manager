@@ -1,8 +1,15 @@
 #include "disk_arrow_store.hpp"
 
 #include <arrow/io/file.h>
+#include <fcntl.h>
+#include <google/protobuf/util/json_util.h>
+#include <sys/stat.h>
+#include <unistd.h>
 
+#include <cerrno>
+#include <cstring>
 #include <filesystem>
+#include <fstream>
 
 #include "internal/storage/common/arrow_utils.hpp"
 #include "internal/storage/common/path_utils.hpp"
@@ -33,11 +40,27 @@ DiskArrowStore::DiskArrowStore(std::filesystem::path root) : root_(std::move(roo
 }
 
 /*
-  Disk tier cannot allocate writable buffers.
-  Only RAM/GPU tiers allocate.
+  Pre-allocate the backing file so the client can mmap it writable.
+  Uses open(O_CREAT|O_EXCL) + ftruncate to reserve space atomically.
+  The return value is unused by PayloadManager::Allocate.
 */
-std::shared_ptr<arrow::Buffer> DiskArrowStore::Allocate(const PayloadID&, uint64_t) {
-  throw std::runtime_error("disk tier does not support direct allocation");
+std::shared_ptr<arrow::Buffer> DiskArrowStore::Allocate(const PayloadID& id, uint64_t size_bytes) {
+  const auto path = PayloadPath(root_, Key(id));
+
+  int fd = open(path.c_str(), O_RDWR | O_CREAT | O_EXCL, S_IRUSR | S_IWUSR);
+  if (fd < 0) {
+    throw std::runtime_error("disk allocate: open failed for " + path.string() + ": " + std::strerror(errno));
+  }
+
+  if (size_bytes > 0 && ftruncate(fd, static_cast<off_t>(size_bytes)) != 0) {
+    const int saved = errno;
+    close(fd);
+    std::filesystem::remove(path);
+    throw std::runtime_error("disk allocate: ftruncate failed for " + path.string() + ": " + std::strerror(saved));
+  }
+
+  close(fd);
+  return nullptr;
 }
 
 /*
@@ -81,10 +104,47 @@ void DiskArrowStore::Write(const PayloadID& id, const std::shared_ptr<arrow::Buf
 }
 
 /*
-  Remove payload from disk
+  Remove payload from disk. Sidecar is cleaned up best-effort.
 */
 void DiskArrowStore::Remove(const PayloadID& id) {
   std::filesystem::remove(PayloadPath(root_, Key(id)));
+  std::error_code ec;
+  std::filesystem::remove(SidecarPath(root_, Key(id)), ec);
+}
+
+/*
+  Write <uuid>.meta.json alongside the data file.
+  Uses write-to-tmp + atomic rename for crash safety.
+*/
+void DiskArrowStore::WriteSidecar(const PayloadID& id, const payload::manager::catalog::v1::PayloadArchiveMetadata& meta) {
+  google::protobuf::util::JsonPrintOptions opts;
+  opts.add_whitespace                = true;
+  opts.always_print_primitive_fields = false;
+
+  std::string json;
+  auto        status = google::protobuf::util::MessageToJsonString(meta, &json, opts);
+  if (!status.ok()) {
+    throw std::runtime_error("WriteSidecar: serialization failed for " + Key(id) + ": " + status.ToString());
+  }
+
+  const auto path = SidecarPath(root_, Key(id));
+  const auto tmp  = path.string() + ".tmp";
+
+  {
+    std::ofstream out(tmp, std::ios::binary | std::ios::trunc);
+    if (!out) {
+      throw std::runtime_error("WriteSidecar: open failed for " + tmp + ": " + std::strerror(errno));
+    }
+    out.write(json.data(), static_cast<std::streamsize>(json.size()));
+  }
+
+  try {
+    std::filesystem::rename(tmp, path);
+  } catch (...) {
+    std::error_code ec;
+    std::filesystem::remove(tmp, ec);
+    throw;
+  }
 }
 
 } // namespace payload::storage

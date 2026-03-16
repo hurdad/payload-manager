@@ -32,6 +32,8 @@ class DiskArrowStore final : public StorageBackend {
 
   void Remove(const payload::manager::v1::PayloadID& id) override;
 
+  void WriteSidecar(const payload::manager::v1::PayloadID& id, const payload::manager::catalog::v1::PayloadArchiveMetadata& meta) override;
+
   payload::manager::v1::Tier TierType() const override {
     return payload::manager::v1::TIER_DISK;
   }
