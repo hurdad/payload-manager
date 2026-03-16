@@ -1,10 +1,13 @@
 #!/usr/bin/env python3
-"""Allocate a GPU-tier payload, write an incrementing pattern via CUDA, and verify.
+"""Allocate a GPU-tier payload, write an incrementing pattern via Arrow CUDA, and verify.
 
-This example mirrors the C++ gpu_example.  It requires ``cupy`` to be installed
-and a CUDA-capable GPU to be present.  When neither is available the script
-prints a message and exits cleanly with code 0 so CI pipelines that lack a GPU
-are not broken.
+This example mirrors the C++ gpu_example.  It requires ``pyarrow`` built with
+CUDA support (``pyarrow.cuda``) and a CUDA-capable GPU.  When neither is
+available the script prints a message and exits cleanly with code 0 so CI
+pipelines that lack a GPU are not broken.
+
+``pyarrow.cuda`` is provided by ``libarrow-cuda`` and the ``python3-pyarrow``
+package from the Apache Arrow apt repository on Ubuntu.
 
 Usage:
     gpu_example.py [endpoint]
@@ -23,39 +26,43 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT / "client/python"))
 
+import uuid as _uuid_mod
+
 import grpc
+import pyarrow as pa
 
 from payload_manager_client import PayloadClient
 from payload.manager.core.v1 import types_pb2
 
 
 # ---------------------------------------------------------------------------
-# Optional cupy import – skip gracefully when CUDA is not available.
+# Optional pyarrow.cuda import – skip gracefully when CUDA is not available.
 # ---------------------------------------------------------------------------
 try:
-    import cupy as cp  # type: ignore[import]
-    _HAS_CUPY = True
-except ImportError:
-    _HAS_CUPY = False
+    import pyarrow.cuda as pac  # type: ignore[import]
+    _HAS_ARROW_CUDA = True
+except (ImportError, AttributeError):
+    _HAS_ARROW_CUDA = False
 
 
 def _check_cuda_available() -> bool:
-    """Return True if at least one CUDA device is accessible via cupy."""
-    if not _HAS_CUPY:
+    """Return True if at least one CUDA device is accessible."""
+    if not _HAS_ARROW_CUDA:
         return False
     try:
-        return cp.cuda.runtime.getDeviceCount() > 0
-    except cp.cuda.runtime.CUDARuntimeError:
+        ctx = pac.Context(0)
+        return ctx.device_count > 0
+    except Exception:
         return False
 
 
 def main() -> int:
     target = sys.argv[1] if len(sys.argv) > 1 else "localhost:50051"
 
-    if not _HAS_CUPY:
+    if not _HAS_ARROW_CUDA:
         print(
-            "cupy is not installed – skipping GPU example.\n"
-            "Install it with: pip install cupy-cuda12x  (adjust for your CUDA version)"
+            "pyarrow.cuda is not available – skipping GPU example.\n"
+            "Install libarrow-cuda and python3-pyarrow from the Apache Arrow apt repo."
         )
         return 0
 
@@ -68,30 +75,29 @@ def main() -> int:
     payload_size = 64
 
     # Allocate a GPU-tier payload.  The server returns a descriptor whose
-    # ``gpu`` field carries a CUDA IPC handle.  The Python client opens that
-    # handle via cupy and returns a cupy ndarray as the ``buffer`` field.
-    # The ``mmap_obj`` field is None for GPU-tier payloads.
+    # ``gpu`` field carries an Arrow-serialized CUDA IPC handle.  The Python
+    # client opens that handle via pyarrow.cuda and returns a CudaBuffer as
+    # the ``buffer`` field.  ``mmap_obj`` is None for GPU-tier payloads.
     writable = client.AllocateWritableBuffer(payload_size, types_pb2.TIER_GPU)
 
-    # ``writable.buffer`` is a cupy.ndarray of uint8 pointing into device
-    # memory opened from the IPC handle.  Write an incrementing pattern.
-    host_src = cp.arange(payload_size, dtype=cp.uint8)
-    gpu_buf = writable.buffer  # cupy.ndarray (mutable, GPU device memory)
-    gpu_buf[:] = host_src
+    # ``writable.buffer`` is a pa.cuda.CudaBuffer pointing into device memory.
+    # Build an incrementing host buffer and copy it to the device.
+    host_src = pa.py_buffer(bytes(i & 0xFF for i in range(payload_size)))
+    cuda_buf = writable.buffer  # pa.cuda.CudaBuffer (mutable, GPU device memory)
+    cuda_buf.copy_from_host(host_src)
 
     payload_id = writable.descriptor.payload_id
-    import uuid as _uuid_mod
     payload_uuid = _uuid_mod.UUID(bytes=bytes(payload_id.value))
 
     # Commit makes the payload visible to readers.
     client.CommitPayload(payload_id)
 
-    # Acquire a read lease.  The client reopens the IPC handle for the
-    # committed snapshot and returns another cupy.ndarray.
+    # Acquire a read lease.  The client reopens the IPC handle and returns
+    # another CudaBuffer.
     readable = client.AcquireReadableBuffer(payload_id)
 
-    gpu_read = readable.buffer  # cupy.ndarray (read via IPC handle)
-    host_dst = cp.asnumpy(gpu_read)  # copy GPU → CPU for verification
+    gpu_read = readable.buffer  # pa.cuda.CudaBuffer
+    host_dst = gpu_read.copy_to_host().to_pybytes()  # GPU → CPU
 
     print(f"GPU payload UUID={payload_uuid}, size={len(host_dst)} bytes")
 
@@ -101,7 +107,7 @@ def main() -> int:
         expected = i & 0xFF
         if byte != expected:
             print(
-                f"mismatch at byte {i}: expected {expected} got {int(byte)}",
+                f"mismatch at byte {i}: expected {expected} got {byte}",
                 file=sys.stderr,
             )
             mismatches += 1

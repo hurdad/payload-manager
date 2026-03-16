@@ -346,55 +346,50 @@ def _shm_path(shm_name: str) -> str:
 def _OpenMutableGpuBuffer(descriptor: placement_pb2.PayloadDescriptor):
     """Open a writable GPU buffer from a descriptor containing a CUDA IPC handle.
 
-    The C++ client serializes the IPC handle as an Arrow ``CudaIpcMemHandle``:
-    8 bytes of ``int64_t`` offset followed by 64 bytes of ``CUipcMemHandle``,
-    for a total of 72 bytes.
+    The C++ server serializes the IPC handle via Arrow's ``CudaIpcMemHandle::Serialize()``:
+    8 bytes of ``int64_t`` cu_offset followed by 64 bytes of ``CUipcMemHandle`` = 72 bytes.
+    ``pyarrow.cuda.CudaIpcMemHandle.from_buffer`` consumes the full 72-byte Arrow format.
 
-    This function requires ``cupy`` to be installed.  It returns a
-    ``cupy.ndarray`` of ``uint8`` backed by the IPC-opened device memory.
-    The caller is responsible for keeping the array alive as long as device
-    memory is accessed.
+    Returns a ``pyarrow.cuda.CudaBuffer`` backed by the IPC-opened device memory.
+    The caller is responsible for keeping the buffer alive while device memory is accessed.
 
-    Raises ``NotImplementedError`` when ``cupy`` is not installed.
+    Requires ``pyarrow`` built with CUDA support (``pyarrow.cuda`` available).
+    On Ubuntu this is satisfied by installing ``libarrow-cuda`` and ``python3-pyarrow``
+    from the Apache Arrow apt repository.
+
+    Raises ``NotImplementedError`` when ``pyarrow.cuda`` is not available.
     """
     try:
-        import cupy as cp  # type: ignore[import]
-    except ImportError:
+        import pyarrow.cuda as pac  # type: ignore[import]
+    except (ImportError, AttributeError):
         raise NotImplementedError(
-            "GPU tier requires cupy to be installed. "
-            "Install it with: pip install cupy-cuda12x  (adjust for your CUDA version)"
+            "GPU tier requires pyarrow built with CUDA support (pyarrow.cuda). "
+            "Install libarrow-cuda and python3-pyarrow from the Apache Arrow apt repo."
         )
 
     gpu = descriptor.gpu
     if not gpu.ipc_handle:
         raise ValueError("payload descriptor GPU location has empty IPC handle")
 
-    # Arrow serializes CudaIpcMemHandle as [int64_t offset (8 B)][CUipcMemHandle (64 B)] = 72 B.
-    # cupy's ipcGetMemHandle returns a 64-byte opaque handle, so we skip the
-    # leading 8-byte offset that Arrow prepends.
     raw_handle: bytes = bytes(gpu.ipc_handle)
     if len(raw_handle) < 72:
         raise ValueError(
             f"IPC handle must be at least 72 bytes (Arrow format), got {len(raw_handle)}"
         )
-    cu_ipc_handle_bytes = raw_handle[8:]  # strip the 8-byte Arrow offset prefix
 
-    mem = cp.cuda.runtime.ipcOpenMemHandle(cu_ipc_handle_bytes)
-    return cp.ndarray(gpu.length_bytes, dtype=cp.uint8, memptr=cp.cuda.MemoryPointer(
-        cp.cuda.UnownedMemory(mem, gpu.length_bytes, None), 0
-    ))
+    ctx = pac.Context(gpu.device_id)
+    handle = pac.CudaIpcMemHandle.from_buffer(pa.py_buffer(raw_handle))
+    return ctx.open_ipc_buffer(handle)
 
 
 def _OpenReadableGpuBuffer(descriptor: placement_pb2.PayloadDescriptor):
     """Open a read-only GPU buffer from a descriptor containing a CUDA IPC handle.
 
-    Identical to ``_OpenMutableGpuBuffer`` but semantically intended for
-    read-only access.  Returns a ``cupy.ndarray`` of ``uint8``.
+    Identical to ``_OpenMutableGpuBuffer`` — Arrow IPC-opened buffers have no
+    separate read-only mode at the Python level.  Returns a ``pyarrow.cuda.CudaBuffer``.
 
-    Raises ``NotImplementedError`` when ``cupy`` is not installed.
+    Raises ``NotImplementedError`` when ``pyarrow.cuda`` is not available.
     """
-    # cupy does not distinguish mutable/immutable device arrays – reuse the
-    # mutable path, which is safe for read-only callers too.
     return _OpenMutableGpuBuffer(descriptor)
 
 

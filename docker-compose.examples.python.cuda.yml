@@ -1,0 +1,30 @@
+# Overlay for running Python examples (including GPU) against a CUDA-enabled
+# payload-manager service.
+#
+# Usage:
+#   docker compose -f docker-compose.gpu.sqlite.yml   -f docker-compose.examples.python.cuda.yml up --build --exit-code-from python-examples
+#   docker compose -f docker-compose.gpu.postgres.yml -f docker-compose.examples.python.cuda.yml up --build --exit-code-from python-examples
+
+services:
+  python-examples:
+    build:
+      context: .
+      dockerfile: Dockerfile.examples.python.cuda
+    depends_on:
+      payload-manager:
+        condition: service_healthy
+    ipc: host
+    # Required for cross-container CUDA IPC: cuIpcOpenMemHandle resolves the
+    # exporting process's PID via procfs; without a shared PID namespace the
+    # driver returns CUDA_ERROR_INVALID_CONTEXT even when ipc: host is set.
+    pid: host
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    environment:
+      PAYLOAD_MANAGER_ENDPOINT: "payload-manager:50051"
+    restart: "no"

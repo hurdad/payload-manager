@@ -44,13 +44,13 @@ else
     echo "[SKIP] spill_example.py — could not obtain UUID from round_trip_example"
 fi
 
-# GPU example: only run if cupy is available
-if python3 -c "import cupy" 2>/dev/null; then
+# GPU example: only run if pyarrow.cuda is available
+if python3 -c "import pyarrow.cuda" 2>/dev/null; then
     run gpu_example.py "$ENDPOINT"
 else
     echo ""
     echo "=========================================="
-    echo " Skipping: gpu_example.py (cupy not available)"
+    echo " Skipping: gpu_example.py (pyarrow.cuda not available)"
     echo "=========================================="
 fi
 
