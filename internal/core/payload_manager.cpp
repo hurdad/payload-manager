@@ -8,6 +8,7 @@
 #include "internal/lease/lease_manager.hpp"
 #include "internal/storage/ram/ram_arrow_store.hpp"
 #include "internal/storage/storage_backend.hpp"
+#include "payload/manager/catalog/v1/archive_metadata.pb.h"
 #include "payload/manager/core/v1/policy.pb.h"
 #if PAYLOAD_MANAGER_ARROW_CUDA
 #include "internal/storage/gpu/cuda_arrow_store.hpp"
@@ -74,6 +75,19 @@ void PayloadManager::UpdateTierCount(Tier tier, int64_t delta) {
 }
 
 namespace {
+
+bool IsDurableTier(Tier tier) {
+  return tier == TIER_DISK || tier == TIER_OBJECT;
+}
+
+payload::manager::catalog::v1::PayloadArchiveMetadata BuildSidecar(const PayloadDescriptor& descriptor) {
+  payload::manager::catalog::v1::PayloadArchiveMetadata meta;
+  *meta.mutable_uuid()               = descriptor.payload_id();
+  meta.set_metadata_version(1);
+  *meta.mutable_archived_at()        = payload::util::ToProto(payload::util::Now());
+  *meta.mutable_payload_descriptor() = descriptor;
+  return meta;
+}
 
 bool IsReadableState(PayloadState state) {
   return state == PAYLOAD_STATE_ACTIVE || state == PAYLOAD_STATE_SPILLING || state == PAYLOAD_STATE_DURABLE;
@@ -445,11 +459,40 @@ PayloadDescriptor PayloadManager::Commit(const PayloadID& id) {
   record->state = PAYLOAD_STATE_ACTIVE;
   record->version++;
   ThrowIfDbError(repository_->UpdatePayload(*tx, *record), "commit payload");
+  const auto parents = repository_->GetParents(*tx, Key(id));
   tx->Commit();
   const auto descriptor = ToPayloadDescriptor(*record, shm_prefix_);
   auto       hydrated   = descriptor;
   PopulateLocation(&hydrated);
   CacheSnapshot(hydrated);
+  // Write a JSON sidecar alongside the data file for durable tiers so that
+  // the stored payload is self-describing independent of the database.
+  if (IsDurableTier(hydrated.tier())) {
+    const auto storage_it = storage_.find(hydrated.tier());
+    if (storage_it != storage_.end() && storage_it->second) {
+      try {
+        auto sidecar = BuildSidecar(hydrated);
+        for (const auto& p : parents) {
+          auto* edge = sidecar.add_lineage();
+          try {
+            *edge->mutable_parent() = payload::util::ToProto(payload::util::FromString(p.parent_id));
+          } catch (...) {
+            edge->mutable_parent()->set_value(p.parent_id);
+          }
+          edge->set_operation(p.operation);
+          edge->set_role(p.role);
+          if (!p.parameters.empty()) {
+            edge->set_parameters(p.parameters);
+          }
+        }
+        storage_it->second->WriteSidecar(id, sidecar);
+      } catch (const std::exception& e) {
+        PAYLOAD_LOG_WARN("commit: sidecar write failed (non-fatal)",
+                         {payload::observability::StringField("payload_id", Key(id)),
+                          payload::observability::StringField("error", e.what())});
+      }
+    }
+  }
   // Register with the metadata cache so this payload is a candidate for
   // LRU-based tier eviction even if UpsertMetadata was never called.
   // Normalize the key to hex-string form so it is consistent with the
@@ -840,6 +883,19 @@ void PayloadManager::ExecuteSpill(const PayloadID& id, Tier target, bool fsync) 
   auto descriptor = ToPayloadDescriptor(*record, shm_prefix_);
   PopulateLocation(&descriptor);
   CacheSnapshot(descriptor);
+  // Write sidecar after a successful spill to a durable tier.
+  if (source_tier != target && IsDurableTier(target)) {
+    const auto dst_it = storage_.find(target);
+    if (dst_it != storage_.end() && dst_it->second) {
+      try {
+        dst_it->second->WriteSidecar(id, BuildSidecar(descriptor));
+      } catch (const std::exception& e) {
+        PAYLOAD_LOG_WARN("spill: sidecar write failed (non-fatal)",
+                         {payload::observability::StringField("payload_id", Key(id)),
+                          payload::observability::StringField("error", e.what())});
+      }
+    }
+  }
   if (source_tier != target) {
     payload::observability::Metrics::Instance().RecordSpillBytes("background", record->size_bytes);
     UpdateTierBytes(source_tier, -static_cast<int64_t>(record->size_bytes));
