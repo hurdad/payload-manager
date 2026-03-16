@@ -429,7 +429,7 @@ void PayloadManager::ExpireStale() {
     try {
       Delete(id, /*force=*/true);
     } catch (const std::exception& e) {
-      PAYLOAD_LOG_WARN("expire stale: failed to delete expired payload (best effort)", "error", std::string(e.what()));
+      PAYLOAD_LOG_WARN("expire stale: failed to delete expired payload (best effort)", {payload::observability::StringField("error", e.what())});
     }
   }
 }
