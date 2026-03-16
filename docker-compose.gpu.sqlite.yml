@@ -4,6 +4,7 @@ services:
       context: .
       dockerfile: Dockerfile.cuda
     restart: unless-stopped
+    hostname: payload-manager
     command: ["./payload-manager", "--config", "/app/conf/runtime-docker-gpu-sqlite.yaml"]
     healthcheck:
       test: ["CMD-SHELL", "bash -c '</dev/tcp/localhost/50051'"]
