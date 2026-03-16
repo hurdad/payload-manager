@@ -92,6 +92,11 @@ class PayloadCatalogServiceStub(object):
         request_serializer=payload_dot_manager_dot_catalog_dot_v1_dot_catalog__pb2.AppendPayloadMetadataEventRequest.SerializeToString,
         response_deserializer=payload_dot_manager_dot_catalog_dot_v1_dot_catalog__pb2.AppendPayloadMetadataEventResponse.FromString,
         )
+    self.ListPayloads = channel.unary_unary(
+        '/payload.manager.services.v1.PayloadCatalogService/ListPayloads',
+        request_serializer=payload_dot_manager_dot_runtime_dot_v1_dot_lifecycle__pb2.ListPayloadsRequest.SerializeToString,
+        response_deserializer=payload_dot_manager_dot_runtime_dot_v1_dot_lifecycle__pb2.ListPayloadsResponse.FromString,
+        )
 
 
 class PayloadCatalogServiceServicer(object):
@@ -239,6 +244,19 @@ class PayloadCatalogServiceServicer(object):
     context.set_details('Method not implemented!')
     raise NotImplementedError('Method not implemented!')
 
+  def ListPayloads(self, request, context):
+    """---------------------------------------------------------------------------
+    Listing
+    ---------------------------------------------------------------------------
+
+
+    Returns a summary row for every payload known to the service.
+    Optionally filtered by tier.
+    """
+    context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+    context.set_details('Method not implemented!')
+    raise NotImplementedError('Method not implemented!')
+
 
 def add_PayloadCatalogServiceServicer_to_server(servicer, server):
   rpc_method_handlers = {
@@ -301,6 +319,11 @@ def add_PayloadCatalogServiceServicer_to_server(servicer, server):
           servicer.AppendPayloadMetadataEvent,
           request_deserializer=payload_dot_manager_dot_catalog_dot_v1_dot_catalog__pb2.AppendPayloadMetadataEventRequest.FromString,
           response_serializer=payload_dot_manager_dot_catalog_dot_v1_dot_catalog__pb2.AppendPayloadMetadataEventResponse.SerializeToString,
+      ),
+      'ListPayloads': grpc.unary_unary_rpc_method_handler(
+          servicer.ListPayloads,
+          request_deserializer=payload_dot_manager_dot_runtime_dot_v1_dot_lifecycle__pb2.ListPayloadsRequest.FromString,
+          response_serializer=payload_dot_manager_dot_runtime_dot_v1_dot_lifecycle__pb2.ListPayloadsResponse.SerializeToString,
       ),
   }
   generic_handler = grpc.method_handlers_generic_handler(

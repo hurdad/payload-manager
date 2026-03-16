@@ -129,11 +129,7 @@ Result SqliteRepository::InsertPayload(Transaction& t, const model::PayloadRecor
   BindI32(st, 7, r.persist ? 1 : 0);
   BindI32(st, 8, r.eviction_priority);
   BindI32(st, 9, r.spill_target);
-  if (r.created_at_ms > 0) {
-    BindU64(st, 10, r.created_at_ms);
-  } else {
-    sqlite3_bind_null(st, 10);
-  }
+  BindU64(st, 10, r.created_at_ms);
 
   int rc = sqlite3_step(st);
   sqlite3_finalize(st);
@@ -147,7 +143,8 @@ std::optional<model::PayloadRecord> SqliteRepository::GetPayload(Transaction& t,
   const char* sql =
       "SELECT id,tier,state,size_bytes,version,expires_at_ms,persist,eviction_priority,spill_target,created_at_ms FROM payload WHERE id=?;";
   sqlite3_stmt* st = nullptr;
-  if (sqlite3_prepare_v2(db, sql, -1, &st, nullptr) != SQLITE_OK) return std::nullopt;
+  if (sqlite3_prepare_v2(db, sql, -1, &st, nullptr) != SQLITE_OK)
+    throw std::runtime_error(std::string("sqlite prepare failed (GetPayload): ") + sqlite3_errmsg(db));
 
   BindUuid(st, 1, id);
 
@@ -181,7 +178,8 @@ std::vector<model::PayloadRecord> SqliteRepository::ListPayloads(Transaction& t,
       filter ? "SELECT id,tier,state,size_bytes,version,expires_at_ms,persist,eviction_priority,spill_target,created_at_ms FROM payload WHERE tier=?;"
              : "SELECT id,tier,state,size_bytes,version,expires_at_ms,persist,eviction_priority,spill_target,created_at_ms FROM payload;";
   sqlite3_stmt* st = nullptr;
-  if (sqlite3_prepare_v2(db, sql, -1, &st, nullptr) != SQLITE_OK) return {};
+  if (sqlite3_prepare_v2(db, sql, -1, &st, nullptr) != SQLITE_OK)
+    throw std::runtime_error(std::string("sqlite prepare failed (ListPayloads): ") + sqlite3_errmsg(db));
   if (filter) {
     BindI32(st, 1, static_cast<int>(tier_filter));
   }
@@ -241,7 +239,8 @@ std::vector<model::PayloadRecord> SqliteRepository::ListExpiredPayloads(Transact
       "SELECT id,tier,state,size_bytes,version,expires_at_ms,persist,eviction_priority,spill_target,created_at_ms"
       " FROM payload WHERE expires_at_ms > 0 AND expires_at_ms <= ?;";
   sqlite3_stmt* st = nullptr;
-  if (sqlite3_prepare_v2(db, sql, -1, &st, nullptr) != SQLITE_OK) return {};
+  if (sqlite3_prepare_v2(db, sql, -1, &st, nullptr) != SQLITE_OK)
+    throw std::runtime_error(std::string("sqlite prepare failed (ListExpiredPayloads): ") + sqlite3_errmsg(db));
 
   BindU64(st, 1, now_ms);
 
@@ -310,7 +309,8 @@ std::optional<model::MetadataRecord> SqliteRepository::GetMetadata(Transaction& 
   const char* sql = "SELECT id,json,schema,updated_at_ms FROM payload_metadata WHERE id=?;";
 
   sqlite3_stmt* st = nullptr;
-  if (sqlite3_prepare_v2(db, sql, -1, &st, nullptr) != SQLITE_OK) return std::nullopt;
+  if (sqlite3_prepare_v2(db, sql, -1, &st, nullptr) != SQLITE_OK)
+    throw std::runtime_error(std::string("sqlite prepare failed (GetMetadata): ") + sqlite3_errmsg(db));
 
   BindUuid(st, 1, id);
 

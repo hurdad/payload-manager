@@ -26,7 +26,7 @@ using namespace payload::manager::v1;
 
 namespace {
 
-static std::string_view TierName(Tier tier) {
+std::string_view TierName(Tier tier) {
   switch (tier) {
     case TIER_RAM:
       return "ram";
@@ -454,10 +454,14 @@ PayloadDescriptor PayloadManager::Commit(const PayloadID& id) {
   CacheSnapshot(hydrated);
   // Register with the metadata cache so this payload is a candidate for
   // LRU-based tier eviction even if UpsertMetadata was never called.
+  // Normalize the key to hex-string form so it is consistent with the
+  // keys written by HydrateCaches() (which reads string IDs from the DB).
   if (metadata_cache_) {
+    payload::manager::v1::PayloadID normalized_id;
+    normalized_id.set_value(Key(id));
     payload::manager::v1::PayloadMetadata minimal;
-    *minimal.mutable_id() = id;
-    metadata_cache_->Put(id, minimal);
+    *minimal.mutable_id() = normalized_id;
+    metadata_cache_->Put(normalized_id, minimal);
   }
   return hydrated;
 }
@@ -523,7 +527,11 @@ void PayloadManager::Delete(const PayloadID& id, bool force) {
     UpdateTierBytes(payload_tier, -static_cast<int64_t>(payload_size));
     UpdateTierCount(payload_tier, -1);
     if (metadata_cache_) {
-      metadata_cache_->Remove(id);
+      // Normalize to hex-string key, matching the form used in Commit() and
+      // HydrateCaches(), so the remove always hits the correct cache entry.
+      payload::manager::v1::PayloadID normalized_id;
+      normalized_id.set_value(Key(id));
+      metadata_cache_->Remove(normalized_id);
     }
   } // payload_lock released
 

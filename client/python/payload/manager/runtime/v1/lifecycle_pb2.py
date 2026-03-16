@@ -23,7 +23,7 @@ DESCRIPTOR = _descriptor.FileDescriptor(
   name='payload/manager/runtime/v1/lifecycle.proto',
   package='payload.manager.runtime.v1',
   syntax='proto3',
-  serialized_pb=_b('\n*payload/manager/runtime/v1/lifecycle.proto\x12\x1apayload.manager.runtime.v1\x1a\'payload/manager/core/v1/placement.proto\x1a payload/manager/core/v1/id.proto\x1a#payload/manager/core/v1/types.proto\x1a$payload/manager/core/v1/policy.proto\"\xc6\x01\n\x16\x41llocatePayloadRequest\x12\x12\n\nsize_bytes\x18\x01 \x01(\x04\x12\x35\n\x0epreferred_tier\x18\x02 \x01(\x0e\x32\x1d.payload.manager.core.v1.Tier\x12\x0e\n\x06ttl_ms\x18\x03 \x01(\x04\x12\x0f\n\x07persist\x18\x04 \x01(\x08\x12@\n\x0f\x65viction_policy\x18\x05 \x01(\x0b\x32\'.payload.manager.core.v1.EvictionPolicy\"a\n\x17\x41llocatePayloadResponse\x12\x46\n\x12payload_descriptor\x18\x01 \x01(\x0b\x32*.payload.manager.core.v1.PayloadDescriptor\"F\n\x14\x43ommitPayloadRequest\x12.\n\x02id\x18\x01 \x01(\x0b\x32\".payload.manager.core.v1.PayloadID\"_\n\x15\x43ommitPayloadResponse\x12\x46\n\x12payload_descriptor\x18\x01 \x01(\x0b\x32*.payload.manager.core.v1.PayloadDescriptor\"N\n\rDeleteRequest\x12.\n\x02id\x18\x01 \x01(\x0b\x32\".payload.manager.core.v1.PayloadID\x12\r\n\x05\x66orce\x18\x02 \x01(\x08\x62\x06proto3')
+  serialized_pb=_b('\n*payload/manager/runtime/v1/lifecycle.proto\x12\x1apayload.manager.runtime.v1\x1a\'payload/manager/core/v1/placement.proto\x1a payload/manager/core/v1/id.proto\x1a#payload/manager/core/v1/types.proto\x1a$payload/manager/core/v1/policy.proto\"\xc6\x01\n\x16\x41llocatePayloadRequest\x12\x12\n\nsize_bytes\x18\x01 \x01(\x04\x12\x35\n\x0epreferred_tier\x18\x02 \x01(\x0e\x32\x1d.payload.manager.core.v1.Tier\x12\x0e\n\x06ttl_ms\x18\x03 \x01(\x04\x12\x0f\n\x07persist\x18\x04 \x01(\x08\x12@\n\x0f\x65viction_policy\x18\x05 \x01(\x0b\x32\'.payload.manager.core.v1.EvictionPolicy\"a\n\x17\x41llocatePayloadResponse\x12\x46\n\x12payload_descriptor\x18\x01 \x01(\x0b\x32*.payload.manager.core.v1.PayloadDescriptor\"F\n\x14\x43ommitPayloadRequest\x12.\n\x02id\x18\x01 \x01(\x0b\x32\".payload.manager.core.v1.PayloadID\"_\n\x15\x43ommitPayloadResponse\x12\x46\n\x12payload_descriptor\x18\x01 \x01(\x0b\x32*.payload.manager.core.v1.PayloadDescriptor\"N\n\rDeleteRequest\x12.\n\x02id\x18\x01 \x01(\x0b\x32\".payload.manager.core.v1.PayloadID\x12\r\n\x05\x66orce\x18\x02 \x01(\x08\"\xfc\x01\n\x0ePayloadSummary\x12.\n\x02id\x18\x01 \x01(\x0b\x32\".payload.manager.core.v1.PayloadID\x12+\n\x04tier\x18\x02 \x01(\x0e\x32\x1d.payload.manager.core.v1.Tier\x12\x34\n\x05state\x18\x03 \x01(\x0e\x32%.payload.manager.core.v1.PayloadState\x12\x12\n\nsize_bytes\x18\x04 \x01(\x04\x12\x15\n\rcreated_at_ms\x18\x05 \x01(\x04\x12\x15\n\rexpires_at_ms\x18\x06 \x01(\x04\x12\x15\n\ractive_leases\x18\x07 \x01(\r\"I\n\x13ListPayloadsRequest\x12\x32\n\x0btier_filter\x18\x01 \x01(\x0e\x32\x1d.payload.manager.core.v1.Tier\"T\n\x14ListPayloadsResponse\x12<\n\x08payloads\x18\x01 \x03(\x0b\x32*.payload.manager.runtime.v1.PayloadSummaryb\x06proto3')
   ,
   dependencies=[payload_dot_manager_dot_core_dot_v1_dot_placement__pb2.DESCRIPTOR,payload_dot_manager_dot_core_dot_v1_dot_id__pb2.DESCRIPTOR,payload_dot_manager_dot_core_dot_v1_dot_types__pb2.DESCRIPTOR,payload_dot_manager_dot_core_dot_v1_dot_policy__pb2.DESCRIPTOR,])
 
@@ -219,17 +219,160 @@ _DELETEREQUEST = _descriptor.Descriptor(
   serialized_end=771,
 )
 
+
+_PAYLOADSUMMARY = _descriptor.Descriptor(
+  name='PayloadSummary',
+  full_name='payload.manager.runtime.v1.PayloadSummary',
+  filename=None,
+  file=DESCRIPTOR,
+  containing_type=None,
+  fields=[
+    _descriptor.FieldDescriptor(
+      name='id', full_name='payload.manager.runtime.v1.PayloadSummary.id', index=0,
+      number=1, type=11, cpp_type=10, label=1,
+      has_default_value=False, default_value=None,
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      options=None, file=DESCRIPTOR),
+    _descriptor.FieldDescriptor(
+      name='tier', full_name='payload.manager.runtime.v1.PayloadSummary.tier', index=1,
+      number=2, type=14, cpp_type=8, label=1,
+      has_default_value=False, default_value=0,
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      options=None, file=DESCRIPTOR),
+    _descriptor.FieldDescriptor(
+      name='state', full_name='payload.manager.runtime.v1.PayloadSummary.state', index=2,
+      number=3, type=14, cpp_type=8, label=1,
+      has_default_value=False, default_value=0,
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      options=None, file=DESCRIPTOR),
+    _descriptor.FieldDescriptor(
+      name='size_bytes', full_name='payload.manager.runtime.v1.PayloadSummary.size_bytes', index=3,
+      number=4, type=4, cpp_type=4, label=1,
+      has_default_value=False, default_value=0,
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      options=None, file=DESCRIPTOR),
+    _descriptor.FieldDescriptor(
+      name='created_at_ms', full_name='payload.manager.runtime.v1.PayloadSummary.created_at_ms', index=4,
+      number=5, type=4, cpp_type=4, label=1,
+      has_default_value=False, default_value=0,
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      options=None, file=DESCRIPTOR),
+    _descriptor.FieldDescriptor(
+      name='expires_at_ms', full_name='payload.manager.runtime.v1.PayloadSummary.expires_at_ms', index=5,
+      number=6, type=4, cpp_type=4, label=1,
+      has_default_value=False, default_value=0,
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      options=None, file=DESCRIPTOR),
+    _descriptor.FieldDescriptor(
+      name='active_leases', full_name='payload.manager.runtime.v1.PayloadSummary.active_leases', index=6,
+      number=7, type=13, cpp_type=3, label=1,
+      has_default_value=False, default_value=0,
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      options=None, file=DESCRIPTOR),
+  ],
+  extensions=[
+  ],
+  nested_types=[],
+  enum_types=[
+  ],
+  options=None,
+  is_extendable=False,
+  syntax='proto3',
+  extension_ranges=[],
+  oneofs=[
+  ],
+  serialized_start=774,
+  serialized_end=1026,
+)
+
+
+_LISTPAYLOADSREQUEST = _descriptor.Descriptor(
+  name='ListPayloadsRequest',
+  full_name='payload.manager.runtime.v1.ListPayloadsRequest',
+  filename=None,
+  file=DESCRIPTOR,
+  containing_type=None,
+  fields=[
+    _descriptor.FieldDescriptor(
+      name='tier_filter', full_name='payload.manager.runtime.v1.ListPayloadsRequest.tier_filter', index=0,
+      number=1, type=14, cpp_type=8, label=1,
+      has_default_value=False, default_value=0,
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      options=None, file=DESCRIPTOR),
+  ],
+  extensions=[
+  ],
+  nested_types=[],
+  enum_types=[
+  ],
+  options=None,
+  is_extendable=False,
+  syntax='proto3',
+  extension_ranges=[],
+  oneofs=[
+  ],
+  serialized_start=1028,
+  serialized_end=1101,
+)
+
+
+_LISTPAYLOADSRESPONSE = _descriptor.Descriptor(
+  name='ListPayloadsResponse',
+  full_name='payload.manager.runtime.v1.ListPayloadsResponse',
+  filename=None,
+  file=DESCRIPTOR,
+  containing_type=None,
+  fields=[
+    _descriptor.FieldDescriptor(
+      name='payloads', full_name='payload.manager.runtime.v1.ListPayloadsResponse.payloads', index=0,
+      number=1, type=11, cpp_type=10, label=3,
+      has_default_value=False, default_value=[],
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      options=None, file=DESCRIPTOR),
+  ],
+  extensions=[
+  ],
+  nested_types=[],
+  enum_types=[
+  ],
+  options=None,
+  is_extendable=False,
+  syntax='proto3',
+  extension_ranges=[],
+  oneofs=[
+  ],
+  serialized_start=1103,
+  serialized_end=1187,
+)
+
 _ALLOCATEPAYLOADREQUEST.fields_by_name['preferred_tier'].enum_type = payload_dot_manager_dot_core_dot_v1_dot_types__pb2._TIER
 _ALLOCATEPAYLOADREQUEST.fields_by_name['eviction_policy'].message_type = payload_dot_manager_dot_core_dot_v1_dot_policy__pb2._EVICTIONPOLICY
 _ALLOCATEPAYLOADRESPONSE.fields_by_name['payload_descriptor'].message_type = payload_dot_manager_dot_core_dot_v1_dot_placement__pb2._PAYLOADDESCRIPTOR
 _COMMITPAYLOADREQUEST.fields_by_name['id'].message_type = payload_dot_manager_dot_core_dot_v1_dot_id__pb2._PAYLOADID
 _COMMITPAYLOADRESPONSE.fields_by_name['payload_descriptor'].message_type = payload_dot_manager_dot_core_dot_v1_dot_placement__pb2._PAYLOADDESCRIPTOR
 _DELETEREQUEST.fields_by_name['id'].message_type = payload_dot_manager_dot_core_dot_v1_dot_id__pb2._PAYLOADID
+_PAYLOADSUMMARY.fields_by_name['id'].message_type = payload_dot_manager_dot_core_dot_v1_dot_id__pb2._PAYLOADID
+_PAYLOADSUMMARY.fields_by_name['tier'].enum_type = payload_dot_manager_dot_core_dot_v1_dot_types__pb2._TIER
+_PAYLOADSUMMARY.fields_by_name['state'].enum_type = payload_dot_manager_dot_core_dot_v1_dot_types__pb2._PAYLOADSTATE
+_LISTPAYLOADSREQUEST.fields_by_name['tier_filter'].enum_type = payload_dot_manager_dot_core_dot_v1_dot_types__pb2._TIER
+_LISTPAYLOADSRESPONSE.fields_by_name['payloads'].message_type = _PAYLOADSUMMARY
 DESCRIPTOR.message_types_by_name['AllocatePayloadRequest'] = _ALLOCATEPAYLOADREQUEST
 DESCRIPTOR.message_types_by_name['AllocatePayloadResponse'] = _ALLOCATEPAYLOADRESPONSE
 DESCRIPTOR.message_types_by_name['CommitPayloadRequest'] = _COMMITPAYLOADREQUEST
 DESCRIPTOR.message_types_by_name['CommitPayloadResponse'] = _COMMITPAYLOADRESPONSE
 DESCRIPTOR.message_types_by_name['DeleteRequest'] = _DELETEREQUEST
+DESCRIPTOR.message_types_by_name['PayloadSummary'] = _PAYLOADSUMMARY
+DESCRIPTOR.message_types_by_name['ListPayloadsRequest'] = _LISTPAYLOADSREQUEST
+DESCRIPTOR.message_types_by_name['ListPayloadsResponse'] = _LISTPAYLOADSRESPONSE
 _sym_db.RegisterFileDescriptor(DESCRIPTOR)
 
 AllocatePayloadRequest = _reflection.GeneratedProtocolMessageType('AllocatePayloadRequest', (_message.Message,), dict(
@@ -266,6 +409,27 @@ DeleteRequest = _reflection.GeneratedProtocolMessageType('DeleteRequest', (_mess
   # @@protoc_insertion_point(class_scope:payload.manager.runtime.v1.DeleteRequest)
   ))
 _sym_db.RegisterMessage(DeleteRequest)
+
+PayloadSummary = _reflection.GeneratedProtocolMessageType('PayloadSummary', (_message.Message,), dict(
+  DESCRIPTOR = _PAYLOADSUMMARY,
+  __module__ = 'payload.manager.runtime.v1.lifecycle_pb2'
+  # @@protoc_insertion_point(class_scope:payload.manager.runtime.v1.PayloadSummary)
+  ))
+_sym_db.RegisterMessage(PayloadSummary)
+
+ListPayloadsRequest = _reflection.GeneratedProtocolMessageType('ListPayloadsRequest', (_message.Message,), dict(
+  DESCRIPTOR = _LISTPAYLOADSREQUEST,
+  __module__ = 'payload.manager.runtime.v1.lifecycle_pb2'
+  # @@protoc_insertion_point(class_scope:payload.manager.runtime.v1.ListPayloadsRequest)
+  ))
+_sym_db.RegisterMessage(ListPayloadsRequest)
+
+ListPayloadsResponse = _reflection.GeneratedProtocolMessageType('ListPayloadsResponse', (_message.Message,), dict(
+  DESCRIPTOR = _LISTPAYLOADSRESPONSE,
+  __module__ = 'payload.manager.runtime.v1.lifecycle_pb2'
+  # @@protoc_insertion_point(class_scope:payload.manager.runtime.v1.ListPayloadsResponse)
+  ))
+_sym_db.RegisterMessage(ListPayloadsResponse)
 
 
 # @@protoc_insertion_point(module_scope)

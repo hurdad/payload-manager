@@ -1,5 +1,7 @@
 #include "metadata_cache.hpp"
 
+#include <vector>
+
 #include "payload/manager/v1.hpp"
 
 namespace payload::metadata {
@@ -101,9 +103,17 @@ std::optional<PayloadID> MetadataCache::GetLeastRecentlyUsedId() const {
 }
 
 std::optional<PayloadID> MetadataCache::GetLeastRecentlyUsedId(const std::function<bool(const PayloadID&)>& include) const {
-  std::shared_lock lock(mutex_);
+  // Snapshot the recency order under the lock, then evaluate the predicate
+  // outside the lock to avoid holding mutex_ across external callbacks that
+  // may acquire other locks (e.g. PayloadManager internals), which would
+  // create a potential lock-order inversion.
+  std::vector<std::string> snapshot;
+  {
+    std::shared_lock lock(mutex_);
+    snapshot.assign(recency_.begin(), recency_.end());
+  }
 
-  for (const auto& key : recency_) {
+  for (const auto& key : snapshot) {
     PayloadID id;
     id.set_value(key);
     if (include(id)) {

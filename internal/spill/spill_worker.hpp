@@ -2,6 +2,7 @@
 
 #include <atomic>
 #include <memory>
+#include <mutex>
 #include <thread>
 
 #include "spill_scheduler.hpp"
@@ -32,6 +33,7 @@ class SpillWorker {
   std::shared_ptr<SpillScheduler>                scheduler_;
   std::shared_ptr<payload::core::PayloadManager> manager_;
 
+  std::mutex        mu_;
   std::thread       thread_;
   std::atomic<bool> running_{false};
 };

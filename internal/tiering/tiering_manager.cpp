@@ -24,6 +24,7 @@ TieringManager::~TieringManager() {
 }
 
 void TieringManager::Start() {
+  std::lock_guard lock(mu_);
   if (thread_.joinable()) return; // already running
   running_ = true;
   thread_  = std::thread(&TieringManager::Loop, this);
