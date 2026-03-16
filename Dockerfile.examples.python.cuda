@@ -1,27 +1,83 @@
-FROM nvidia/cuda:12.6.3-runtime-ubuntu24.04
+FROM nvidia/cuda:12.6.3-devel-ubuntu24.04 AS pyarrow-builder
 
 ENV DEBIAN_FRONTEND=noninteractive
-WORKDIR /app
+WORKDIR /build
 
-# Install pyarrow with CUDA support from the Apache Arrow apt repository.
-# The pip pyarrow wheel is built without CUDA; the apt package links against
-# libarrow-cuda so that pyarrow.cuda is available.
+# Install system Arrow + CUDA dev packages, plus Python build tools.
+# We build only the pyarrow Python bindings against the system Arrow C++ libs;
+# this avoids a full Arrow C++ build (which would take 30+ min).
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
-        ca-certificates \
-        lsb-release \
-        wget \
-        python3 \
-        python3-pip \
+        ca-certificates lsb-release wget \
     && wget https://packages.apache.org/artifactory/arrow/$(lsb_release --id --short | tr 'A-Z' 'a-z')/apache-arrow-apt-source-latest-$(lsb_release --codename --short).deb \
     && apt-get install -y --no-install-recommends \
         ./apache-arrow-apt-source-latest-$(lsb_release --codename --short).deb \
     && rm apache-arrow-apt-source-latest-$(lsb_release --codename --short).deb \
     && apt-get update \
     && apt-get install -y --no-install-recommends \
-        libarrow-cuda2300 \
-        python3-pyarrow \
+        libarrow-dev \
+        libarrow-acero-dev \
+        libarrow-cuda-dev \
+        python3 \
+        python3-pip \
+        python3-dev \
+        python3-numpy \
+        cython3 \
+        cmake \
+        ninja-build \
+        pkg-config \
     && rm -rf /var/lib/apt/lists/*
+
+# Copy the Arrow Python source (only the python/ subdirectory is needed).
+COPY apache-arrow-23.0.1/python /build/python
+
+# Install pyarrow build requirements then build against system Arrow with CUDA.
+# setuptools_scm falls back to version 23.0.1 when git is not available.
+RUN pip3 install --break-system-packages \
+        "cython>=3.1" \
+        "setuptools>=77" \
+        "setuptools_scm[toml]>=8" \
+        "numpy>=1.25" && \
+    cd /build/python && \
+    ARROW_HOME=/usr \
+    PYARROW_WITH_CUDA=1 \
+    PYARROW_WITH_DATASET=0 \
+    PYARROW_WITH_FLIGHT=0 \
+    PYARROW_WITH_FLIGHT_SQL=0 \
+    PYARROW_WITH_GANDIVA=0 \
+    PYARROW_WITH_ORC=0 \
+    PYARROW_WITH_PARQUET=0 \
+    PYARROW_WITH_SUBSTRAIT=0 \
+    PYARROW_WITH_S3=0 \
+    PYARROW_WITH_GCS=0 \
+    PYARROW_BUNDLE_ARROW_CPP=0 \
+    pip3 install --break-system-packages --no-build-isolation .
+
+
+# ---------------------------------------------------------------------------
+# Runtime image
+# ---------------------------------------------------------------------------
+FROM nvidia/cuda:12.6.3-runtime-ubuntu24.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+WORKDIR /app
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        ca-certificates lsb-release wget python3 python3-pip python3-numpy \
+    && wget https://packages.apache.org/artifactory/arrow/$(lsb_release --id --short | tr 'A-Z' 'a-z')/apache-arrow-apt-source-latest-$(lsb_release --codename --short).deb \
+    && apt-get install -y --no-install-recommends \
+        ./apache-arrow-apt-source-latest-$(lsb_release --codename --short).deb \
+    && rm apache-arrow-apt-source-latest-$(lsb_release --codename --short).deb \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends \
+        libarrow2300 \
+        libarrow-acero2300 \
+        libarrow-cuda2300 \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy the built pyarrow (with _cuda extension) from the builder stage.
+COPY --from=pyarrow-builder /usr/local/lib/python3.12/dist-packages/pyarrow /usr/local/lib/python3.12/dist-packages/pyarrow
 
 RUN pip3 install --no-cache-dir --break-system-packages \
     "grpcio>=1.50" \
