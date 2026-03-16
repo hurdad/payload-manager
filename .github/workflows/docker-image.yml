@@ -18,17 +18,28 @@ jobs:
       contents: read
       packages: write
     strategy:
+      fail-fast: false
       matrix:
         include:
+          # CPU-only build, no OpenTelemetry
           - component: payload-manager
             dockerfile: ./Dockerfile
             image: ghcr.io/${{ github.repository }}
+
+          # CPU-only build with OpenTelemetry (metrics + tracing)
+          - component: payload-manager-otel
+            dockerfile: ./Dockerfile.otel
+            image: ghcr.io/${{ github.repository }}-otel
+
+          # GPU (CUDA) build with OpenTelemetry
           - component: payload-manager-cuda
             dockerfile: ./Dockerfile.cuda
             image: ghcr.io/${{ github.repository }}-cuda
+
+          # CLI management tool
           - component: payloadctl
             dockerfile: ./Dockerfile.payloadctl
-            image: ghcr.io/${{ github.repository }}/payloadctl
+            image: ghcr.io/${{ github.repository }}-payloadctl
 
     steps:
       - name: Checkout
