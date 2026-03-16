@@ -12,6 +12,7 @@
 #if PAYLOAD_MANAGER_ARROW_CUDA
 #include "internal/storage/gpu/cuda_arrow_store.hpp"
 #endif
+#include "internal/metadata/metadata_cache.hpp"
 #include "internal/observability/logging.hpp"
 #include "internal/observability/spans.hpp"
 #include "internal/util/errors.hpp"
@@ -163,8 +164,10 @@ PayloadDescriptor ToPayloadDescriptor(const db::model::PayloadRecord& record, co
 } // namespace
 
 PayloadManager::PayloadManager(payload::storage::StorageFactory::TierMap storage, std::shared_ptr<payload::lease::LeaseManager> lease_mgr,
-                               std::shared_ptr<payload::db::Repository> repository)
-    : storage_(std::move(storage)), lease_mgr_(std::move(lease_mgr)), repository_(std::move(repository)) {
+                               std::shared_ptr<payload::db::Repository>          repository,
+                               std::shared_ptr<payload::metadata::MetadataCache> metadata_cache)
+    : storage_(std::move(storage)), lease_mgr_(std::move(lease_mgr)), repository_(std::move(repository)),
+      metadata_cache_(std::move(metadata_cache)) {
   // Cache the shm prefix from the RAM backend so descriptor building is consistent.
   const auto ram_it = storage_.find(TIER_RAM);
   if (ram_it != storage_.end() && ram_it->second) {
@@ -449,6 +452,13 @@ PayloadDescriptor PayloadManager::Commit(const PayloadID& id) {
   auto       hydrated   = descriptor;
   PopulateLocation(&hydrated);
   CacheSnapshot(hydrated);
+  // Register with the metadata cache so this payload is a candidate for
+  // LRU-based tier eviction even if UpsertMetadata was never called.
+  if (metadata_cache_) {
+    payload::manager::v1::PayloadMetadata minimal;
+    *minimal.mutable_id() = id;
+    metadata_cache_->Put(id, minimal);
+  }
   return hydrated;
 }
 
@@ -512,6 +522,9 @@ void PayloadManager::Delete(const PayloadID& id, bool force) {
 
     UpdateTierBytes(payload_tier, -static_cast<int64_t>(payload_size));
     UpdateTierCount(payload_tier, -1);
+    if (metadata_cache_) {
+      metadata_cache_->Remove(id);
+    }
   } // payload_lock released
 
   // Prune the per-payload mutex now that the payload is fully deleted.
@@ -723,6 +736,20 @@ void PayloadManager::HydrateCaches() {
   {
     std::lock_guard<std::mutex> lock(spill_targets_guard_);
     spill_targets_ = std::move(new_spill_targets);
+  }
+
+  // Register all active payloads in the metadata cache so they are candidates
+  // for LRU-based tier eviction even if UpsertMetadata was never called.
+  if (metadata_cache_) {
+    for (const auto& record : records) {
+      if (record.state == PAYLOAD_STATE_ACTIVE) {
+        payload::manager::v1::PayloadID id;
+        id.set_value(record.id);
+        payload::manager::v1::PayloadMetadata minimal;
+        *minimal.mutable_id() = id;
+        metadata_cache_->Put(id, minimal);
+      }
+    }
   }
 
   std::unordered_map<int, uint64_t> new_tier_bytes;

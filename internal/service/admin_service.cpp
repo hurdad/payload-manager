@@ -2,6 +2,7 @@
 
 #include <chrono>
 
+#include "internal/core/payload_manager.hpp"
 #include "internal/db/api/repository.hpp"
 #include "internal/observability/logging.hpp"
 #include "internal/observability/spans.hpp"
@@ -40,6 +41,15 @@ StatsResponse AdminService::Stats(const StatsRequest&) {
     resp.set_payloads_ram(ram_count);
     resp.set_payloads_disk(disk_count);
     resp.set_payloads_gpu(gpu_count);
+
+    const auto tier_bytes = ctx_.manager->GetTierBytes();
+    auto       get_bytes  = [&](Tier t) -> uint64_t {
+      auto it = tier_bytes.find(static_cast<int>(t));
+      return it != tier_bytes.end() ? it->second : 0;
+    };
+    resp.set_bytes_ram(get_bytes(TIER_RAM));
+    resp.set_bytes_disk(get_bytes(TIER_DISK));
+    resp.set_bytes_gpu(get_bytes(TIER_GPU));
 
     payload::observability::Metrics::Instance().RecordRequest("AdminService.Stats", true);
     payload::observability::Metrics::Instance().ObserveRequestLatencyMs(

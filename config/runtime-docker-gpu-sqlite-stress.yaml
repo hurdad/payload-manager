@@ -1,0 +1,51 @@
+server:
+  bind_address: "0.0.0.0:50051"
+
+database:
+  sqlite:
+    path: "/var/lib/payload-manager/payload-manager.db"
+    wal_mode: true
+
+storage:
+  ram:
+    capacity_bytes: 1073741824   # 1 GiB  — small so RAM→Disk spill triggers quickly
+    use_hugepages: false
+    shm_prefix: "pm"
+  disk:
+    root_path: "/var/lib/payload-manager/payloads"
+    capacity_bytes: 107374182400  # 100 GiB
+    fsync: false                  # skip fsync for stress speed
+  gpu:
+    devices:
+      - device_id: 0
+        capacity_bytes: 2147483648  # 2 GiB  — small so GPU→RAM spill triggers quickly
+
+spill_workers:
+  threads: 4
+  retry_backoff: "0.1s"
+
+leases:
+  default_lease: "300s"
+  max_lease: "600s"
+
+logging:
+  level: "warn"
+  pattern: "%+"
+  include_trace_context: false
+
+observability:
+  metrics_enabled: true
+  tracing_enabled: false
+  logs_enabled: false
+  otlp_endpoint: "alloy:4317"
+  transport: OTLP_TRANSPORT_GRPC
+  metrics:
+    request_metrics_enabled: true
+    spill_metrics_enabled: true
+    tier_occupancy_metrics_enabled: true
+    request_latency_histograms_enabled: true
+    route_labels_enabled: true
+    tier_labels_enabled: true
+    min_collection_interval_ms: 1000
+    collection_interval_ms: 5000
+    export_timeout_ms: 3000
