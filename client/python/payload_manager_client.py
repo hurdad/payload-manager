@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 import mmap
 import os
-from typing import Iterator, Union
+from typing import Any, Iterator, Optional, Union
 import uuid as uuidlib
 
 from google.protobuf import empty_pb2
@@ -34,16 +34,16 @@ PayloadIdLike = Union[id_pb2.PayloadID, bytes, bytearray, memoryview, str, uuidl
 @dataclass(frozen=True)
 class WritablePayload:
     descriptor: placement_pb2.PayloadDescriptor
-    mmap_obj: mmap.mmap
-    buffer: pa.Buffer
+    mmap_obj: Optional[mmap.mmap]  # None for GPU-tier payloads
+    buffer: Any  # pa.Buffer for CPU tiers; cupy.ndarray for GPU tier
 
 
 @dataclass(frozen=True)
 class ReadablePayload:
     descriptor: placement_pb2.PayloadDescriptor
     lease_id: bytes
-    mmap_obj: mmap.mmap
-    buffer: pa.Buffer
+    mmap_obj: Optional[mmap.mmap]  # None for GPU-tier payloads
+    buffer: Any  # pa.Buffer for CPU tiers; cupy.ndarray for GPU tier
 
 
 class PayloadClient:
@@ -102,6 +102,11 @@ class PayloadClient:
     ) -> catalog_pb2.AppendPayloadMetadataEventResponse:
         return self._catalog_stub.AppendPayloadMetadataEvent(request, metadata=_trace_metadata())
 
+    def ListPayloads(
+        self, request: lifecycle_pb2.ListPayloadsRequest
+    ) -> lifecycle_pb2.ListPayloadsResponse:
+        return self._catalog_stub.ListPayloads(request, metadata=_trace_metadata())
+
     # Data service --------------------------------------------------------
     def ResolveSnapshot(self, request: lease_pb2.ResolveSnapshotRequest) -> lease_pb2.ResolveSnapshotResponse:
         return self._data_stub.ResolveSnapshot(request, metadata=_trace_metadata())
@@ -144,6 +149,20 @@ class PayloadClient:
         return self._stream_stub.GetRange(request, metadata=_trace_metadata())
 
     # Convenience methods -------------------------------------------------
+    def ListAllPayloads(
+        self,
+        tier_filter: int = 0,
+    ) -> lifecycle_pb2.ListPayloadsResponse:
+        """Return all payloads, optionally filtered by tier.
+
+        Pass a ``types_pb2.Tier`` value (e.g. ``TIER_RAM``, ``TIER_DISK``,
+        ``TIER_GPU``) to restrict the result to a single tier.  The default
+        value of ``0`` (``TIER_UNSPECIFIED``) returns every payload regardless
+        of tier, matching the C++ ``ListPayloads`` convenience semantics.
+        """
+        request = lifecycle_pb2.ListPayloadsRequest(tier_filter=tier_filter)
+        return self.ListPayloads(request)
+
     def AllocateWritableBuffer(
         self,
         size_bytes: int,
@@ -209,6 +228,11 @@ class PayloadClient:
     def _OpenMutableBuffer(self, descriptor: placement_pb2.PayloadDescriptor) -> tuple[mmap.mmap, pa.Buffer]:
         length = _descriptor_length_bytes(descriptor)
 
+        if descriptor.HasField("gpu"):
+            gpu_array = _OpenMutableGpuBuffer(descriptor)
+            # Return (None, gpu_array) – mmap_obj is unused for GPU tier.
+            return None, gpu_array  # type: ignore[return-value]
+
         if descriptor.HasField("ram"):
             path = _shm_path(descriptor.ram.shm_name)
             fd = os.open(path, os.O_RDWR)
@@ -242,6 +266,10 @@ class PayloadClient:
 
     def _OpenReadableBuffer(self, descriptor: placement_pb2.PayloadDescriptor) -> tuple[mmap.mmap, pa.Buffer]:
         length = _descriptor_length_bytes(descriptor)
+
+        if descriptor.HasField("gpu"):
+            gpu_array = _OpenReadableGpuBuffer(descriptor)
+            return None, gpu_array  # type: ignore[return-value]
 
         if descriptor.HasField("ram"):
             fd = os.open(_shm_path(descriptor.ram.shm_name), os.O_RDONLY)
@@ -313,6 +341,61 @@ def _uuid_bytes(value: PayloadIdLike) -> bytes:
 def _shm_path(shm_name: str) -> str:
     cleaned = shm_name[1:] if shm_name.startswith("/") else shm_name
     return os.path.join("/dev/shm", cleaned)
+
+
+def _OpenMutableGpuBuffer(descriptor: placement_pb2.PayloadDescriptor):
+    """Open a writable GPU buffer from a descriptor containing a CUDA IPC handle.
+
+    The C++ client serializes the IPC handle as an Arrow ``CudaIpcMemHandle``:
+    8 bytes of ``int64_t`` offset followed by 64 bytes of ``CUipcMemHandle``,
+    for a total of 72 bytes.
+
+    This function requires ``cupy`` to be installed.  It returns a
+    ``cupy.ndarray`` of ``uint8`` backed by the IPC-opened device memory.
+    The caller is responsible for keeping the array alive as long as device
+    memory is accessed.
+
+    Raises ``NotImplementedError`` when ``cupy`` is not installed.
+    """
+    try:
+        import cupy as cp  # type: ignore[import]
+    except ImportError:
+        raise NotImplementedError(
+            "GPU tier requires cupy to be installed. "
+            "Install it with: pip install cupy-cuda12x  (adjust for your CUDA version)"
+        )
+
+    gpu = descriptor.gpu
+    if not gpu.ipc_handle:
+        raise ValueError("payload descriptor GPU location has empty IPC handle")
+
+    # Arrow serializes CudaIpcMemHandle as [int64_t offset (8 B)][CUipcMemHandle (64 B)] = 72 B.
+    # cupy's ipcGetMemHandle returns a 64-byte opaque handle, so we skip the
+    # leading 8-byte offset that Arrow prepends.
+    raw_handle: bytes = bytes(gpu.ipc_handle)
+    if len(raw_handle) < 72:
+        raise ValueError(
+            f"IPC handle must be at least 72 bytes (Arrow format), got {len(raw_handle)}"
+        )
+    cu_ipc_handle_bytes = raw_handle[8:]  # strip the 8-byte Arrow offset prefix
+
+    mem = cp.cuda.runtime.ipcOpenMemHandle(cu_ipc_handle_bytes)
+    return cp.ndarray(gpu.length_bytes, dtype=cp.uint8, memptr=cp.cuda.MemoryPointer(
+        cp.cuda.UnownedMemory(mem, gpu.length_bytes, None), 0
+    ))
+
+
+def _OpenReadableGpuBuffer(descriptor: placement_pb2.PayloadDescriptor):
+    """Open a read-only GPU buffer from a descriptor containing a CUDA IPC handle.
+
+    Identical to ``_OpenMutableGpuBuffer`` but semantically intended for
+    read-only access.  Returns a ``cupy.ndarray`` of ``uint8``.
+
+    Raises ``NotImplementedError`` when ``cupy`` is not installed.
+    """
+    # cupy does not distinguish mutable/immutable device arrays – reuse the
+    # mutable path, which is safe for read-only callers too.
+    return _OpenMutableGpuBuffer(descriptor)
 
 
 def _trace_metadata() -> list[tuple[str, str]]:

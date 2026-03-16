@@ -19,11 +19,22 @@ services:
       context: .
       dockerfile: Dockerfile.cuda
     restart: unless-stopped
+    hostname: payload-manager
     depends_on:
       postgres:
         condition: service_healthy
     command: ["./payload-manager", "--config", "/app/conf/runtime-docker-gpu-postgres.yaml"]
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c '</dev/tcp/localhost/50051'"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 10s
     ipc: host
+    # Required for cross-container CUDA IPC: cuIpcOpenMemHandle resolves the
+    # exporting process's PID via procfs; without a shared PID namespace the
+    # driver returns CUDA_ERROR_INVALID_CONTEXT even when ipc: host is set.
+    pid: host
     deploy:
       resources:
         reservations:

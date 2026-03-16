@@ -24,7 +24,7 @@ DESCRIPTOR = _descriptor.FileDescriptor(
   name='payload/manager/services/v1/payload_catalog_service.proto',
   package='payload.manager.services.v1',
   syntax='proto3',
-  serialized_pb=_b('\n9payload/manager/services/v1/payload_catalog_service.proto\x12\x1bpayload.manager.services.v1\x1a\x1bgoogle/protobuf/empty.proto\x1a*payload/manager/runtime/v1/lifecycle.proto\x1a(payload/manager/runtime/v1/tiering.proto\x1a(payload/manager/catalog/v1/catalog.proto\x1a(payload/manager/catalog/v1/lineage.proto2\xea\t\n\x15PayloadCatalogService\x12z\n\x0f\x41llocatePayload\x12\x32.payload.manager.runtime.v1.AllocatePayloadRequest\x1a\x33.payload.manager.runtime.v1.AllocatePayloadResponse\x12t\n\rCommitPayload\x12\x30.payload.manager.runtime.v1.CommitPayloadRequest\x1a\x31.payload.manager.runtime.v1.CommitPayloadResponse\x12K\n\x06\x44\x65lete\x12).payload.manager.runtime.v1.DeleteRequest\x1a\x16.google.protobuf.Empty\x12\x62\n\x07Promote\x12*.payload.manager.runtime.v1.PromoteRequest\x1a+.payload.manager.runtime.v1.PromoteResponse\x12\\\n\x05Spill\x12(.payload.manager.runtime.v1.SpillRequest\x1a).payload.manager.runtime.v1.SpillResponse\x12O\n\x08Prefetch\x12+.payload.manager.runtime.v1.PrefetchRequest\x1a\x16.google.protobuf.Empty\x12\x45\n\x03Pin\x12&.payload.manager.runtime.v1.PinRequest\x1a\x16.google.protobuf.Empty\x12I\n\x05Unpin\x12(.payload.manager.runtime.v1.UnpinRequest\x1a\x16.google.protobuf.Empty\x12S\n\nAddLineage\x12-.payload.manager.catalog.v1.AddLineageRequest\x1a\x16.google.protobuf.Empty\x12k\n\nGetLineage\x12-.payload.manager.catalog.v1.GetLineageRequest\x1a..payload.manager.catalog.v1.GetLineageResponse\x12\x8c\x01\n\x15UpdatePayloadMetadata\x12\x38.payload.manager.catalog.v1.UpdatePayloadMetadataRequest\x1a\x39.payload.manager.catalog.v1.UpdatePayloadMetadataResponse\x12\x9b\x01\n\x1a\x41ppendPayloadMetadataEvent\x12=.payload.manager.catalog.v1.AppendPayloadMetadataEventRequest\x1a>.payload.manager.catalog.v1.AppendPayloadMetadataEventResponseb\x06proto3')
+  serialized_pb=_b('\n9payload/manager/services/v1/payload_catalog_service.proto\x12\x1bpayload.manager.services.v1\x1a\x1bgoogle/protobuf/empty.proto\x1a*payload/manager/runtime/v1/lifecycle.proto\x1a(payload/manager/runtime/v1/tiering.proto\x1a(payload/manager/catalog/v1/catalog.proto\x1a(payload/manager/catalog/v1/lineage.proto2\xdd\n\n\x15PayloadCatalogService\x12z\n\x0f\x41llocatePayload\x12\x32.payload.manager.runtime.v1.AllocatePayloadRequest\x1a\x33.payload.manager.runtime.v1.AllocatePayloadResponse\x12t\n\rCommitPayload\x12\x30.payload.manager.runtime.v1.CommitPayloadRequest\x1a\x31.payload.manager.runtime.v1.CommitPayloadResponse\x12K\n\x06\x44\x65lete\x12).payload.manager.runtime.v1.DeleteRequest\x1a\x16.google.protobuf.Empty\x12\x62\n\x07Promote\x12*.payload.manager.runtime.v1.PromoteRequest\x1a+.payload.manager.runtime.v1.PromoteResponse\x12\\\n\x05Spill\x12(.payload.manager.runtime.v1.SpillRequest\x1a).payload.manager.runtime.v1.SpillResponse\x12O\n\x08Prefetch\x12+.payload.manager.runtime.v1.PrefetchRequest\x1a\x16.google.protobuf.Empty\x12\x45\n\x03Pin\x12&.payload.manager.runtime.v1.PinRequest\x1a\x16.google.protobuf.Empty\x12I\n\x05Unpin\x12(.payload.manager.runtime.v1.UnpinRequest\x1a\x16.google.protobuf.Empty\x12S\n\nAddLineage\x12-.payload.manager.catalog.v1.AddLineageRequest\x1a\x16.google.protobuf.Empty\x12k\n\nGetLineage\x12-.payload.manager.catalog.v1.GetLineageRequest\x1a..payload.manager.catalog.v1.GetLineageResponse\x12\x8c\x01\n\x15UpdatePayloadMetadata\x12\x38.payload.manager.catalog.v1.UpdatePayloadMetadataRequest\x1a\x39.payload.manager.catalog.v1.UpdatePayloadMetadataResponse\x12\x9b\x01\n\x1a\x41ppendPayloadMetadataEvent\x12=.payload.manager.catalog.v1.AppendPayloadMetadataEventRequest\x1a>.payload.manager.catalog.v1.AppendPayloadMetadataEventResponse\x12q\n\x0cListPayloads\x12/.payload.manager.runtime.v1.ListPayloadsRequest\x1a\x30.payload.manager.runtime.v1.ListPayloadsResponseb\x06proto3')
   ,
   dependencies=[google_dot_protobuf_dot_empty__pb2.DESCRIPTOR,payload_dot_manager_dot_runtime_dot_v1_dot_lifecycle__pb2.DESCRIPTOR,payload_dot_manager_dot_runtime_dot_v1_dot_tiering__pb2.DESCRIPTOR,payload_dot_manager_dot_catalog_dot_v1_dot_catalog__pb2.DESCRIPTOR,payload_dot_manager_dot_catalog_dot_v1_dot_lineage__pb2.DESCRIPTOR,])
 
@@ -41,7 +41,7 @@ _PAYLOADCATALOGSERVICE = _descriptor.ServiceDescriptor(
   index=0,
   options=None,
   serialized_start=290,
-  serialized_end=1548,
+  serialized_end=1663,
   methods=[
   _descriptor.MethodDescriptor(
     name='AllocatePayload',
@@ -149,6 +149,15 @@ _PAYLOADCATALOGSERVICE = _descriptor.ServiceDescriptor(
     containing_service=None,
     input_type=payload_dot_manager_dot_catalog_dot_v1_dot_catalog__pb2._APPENDPAYLOADMETADATAEVENTREQUEST,
     output_type=payload_dot_manager_dot_catalog_dot_v1_dot_catalog__pb2._APPENDPAYLOADMETADATAEVENTRESPONSE,
+    options=None,
+  ),
+  _descriptor.MethodDescriptor(
+    name='ListPayloads',
+    full_name='payload.manager.services.v1.PayloadCatalogService.ListPayloads',
+    index=12,
+    containing_service=None,
+    input_type=payload_dot_manager_dot_runtime_dot_v1_dot_lifecycle__pb2._LISTPAYLOADSREQUEST,
+    output_type=payload_dot_manager_dot_runtime_dot_v1_dot_lifecycle__pb2._LISTPAYLOADSRESPONSE,
     options=None,
   ),
 ])

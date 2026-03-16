@@ -242,6 +242,8 @@ StreamService::SubscribeBatch StreamService::Subscribe(const SubscribeRequest& r
       if (max_offset.has_value()) {
         start_offset = *max_offset + 1;
       }
+      // If the stream is empty (no max_offset), start_offset stays 0 and the
+      // subscriber will block until the first entry is appended.
     }
 
     constexpr auto kMaxStreamReadBatch = uint64_t{10'000};

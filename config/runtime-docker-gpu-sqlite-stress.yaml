@@ -8,25 +8,25 @@ database:
 
 storage:
   ram:
-    capacity_bytes: 8589934592  # 8 GiB
+    capacity_bytes: 1073741824   # 1 GiB  — small so RAM→Disk spill triggers quickly
     use_hugepages: false
-    shm_prefix: "pm"  # POSIX shm segments named /pm-<uuid>
+    shm_prefix: "pm"
   disk:
     root_path: "/var/lib/payload-manager/payloads"
     capacity_bytes: 107374182400  # 100 GiB
-    fsync: true
+    fsync: false                  # skip fsync for stress speed
   gpu:
     devices:
       - device_id: 0
-        capacity_bytes: 12884901888  # 12 GiB
+        capacity_bytes: 2147483648  # 2 GiB  — small so GPU→RAM spill triggers quickly
 
 spill_workers:
   threads: 4
-  retry_backoff: "1s"
+  retry_backoff: "0.1s"
 
 leases:
-  default_lease: "20s"
-  max_lease: "120s"
+  default_lease: "300s"
+  max_lease: "600s"
 
 logging:
   level: "warn"
@@ -35,7 +35,7 @@ logging:
 
 observability:
   metrics_enabled: true
-  tracing_enabled: true
+  tracing_enabled: false
   logs_enabled: false
   otlp_endpoint: "alloy:4317"
   transport: OTLP_TRANSPORT_GRPC
@@ -47,5 +47,5 @@ observability:
     route_labels_enabled: true
     tier_labels_enabled: true
     min_collection_interval_ms: 1000
-    collection_interval_ms: 10000
+    collection_interval_ms: 5000
     export_timeout_ms: 3000

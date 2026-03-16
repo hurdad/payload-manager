@@ -1,0 +1,31 @@
+# Overlay this on a GPU base compose file to run the C++ examples (including
+# the GPU allocate/read example) inside Docker against a CUDA-enabled service.
+#
+# Usage:
+#   docker compose -f docker-compose.gpu.sqlite.yml   -f docker-compose.examples.cuda.yml up --build --exit-code-from cpp-examples
+#   docker compose -f docker-compose.gpu.postgres.yml -f docker-compose.examples.cuda.yml up --build --exit-code-from cpp-examples
+
+services:
+  cpp-examples:
+    build:
+      context: .
+      dockerfile: Dockerfile.examples.cuda
+      shm_size: '256m'
+    depends_on:
+      payload-manager:
+        condition: service_healthy
+    ipc: host
+    # Required for cross-container CUDA IPC: cuIpcOpenMemHandle resolves the
+    # exporting process's PID via procfs; without a shared PID namespace the
+    # driver returns CUDA_ERROR_INVALID_CONTEXT even when ipc: host is set.
+    pid: host
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    environment:
+      PAYLOAD_MANAGER_ENDPOINT: "payload-manager:50051"
+    restart: "no"

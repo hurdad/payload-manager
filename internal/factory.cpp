@@ -46,7 +46,7 @@ namespace {
 // Execute a migration SQL statement, ignoring "duplicate column" errors so that
 // ALTER TABLE ADD COLUMN is idempotent on older SQLite builds that don't support
 // IF NOT EXISTS. All other errors are re-thrown.
-static void TryExecSqlite(const std::shared_ptr<db::sqlite::SqliteDB>& db, const std::string& sql) {
+void TryExecSqlite(const std::shared_ptr<db::sqlite::SqliteDB>& db, const std::string& sql) {
   try {
     db->Exec(sql);
   } catch (const std::runtime_error& e) {
@@ -242,7 +242,7 @@ Application Build(const payload::runtime::config::RuntimeConfig& config) {
   auto lineage_graph  = std::make_shared<lineage::LineageGraph>();
   auto repository     = BuildRepository(config);
 
-  auto payload_manager = std::make_shared<core::PayloadManager>(storage_map, lease_mgr, repository);
+  auto payload_manager = std::make_shared<core::PayloadManager>(storage_map, lease_mgr, repository, metadata_cache);
   payload_manager->HydrateCaches();
 
   // ------------------------------------------------------------------

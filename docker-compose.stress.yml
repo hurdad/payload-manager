@@ -1,0 +1,50 @@
+# Stress-test overlay: uses reduced tier limits (GPU=2GiB, RAM=1GiB) so the
+# GPU→RAM→Disk spill cascade happens quickly without needing 12GiB of VRAM.
+#
+# Usage (GPU + observability stack):
+#   docker compose \
+#     -f docker-compose.gpu.sqlite.yml \
+#     -f docker-compose.observability.yml \
+#     -f docker-compose.stress.yml \
+#     up --build --exit-code-from tier-spill-stress
+
+services:
+  # Override payload-manager to use the reduced-capacity stress config.
+  payload-manager:
+    command: ["./payload-manager", "--config", "/app/conf/runtime-docker-gpu-sqlite-stress.yaml"]
+    volumes:
+      - ./config/runtime-docker-gpu-sqlite-stress.yaml:/app/conf/runtime-docker-gpu-sqlite-stress.yaml:ro
+
+  tier-spill-stress:
+    build:
+      context: .
+      dockerfile: Dockerfile.examples.cuda
+      shm_size: '256m'
+    depends_on:
+      payload-manager:
+        condition: service_healthy
+    ipc: host
+    pid: host
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    environment:
+      PAYLOAD_MANAGER_ENDPOINT: "payload-manager:50051"
+      # payload_mb=128  gpu_payloads=17  ram_payloads=10  poll_ms=1000
+      STRESS_PAYLOAD_MB: "${STRESS_PAYLOAD_MB:-128}"
+      STRESS_GPU_PAYLOADS: "${STRESS_GPU_PAYLOADS:-17}"
+      STRESS_RAM_PAYLOADS: "${STRESS_RAM_PAYLOADS:-10}"
+      STRESS_POLL_MS: "${STRESS_POLL_MS:-1000}"
+    entrypoint: [
+      "/app/payload_manager_example_tier_spill_stress",
+      "payload-manager:50051",
+      "${STRESS_PAYLOAD_MB:-128}",
+      "${STRESS_GPU_PAYLOADS:-17}",
+      "${STRESS_RAM_PAYLOADS:-10}",
+      "${STRESS_POLL_MS:-1000}"
+    ]
+    restart: "no"

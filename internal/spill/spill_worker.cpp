@@ -20,13 +20,17 @@ SpillWorker::~SpillWorker() {
 }
 
 void SpillWorker::Start() {
+  std::lock_guard lock(mu_);
   if (thread_.joinable()) return; // already running
   running_ = true;
   thread_  = std::thread(&SpillWorker::Run, this);
 }
 
 void SpillWorker::Stop() {
-  running_ = false;
+  {
+    std::lock_guard lock(mu_);
+    running_ = false;
+  }
   scheduler_->Wakeup();
   if (thread_.joinable()) thread_.join();
 }

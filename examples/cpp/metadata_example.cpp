@@ -4,28 +4,10 @@
 #include <string>
 
 #include "client/cpp/payload_manager_client.h"
+#include "example_util.hpp"
 #include "otel_tracer.hpp"
 #include "payload/manager/v1.hpp"
 #include "traced_channel.hpp"
-
-namespace {
-
-std::string UuidToHex(const std::string& uuid_bytes) {
-  static constexpr char kHex[] = "0123456789abcdef";
-  std::string           out;
-  out.reserve(36);
-  for (size_t i = 0; i < uuid_bytes.size(); ++i) {
-    if (i == 4 || i == 6 || i == 8 || i == 10) {
-      out.push_back('-');
-    }
-    const uint8_t byte = static_cast<uint8_t>(uuid_bytes[i]);
-    out.push_back(kHex[byte >> 4]);
-    out.push_back(kHex[byte & 0x0F]);
-  }
-  return out;
-}
-
-} // namespace
 
 int main(int argc, char** argv) {
   // argv[1]: server endpoint  (default localhost:50051)
@@ -41,6 +23,8 @@ int main(int argc, char** argv) {
   auto writable = client.AllocateWritableBuffer(8, payload::manager::v1::TIER_RAM);
   if (!writable.ok()) {
     std::cerr << "AllocateWritableBuffer failed: " << writable.status().ToString() << '\n';
+    OtelEndSpan();
+    OtelShutdown();
     return 1;
   }
 
@@ -48,10 +32,12 @@ int main(int argc, char** argv) {
   writable_payload.buffer->mutable_data()[0] = 42;
 
   const auto& payload_id    = writable_payload.descriptor.payload_id();
-  const auto  uuid_text     = UuidToHex(payload_id.value());
+  const auto  uuid_text     = payload::examples::UuidToHex(payload_id.value());
   auto        commit_status = client.CommitPayload(payload_id);
   if (!commit_status.ok()) {
     std::cerr << "CommitPayload failed: " << commit_status.ToString() << '\n';
+    OtelEndSpan();
+    OtelShutdown();
     return 1;
   }
 
@@ -69,6 +55,8 @@ int main(int argc, char** argv) {
   auto update_response = client.UpdatePayloadMetadata(update_request);
   if (!update_response.ok()) {
     std::cerr << "UpdatePayloadMetadata failed: " << update_response.status().ToString() << '\n';
+    OtelEndSpan();
+    OtelShutdown();
     return 1;
   }
 
@@ -84,6 +72,8 @@ int main(int argc, char** argv) {
   auto event_response = client.AppendPayloadMetadataEvent(event_request);
   if (!event_response.ok()) {
     std::cerr << "AppendPayloadMetadataEvent failed: " << event_response.status().ToString() << '\n';
+    OtelEndSpan();
+    OtelShutdown();
     return 1;
   }
 

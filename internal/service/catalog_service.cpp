@@ -225,10 +225,8 @@ GetLineageResponse CatalogService::GetLineage(const GetLineageRequest& req) {
 
 void CatalogService::Delete(const DeleteRequest& req) {
   ObserveRpc("CatalogService.Delete", &req.id(), [&] {
+    // PayloadManager::Delete() handles metadata cache removal internally.
     ctx_.manager->Delete(req.id(), req.force());
-    if (ctx_.metadata) {
-      ctx_.metadata->Remove(req.id());
-    }
   });
 }
 
@@ -302,10 +300,18 @@ ListPayloadsResponse CatalogService::ListPayloads(const ListPayloadsRequest& req
     tx->Commit();
 
     for (const auto& r : records) {
-      auto* entry = resp.add_payloads();
-
+      // Skip records whose stored ID cannot be parsed — this protects against
+      // database corruption introducing malformed IDs crashing the whole list.
       PayloadID proto_id;
-      proto_id.set_value(payload::util::FromString(r.id).data(), 16);
+      try {
+        proto_id.set_value(payload::util::FromString(r.id).data(), 16);
+      } catch (const std::exception&) {
+        PAYLOAD_LOG_WARN("list payloads: skipping record with malformed id",
+                         {payload::observability::StringField("id", r.id)});
+        continue;
+      }
+
+      auto* entry = resp.add_payloads();
       *entry->mutable_id() = proto_id;
 
       entry->set_tier(r.tier);

@@ -174,7 +174,9 @@ class MutableMMapBuffer final : public arrow::MutableBuffer {
 class MutableCudaIpcBuffer final : public arrow::MutableBuffer {
  public:
   explicit MutableCudaIpcBuffer(std::shared_ptr<arrow::cuda::CudaBuffer> buffer)
-      : arrow::MutableBuffer(buffer->mutable_data(), buffer->size()), buffer_(std::move(buffer)) {
+      // Use address() rather than mutable_data(): CudaBuffer::mutable_data() returns
+      // nullptr because is_cpu_ is false, but address() always returns the raw pointer.
+      : arrow::MutableBuffer(reinterpret_cast<uint8_t*>(buffer->address()), buffer->size()), buffer_(std::move(buffer)) {
   }
 
  private:
@@ -188,10 +190,8 @@ arrow::Result<std::shared_ptr<arrow::cuda::CudaBuffer>> OpenCudaIpcBuffer(const 
     return arrow::Status::Invalid("payload descriptor GPU location has empty IPC handle");
   }
 
-  if (gpu.ipc_handle().size() != sizeof(CUipcMemHandle)) {
-    return arrow::Status::Invalid("payload descriptor GPU IPC handle must be ", sizeof(CUipcMemHandle), " bytes, got ", gpu.ipc_handle().size());
-  }
-
+  // Arrow serializes CudaIpcMemHandle as [int64_t offset (8B)][CUipcMemHandle (64B)] = 72B.
+  // Do not validate against sizeof(CUipcMemHandle) here; let FromBuffer() parse the format.
   ARROW_ASSIGN_OR_RAISE(auto* device_manager, arrow::cuda::CudaDeviceManager::Instance());
   ARROW_ASSIGN_OR_RAISE(auto context, device_manager->GetContext(static_cast<int>(gpu.device_id())));
   ARROW_ASSIGN_OR_RAISE(auto ipc_handle, arrow::cuda::CudaIpcMemHandle::FromBuffer(gpu.ipc_handle().data()));

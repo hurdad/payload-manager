@@ -5,24 +5,12 @@
 #include <string>
 
 #include "client/cpp/payload_manager_client.h"
+#include "example_util.hpp"
 #include "otel_tracer.hpp"
 #include "payload/manager/v1.hpp"
 #include "traced_channel.hpp"
 
 namespace {
-
-std::string UuidToHex(const std::string& bytes) {
-  static constexpr char kHex[] = "0123456789abcdef";
-  std::string           out;
-  out.reserve(36);
-  for (size_t i = 0; i < bytes.size(); ++i) {
-    const auto b = static_cast<unsigned char>(bytes[i]);
-    if (i == 4 || i == 6 || i == 8 || i == 10) out += '-';
-    out += kHex[b >> 4];
-    out += kHex[b & 0x0F];
-  }
-  return out;
-}
 
 const char* TierName(payload::manager::v1::Tier t) {
   switch (t) {
@@ -93,7 +81,7 @@ int main(int argc, char** argv) {
             << "AGE(s)" << std::setw(9) << "TTL(s)" << std::setw(8) << "LEASES" << "\n";
 
   for (const auto& p : resp.payloads()) {
-    const std::string uuid = UuidToHex(p.id().value());
+    const std::string uuid = payload::examples::UuidToHex(p.id().value());
 
     const std::string age = p.created_at_ms() > 0 ? std::to_string((now_ms - p.created_at_ms()) / 1000) : "?";
 
