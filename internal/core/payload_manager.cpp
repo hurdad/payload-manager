@@ -164,10 +164,8 @@ PayloadDescriptor ToPayloadDescriptor(const db::model::PayloadRecord& record, co
 } // namespace
 
 PayloadManager::PayloadManager(payload::storage::StorageFactory::TierMap storage, std::shared_ptr<payload::lease::LeaseManager> lease_mgr,
-                               std::shared_ptr<payload::db::Repository>          repository,
-                               std::shared_ptr<payload::metadata::MetadataCache> metadata_cache)
-    : storage_(std::move(storage)), lease_mgr_(std::move(lease_mgr)), repository_(std::move(repository)),
-      metadata_cache_(std::move(metadata_cache)) {
+                               std::shared_ptr<payload::db::Repository> repository, std::shared_ptr<payload::metadata::MetadataCache> metadata_cache)
+    : storage_(std::move(storage)), lease_mgr_(std::move(lease_mgr)), repository_(std::move(repository)), metadata_cache_(std::move(metadata_cache)) {
   // Cache the shm prefix from the RAM backend so descriptor building is consistent.
   const auto ram_it = storage_.find(TIER_RAM);
   if (ram_it != storage_.end() && ram_it->second) {

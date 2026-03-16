@@ -58,9 +58,9 @@ std::string HumanBytes(uint64_t bytes) {
 
 // Render a fixed-width ASCII bar: [████░░░░░░] pct%
 std::string Bar(uint64_t used, uint64_t limit, int width = 20) {
-  const double   ratio  = limit > 0 ? static_cast<double>(used) / limit : 0.0;
-  const int      filled = static_cast<int>(ratio * width);
-  std::string    bar    = "[";
+  const double ratio  = limit > 0 ? static_cast<double>(used) / limit : 0.0;
+  const int    filled = static_cast<int>(ratio * width);
+  std::string  bar    = "[";
   for (int i = 0; i < width; ++i) bar += (i < filled ? "\xe2\x96\x88" : "\xe2\x96\x91");
   bar += "] ";
   std::ostringstream pct;
@@ -91,17 +91,17 @@ void PrintStats(payload::manager::client::PayloadClient& client, const Limits& l
   const uint64_t disk_used = s.bytes_disk();
 
   std::cout << "  " << label << "\n";
-  std::cout << "    GPU  " << Bar(gpu_used, limits.gpu_bytes) << "  " << HumanBytes(gpu_used) << " / " << HumanBytes(limits.gpu_bytes)
-            << "  (" << s.payloads_gpu() << " payloads)\n";
-  std::cout << "    RAM  " << Bar(ram_used, limits.ram_bytes) << "  " << HumanBytes(ram_used) << " / " << HumanBytes(limits.ram_bytes)
-            << "  (" << s.payloads_ram() << " payloads)\n";
-  std::cout << "    Disk " << Bar(disk_used, limits.disk_bytes) << "  " << HumanBytes(disk_used) << " / " << HumanBytes(limits.disk_bytes)
-            << "  (" << s.payloads_disk() << " payloads)\n";
+  std::cout << "    GPU  " << Bar(gpu_used, limits.gpu_bytes) << "  " << HumanBytes(gpu_used) << " / " << HumanBytes(limits.gpu_bytes) << "  ("
+            << s.payloads_gpu() << " payloads)\n";
+  std::cout << "    RAM  " << Bar(ram_used, limits.ram_bytes) << "  " << HumanBytes(ram_used) << " / " << HumanBytes(limits.ram_bytes) << "  ("
+            << s.payloads_ram() << " payloads)\n";
+  std::cout << "    Disk " << Bar(disk_used, limits.disk_bytes) << "  " << HumanBytes(disk_used) << " / " << HumanBytes(limits.disk_bytes) << "  ("
+            << s.payloads_disk() << " payloads)\n";
   std::cout << std::flush;
 }
 
-void PollUntilSettled(payload::manager::client::PayloadClient& client, const Limits& limits,
-                      const std::string& phase_label, int poll_ms, int max_polls = 60) {
+void PollUntilSettled(payload::manager::client::PayloadClient& client, const Limits& limits, const std::string& phase_label, int poll_ms,
+                      int max_polls = 60) {
   std::cout << "\n── " << phase_label << " ──\n";
   for (int i = 0; i < max_polls; ++i) {
     std::this_thread::sleep_for(std::chrono::milliseconds(poll_ms));
@@ -112,12 +112,12 @@ void PollUntilSettled(payload::manager::client::PayloadClient& client, const Lim
 } // namespace
 
 int main(int argc, char** argv) {
-  const std::string target      = argc > 1 ? argv[1] : "localhost:50051";
-  const uint64_t    payload_mb  = argc > 2 ? std::stoull(argv[2]) : 128;
-  const int         gpu_count   = argc > 3 ? std::stoi(argv[3]) : 17;
-  const int         ram_count   = argc > 4 ? std::stoi(argv[4]) : 10;
-  const int         poll_ms     = argc > 5 ? std::stoi(argv[5]) : 1000;
-  const std::string otlp_ep     = argc > 6 ? argv[6] : "";
+  const std::string target     = argc > 1 ? argv[1] : "localhost:50051";
+  const uint64_t    payload_mb = argc > 2 ? std::stoull(argv[2]) : 128;
+  const int         gpu_count  = argc > 3 ? std::stoi(argv[3]) : 17;
+  const int         ram_count  = argc > 4 ? std::stoi(argv[4]) : 10;
+  const int         poll_ms    = argc > 5 ? std::stoi(argv[5]) : 1000;
+  const std::string otlp_ep    = argc > 6 ? argv[6] : "";
 
   const uint64_t payload_bytes = payload_mb * kMiB;
 
@@ -154,7 +154,8 @@ int main(int argc, char** argv) {
   for (int i = 0; i < gpu_count; ++i) {
     auto writable = client.AllocateWritableBuffer(payload_bytes, payload::manager::v1::TIER_GPU);
     if (!writable.ok()) {
-      std::cerr << "  [" << std::setw(3) << (i + 1) << "/" << gpu_count << "] AllocateWritableBuffer(GPU) failed: " << writable.status().ToString() << "\n";
+      std::cerr << "  [" << std::setw(3) << (i + 1) << "/" << gpu_count << "] AllocateWritableBuffer(GPU) failed: " << writable.status().ToString()
+                << "\n";
       break;
     }
     auto& wp = writable.ValueOrDie();
@@ -193,7 +194,8 @@ int main(int argc, char** argv) {
   for (int i = 0; i < ram_count; ++i) {
     auto writable = client.AllocateWritableBuffer(payload_bytes, payload::manager::v1::TIER_RAM);
     if (!writable.ok()) {
-      std::cerr << "  [" << std::setw(3) << (i + 1) << "/" << ram_count << "] AllocateWritableBuffer(RAM) failed: " << writable.status().ToString() << "\n";
+      std::cerr << "  [" << std::setw(3) << (i + 1) << "/" << ram_count << "] AllocateWritableBuffer(RAM) failed: " << writable.status().ToString()
+                << "\n";
       break;
     }
     auto& wp     = writable.ValueOrDie();

@@ -306,12 +306,11 @@ ListPayloadsResponse CatalogService::ListPayloads(const ListPayloadsRequest& req
       try {
         proto_id.set_value(payload::util::FromString(r.id).data(), 16);
       } catch (const std::exception&) {
-        PAYLOAD_LOG_WARN("list payloads: skipping record with malformed id",
-                         {payload::observability::StringField("id", r.id)});
+        PAYLOAD_LOG_WARN("list payloads: skipping record with malformed id", {payload::observability::StringField("id", r.id)});
         continue;
       }
 
-      auto* entry = resp.add_payloads();
+      auto* entry          = resp.add_payloads();
       *entry->mutable_id() = proto_id;
 
       entry->set_tier(r.tier);

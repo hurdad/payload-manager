@@ -31,8 +31,7 @@ namespace payload::core {
 class PayloadManager {
  public:
   PayloadManager(payload::storage::StorageFactory::TierMap storage, std::shared_ptr<payload::lease::LeaseManager> lease_mgr,
-                 std::shared_ptr<payload::db::Repository>      repository,
-                 std::shared_ptr<payload::metadata::MetadataCache> metadata_cache = nullptr);
+                 std::shared_ptr<payload::db::Repository> repository, std::shared_ptr<payload::metadata::MetadataCache> metadata_cache = nullptr);
 
   payload::manager::v1::PayloadDescriptor Allocate(uint64_t size_bytes, payload::manager::v1::Tier preferred, uint64_t ttl_ms = 0,
                                                    bool persist = false, const payload::manager::core::v1::EvictionPolicy& eviction_policy = {});
@@ -72,7 +71,7 @@ class PayloadManager {
   std::shared_ptr<payload::lease::LeaseManager>     lease_mgr_;
   std::shared_ptr<payload::db::Repository>          repository_;
   std::shared_ptr<payload::metadata::MetadataCache> metadata_cache_;
-  std::string                                   shm_prefix_{"pm"};
+  std::string                                       shm_prefix_{"pm"};
 
   // Serializes Delete with AcquireReadLease to prevent TOCTOU on lease checks.
   mutable std::mutex delete_mutex_;
