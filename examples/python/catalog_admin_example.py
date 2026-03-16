@@ -49,7 +49,7 @@ def main() -> int:
     edge.parent.CopyFrom(payload_id)
     edge.operation = "identity"
     edge.role = "demo"
-    edge.parameters = "{}"
+    edge.parameters = b"{}"
     client.AddLineage(add_lineage_request)
 
     get_lineage_request = lineage_pb2.GetLineageRequest(upstream=True, max_depth=1)

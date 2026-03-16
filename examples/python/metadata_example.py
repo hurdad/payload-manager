@@ -39,7 +39,7 @@ def main() -> int:
     update_request.id.CopyFrom(payload_id)
     update_request.metadata.id.CopyFrom(payload_id)
     update_request.metadata.schema = "example.payload.v1"
-    update_request.metadata.data = '{"producer":"metadata_example","notes":"hello payload manager"}'
+    update_request.metadata.data = b'{"producer":"metadata_example","notes":"hello payload manager"}'
     client.UpdatePayloadMetadata(update_request)
 
     # AppendPayloadMetadataEvent stores an immutable event entry so consumers
@@ -51,7 +51,7 @@ def main() -> int:
     event_request.id.CopyFrom(payload_id)
     event_request.metadata.id.CopyFrom(payload_id)
     event_request.metadata.schema = "example.payload.v1"
-    event_request.metadata.data = '{"event":"metadata_updated","component":"metadata_example"}'
+    event_request.metadata.data = b'{"event":"metadata_updated","component":"metadata_example"}'
     client.AppendPayloadMetadataEvent(event_request)
 
     print(f"Metadata updated for payload {payload_uuid}")

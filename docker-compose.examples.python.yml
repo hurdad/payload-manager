@@ -1,0 +1,17 @@
+# Overlay for running Python examples against a live payload-manager service.
+#
+# Usage:
+#   docker compose -f docker-compose.sqlite.yml -f docker-compose.examples.python.yml up --build --exit-code-from python-examples
+
+services:
+  python-examples:
+    build:
+      context: .
+      dockerfile: Dockerfile.examples.python
+    depends_on:
+      payload-manager:
+        condition: service_healthy
+    ipc: host
+    environment:
+      PAYLOAD_MANAGER_ENDPOINT: "payload-manager:50051"
+    restart: "no"

@@ -11,7 +11,7 @@ services:
   cpp-examples:
     build:
       context: .
-      dockerfile: Dockerfile.examples
+      dockerfile: Dockerfile.examples.cpp
       shm_size: '256m'
     depends_on:
       payload-manager:
