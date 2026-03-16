@@ -35,6 +35,7 @@ payload_manager_add_unit_test(payload_manager_unit_lease_table_multi_payload lea
 payload_manager_add_unit_test(payload_manager_unit_sqlite_transaction sqlite_transaction_test.cpp "sqlite;db")
 payload_manager_add_unit_test(payload_manager_unit_tiering_manager_stop tiering_manager_stop_test.cpp "tiering;stop")
 payload_manager_add_unit_test(payload_manager_unit_data_service_best_effort data_service_best_effort_test.cpp "data;lease")
+payload_manager_add_unit_test(payload_manager_unit_storage_sidecar storage_sidecar_test.cpp "storage;sidecar;disk")
 
 if(TARGET payload_manager::client)
   payload_manager_add_unit_test(payload_manager_unit_client_payload_manager_client client/payload_manager_client_test.cpp "client")
