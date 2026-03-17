@@ -196,8 +196,8 @@ pip install './client/python[cuda]'
 Current GPU client runtime status:
 
 - C++ client: GPU descriptor runtime handling is implemented when built with `-DPAYLOAD_MANAGER_CLIENT_ENABLE_CUDA=ON` and Arrow CUDA libraries are available.
-- Python client: GPU descriptor read/write path is **not yet implemented** (RAM/disk paths are implemented).
-- Result: C++ can use GPU descriptors at runtime in CUDA-capable builds; Python remains RAM/disk-only today.
+- Python client: GPU descriptor read/write runtime handling is implemented when installed with CUDA extras and Arrow CUDA dependencies are available.
+- Result: Both C++ and Python clients can use GPU descriptors at runtime in CUDA-capable environments.
 
 ## Repository layout
 
