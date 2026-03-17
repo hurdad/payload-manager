@@ -16,8 +16,8 @@ services:
 
   payload-manager:
     build:
-      context: .
-      dockerfile: Dockerfile.otel
+      context: ..
+      dockerfile: docker/Dockerfile.otel
     restart: unless-stopped
     hostname: payload-manager
     depends_on:
@@ -34,7 +34,7 @@ services:
     ports:
       - "50055:50051"
     volumes:
-      - ./config/runtime-docker-postgres.yaml:/app/conf/runtime-docker-postgres.yaml:ro
+      - ../config/runtime-docker-postgres.yaml:/app/conf/runtime-docker-postgres.yaml:ro
       - payload-otel-data:/var/lib/payload-manager
 
 volumes:

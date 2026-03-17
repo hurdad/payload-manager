@@ -1,7 +1,7 @@
 # Overlay this on top of any base compose file to add the full observability stack:
 #
-#   docker compose -f docker-compose.postgres.yml -f docker-compose.observability.yml up
-#   docker compose -f docker-compose.sqlite.yml   -f docker-compose.observability.yml up
+#   docker compose -f docker/docker-compose.postgres.yml -f docker/docker-compose.observability.yml up
+#   docker compose -f docker/docker-compose.sqlite.yml   -f docker/docker-compose.observability.yml up
 #
 # Provides:
 #   - Grafana Alloy  — OTLP receiver (gRPC :4317, HTTP :4318)
@@ -23,7 +23,7 @@ services:
       - "4318:4318"   # OTLP HTTP (used by integration test for root span export)
       - "12345:12345" # Alloy UI
     volumes:
-      - ./grafana/alloy/config.alloy:/etc/alloy/config.alloy:ro
+      - ../grafana/alloy/config.alloy:/etc/alloy/config.alloy:ro
     depends_on:
       - prometheus
 
@@ -39,7 +39,7 @@ services:
     ports:
       - "9090:9090"
     volumes:
-      - ./grafana/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ../grafana/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - prometheus-data:/prometheus
 
   grafana:
@@ -54,8 +54,8 @@ services:
     ports:
       - "3000:3000"
     volumes:
-      - ./grafana/provisioning:/etc/grafana/provisioning:ro
-      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - ../grafana/provisioning:/etc/grafana/provisioning:ro
+      - ../grafana/dashboards:/var/lib/grafana/dashboards:ro
       - grafana-data:/var/lib/grafana
     depends_on:
       - prometheus
@@ -69,7 +69,7 @@ services:
       - "9095:9095"  # Tempo gRPC query (used by Grafana 11.x streaming search)
       - "4327:4317"  # OTLP gRPC (offset to avoid collision with alloy)
     volumes:
-      - ./grafana/tempo/tempo.yaml:/etc/tempo/tempo.yaml:ro
+      - ../grafana/tempo/tempo.yaml:/etc/tempo/tempo.yaml:ro
       - tempo-data:/var/tempo
 
 volumes:

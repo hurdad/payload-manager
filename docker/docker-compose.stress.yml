@@ -3,9 +3,9 @@
 #
 # Usage (GPU + observability stack):
 #   docker compose \
-#     -f docker-compose.gpu.sqlite.yml \
-#     -f docker-compose.observability.yml \
-#     -f docker-compose.stress.yml \
+#     -f docker/docker-compose.gpu.sqlite.yml \
+#     -f docker/docker-compose.observability.yml \
+#     -f docker/docker-compose.stress.yml \
 #     up --build --exit-code-from tier-spill-stress
 
 services:
@@ -13,12 +13,12 @@ services:
   payload-manager:
     command: ["./payload-manager", "--config", "/app/conf/runtime-docker-gpu-sqlite-stress.yaml"]
     volumes:
-      - ./config/runtime-docker-gpu-sqlite-stress.yaml:/app/conf/runtime-docker-gpu-sqlite-stress.yaml:ro
+      - ../config/runtime-docker-gpu-sqlite-stress.yaml:/app/conf/runtime-docker-gpu-sqlite-stress.yaml:ro
 
   tier-spill-stress:
     build:
-      context: .
-      dockerfile: Dockerfile.examples.cuda
+      context: ..
+      dockerfile: docker/Dockerfile.examples.cuda
       shm_size: '256m'
     depends_on:
       payload-manager:

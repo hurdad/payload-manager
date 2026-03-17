@@ -1,16 +1,15 @@
-# Overlay this on a GPU base compose file to run the C++ examples (including
-# the GPU allocate/read example) inside Docker against a CUDA-enabled service.
+# Overlay for running Python examples (including GPU) against a CUDA-enabled
+# payload-manager service.
 #
 # Usage:
-#   docker compose -f docker-compose.gpu.sqlite.yml   -f docker-compose.examples.cuda.yml up --build --exit-code-from cpp-examples
-#   docker compose -f docker-compose.gpu.postgres.yml -f docker-compose.examples.cuda.yml up --build --exit-code-from cpp-examples
+#   docker compose -f docker/docker-compose.gpu.sqlite.yml   -f docker/docker-compose.examples.python.cuda.yml up --build --exit-code-from python-examples
+#   docker compose -f docker/docker-compose.gpu.postgres.yml -f docker/docker-compose.examples.python.cuda.yml up --build --exit-code-from python-examples
 
 services:
-  cpp-examples:
+  python-examples:
     build:
-      context: .
-      dockerfile: Dockerfile.examples.cuda
-      shm_size: '256m'
+      context: ..
+      dockerfile: docker/Dockerfile.examples.python.cuda
     depends_on:
       payload-manager:
         condition: service_healthy

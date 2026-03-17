@@ -1,0 +1,22 @@
+# Overlay this on any base compose file to run the C++ examples
+# inside Docker against the running payload-manager service.
+#
+# Usage:
+#   docker compose -f docker/docker-compose.sqlite.yml      -f docker/docker-compose.examples.yml up --build --exit-code-from cpp-examples
+#   docker compose -f docker/docker-compose.postgres.yml    -f docker/docker-compose.examples.yml up --build --exit-code-from cpp-examples
+#   docker compose -f docker/docker-compose.otel.sqlite.yml -f docker/docker-compose.examples.yml up --build --exit-code-from cpp-examples
+#   docker compose -f docker/docker-compose.otel.postgres.yml -f docker/docker-compose.examples.yml up --build --exit-code-from cpp-examples
+
+services:
+  cpp-examples:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.examples.cpp
+      shm_size: '256m'
+    depends_on:
+      payload-manager:
+        condition: service_healthy
+    ipc: host
+    environment:
+      PAYLOAD_MANAGER_ENDPOINT: "payload-manager:50051"
+    restart: "no"

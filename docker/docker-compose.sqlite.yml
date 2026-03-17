@@ -1,8 +1,8 @@
 services:
   payload-manager:
     build:
-      context: .
-      dockerfile: Dockerfile
+      context: ..
+      dockerfile: docker/Dockerfile
     restart: unless-stopped
     hostname: payload-manager
     command: ["./payload-manager", "--config", "/app/conf/runtime-docker-no-otel-sqlite.yaml"]
@@ -16,7 +16,7 @@ services:
     ports:
       - "50052:50051"
     volumes:
-      - ./config/runtime-docker-no-otel-sqlite.yaml:/app/conf/runtime-docker-no-otel-sqlite.yaml:ro
+      - ../config/runtime-docker-no-otel-sqlite.yaml:/app/conf/runtime-docker-no-otel-sqlite.yaml:ro
       - payload-sqlite-data:/var/lib/payload-manager
 
 volumes:

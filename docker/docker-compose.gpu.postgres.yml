@@ -16,8 +16,8 @@ services:
 
   payload-manager:
     build:
-      context: .
-      dockerfile: Dockerfile.cuda
+      context: ..
+      dockerfile: docker/Dockerfile.cuda
     restart: unless-stopped
     hostname: payload-manager
     depends_on:
@@ -45,7 +45,7 @@ services:
     ports:
       - "50056:50051"
     volumes:
-      - ./config/runtime-docker-gpu-postgres.yaml:/app/conf/runtime-docker-gpu-postgres.yaml:ro
+      - ../config/runtime-docker-gpu-postgres.yaml:/app/conf/runtime-docker-gpu-postgres.yaml:ro
       - payload-gpu-postgres-data:/var/lib/payload-manager
 
 volumes:
