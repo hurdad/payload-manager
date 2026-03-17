@@ -67,4 +67,28 @@ if(TARGET payload_manager::client)
   )
 
   payload_manager_register_test(payload_manager_integration_api "integration;api;live")
+
+  # ---------------------------------------------------------------------------
+  # Object-storage spill integration test — requires a live payload-manager
+  # with MinIO configured.  Set PAYLOAD_MANAGER_ENDPOINT, MINIO_ENDPOINT, and
+  # MINIO_BUCKET to run.  Verifies .bin and .meta.json land in the S3 bucket.
+  # ---------------------------------------------------------------------------
+
+  add_executable(payload_manager_integration_object_spill
+    object_spill_integration_test.cpp
+  )
+
+  target_compile_features(payload_manager_integration_object_spill PRIVATE cxx_std_20)
+
+  target_include_directories(payload_manager_integration_object_spill
+    PRIVATE
+    ${PROJECT_SOURCE_DIR}
+  )
+
+  target_link_libraries(payload_manager_integration_object_spill
+    PRIVATE
+    payload_manager::client
+  )
+
+  payload_manager_register_test(payload_manager_integration_object_spill "integration;api;live;minio")
 endif()

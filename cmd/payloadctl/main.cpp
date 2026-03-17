@@ -23,13 +23,13 @@ static void Usage() {
             << "  payloadctl <addr> lease <uuid>\n"
             << "  payloadctl <addr> release <lease_id>\n"
             << "  payloadctl <addr> delete <uuid>\n"
-            << "  payloadctl <addr> promote <uuid> <tier=ram|disk|gpu>\n"
+            << "  payloadctl <addr> promote <uuid> <tier=ram|disk|gpu|object>\n"
             << "  payloadctl <addr> spill <uuid>\n"
-            << "  payloadctl <addr> prefetch <uuid> <tier=ram|disk|gpu>\n"
+            << "  payloadctl <addr> prefetch <uuid> <tier=ram|disk|gpu|object>\n"
             << "  payloadctl <addr> pin <uuid> [duration_ms]\n"
             << "  payloadctl <addr> unpin <uuid>\n"
             << "  payloadctl <addr> stats\n"
-            << "  payloadctl <addr> list [tier=ram|disk|gpu]\n";
+            << "  payloadctl <addr> list [tier=ram|disk|gpu|object]\n";
 }
 
 static int HexNibble(char c) {
@@ -100,6 +100,9 @@ static std::optional<Tier> ParseTier(const std::string& value) {
   }
   if (value == "gpu") {
     return TIER_GPU;
+  }
+  if (value == "object") {
+    return TIER_OBJECT;
   }
   return std::nullopt;
 }
@@ -399,6 +402,7 @@ int main(int argc, char** argv) {
     std::cout << "ram=" << resp.payloads_ram() << "\n";
     std::cout << "disk=" << resp.payloads_disk() << "\n";
     std::cout << "gpu=" << resp.payloads_gpu() << "\n";
+    std::cout << "object=" << resp.payloads_object() << "\n";
     return 0;
   }
 

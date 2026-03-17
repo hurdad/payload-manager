@@ -12,8 +12,10 @@ message StatsResponse {
   uint64 payloads_gpu = 1;
   uint64 payloads_ram = 2;
   uint64 payloads_disk = 3;
+  uint64 payloads_object = 7;
 
   uint64 bytes_gpu = 4;
   uint64 bytes_ram = 5;
   uint64 bytes_disk = 6;
+  uint64 bytes_object = 8;
 }
