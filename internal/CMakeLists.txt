@@ -101,9 +101,18 @@ endif()
 # Dependencies
 # ================================================================
 
-find_package(gRPC REQUIRED)
+find_package(Protobuf REQUIRED)
+find_package(gRPC CONFIG QUIET)
+if(NOT gRPC_FOUND AND NOT TARGET gRPC::grpc++)
+  find_package(gRPC REQUIRED)
+endif()
 find_package(Threads REQUIRED)
 find_package(yaml-cpp REQUIRED)
+# yaml-cpp < 0.8 (Ubuntu 22.04 ships 0.7) exports target "yaml-cpp" without
+# namespace; create the namespaced alias expected by the rest of the project.
+if(TARGET yaml-cpp AND NOT TARGET yaml-cpp::yaml-cpp)
+  add_library(yaml-cpp::yaml-cpp ALIAS yaml-cpp)
+endif()
 
 target_link_libraries(payload_manager_internal
         PUBLIC

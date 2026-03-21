@@ -11,7 +11,18 @@ if(NOT Protobuf_FOUND)
   find_package(Protobuf REQUIRED)
 endif()
 
-find_package(gRPC CONFIG REQUIRED)
+find_package(gRPC CONFIG QUIET)
+if(NOT gRPC_FOUND)
+  # gRPC may have been populated via FetchContent (e.g. by opentelemetry-cpp).
+  # On Linux, cmake's auto-redirect uses the lowercase FetchContent name ("grpc")
+  # so it doesn't match the mixed-case "gRPC" searched here.  If the required
+  # targets already exist from the FetchContent pass, accept them directly.
+  if(TARGET gRPC::grpc++)
+    set(gRPC_FOUND TRUE)
+  else()
+    find_package(gRPC CONFIG REQUIRED)
+  endif()
+endif()
 
 # ------------------------------------------------------------------------------
 # Paths
@@ -172,6 +183,16 @@ else()
   find_program(GRPC_CPP_PLUGIN grpc_cpp_plugin REQUIRED)
 endif()
 
+# When protoc comes from a FetchContent build (e.g. the one bundled in gRPC
+# 1.49.2 pulled by opentelemetry-cpp) it has no built-in search path for
+# well-known Google proto types.  Pass the protobuf include dir explicitly.
+set(_PROTOC_WELLKNOWN_ARGS)
+if(DEFINED Protobuf_INCLUDE_DIRS AND Protobuf_INCLUDE_DIRS)
+  list(APPEND _PROTOC_WELLKNOWN_ARGS --proto_path=${Protobuf_INCLUDE_DIRS})
+elseif(DEFINED Protobuf_INCLUDE_DIR AND Protobuf_INCLUDE_DIR)
+  list(APPEND _PROTOC_WELLKNOWN_ARGS --proto_path=${Protobuf_INCLUDE_DIR})
+endif()
+
 # ------------------------------------------------------------------------------
 # Generate protobuf C++ sources
 # ------------------------------------------------------------------------------
@@ -180,6 +201,7 @@ add_custom_command(
         OUTPUT ${PROTO_SRCS} ${PROTO_HDRS}
         COMMAND ${PROTOC}
         --proto_path=${PROTO_ROOT}
+        ${_PROTOC_WELLKNOWN_ARGS}
         --cpp_out=${GENERATED_DIR}
         ${ALL_DEP_PROTOS}
         WORKING_DIRECTORY ${PROTO_ROOT}
@@ -196,6 +218,7 @@ add_custom_command(
         OUTPUT ${GRPC_SRCS} ${GRPC_HDRS}
         COMMAND ${PROTOC}
         --proto_path=${PROTO_ROOT}
+        ${_PROTOC_WELLKNOWN_ARGS}
         --grpc_out=${GENERATED_DIR}
         --plugin=protoc-gen-grpc=${GRPC_CPP_PLUGIN}
         ${SERVICE_PROTO_FILES}
