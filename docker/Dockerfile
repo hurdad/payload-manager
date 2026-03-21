@@ -34,6 +34,7 @@ RUN apt-get update \
         libre2-dev \
         libutf8proc-dev \
         libxml2-dev \
+        libgtest-dev \
     && rm -rf /var/lib/apt/lists/*
 
 COPY . ./src

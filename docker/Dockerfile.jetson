@@ -70,6 +70,8 @@ RUN apt-get update \
         python3-grpc-tools \
         # OpenTelemetry-cpp dependency
         nlohmann-json3-dev \
+        # unit test framework
+        libgtest-dev \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy the entire source tree (including initialised submodules).
