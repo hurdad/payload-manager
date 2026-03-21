@@ -1,11 +1,14 @@
 #include "object_arrow_store.hpp"
 
+#include <arrow/filesystem/s3fs.h>
 #include <arrow/io/interfaces.h>
 #include <arrow/result.h>
 #include <google/protobuf/util/json_util.h>
+#include <spdlog/spdlog.h>
 
 #include "internal/storage/common/arrow_utils.hpp"
 #include "internal/storage/common/path_utils.hpp"
+#include "internal/util/uuid.hpp"
 #include "payload/manager/v1.hpp"
 
 namespace payload::storage {
@@ -13,8 +16,29 @@ namespace payload::storage {
 using namespace payload::storage::common;
 using namespace payload::manager::v1;
 
-ObjectArrowStore::ObjectArrowStore(std::shared_ptr<arrow::fs::FileSystem> fs, std::string root_path)
-    : fs_(std::move(fs)), root_path_(std::move(root_path)) {
+namespace {
+
+// Convert a PayloadID to its hex-string key, handling binary (16-byte) UUIDs.
+std::string Key(const PayloadID& id) {
+  if (id.value().size() == 16) {
+    payload::util::UUID uuid{};
+    std::memcpy(uuid.data(), id.value().data(), 16);
+    return payload::util::ToString(uuid);
+  }
+  return id.value();
+}
+
+} // namespace
+
+ObjectArrowStore::ObjectArrowStore(std::shared_ptr<arrow::fs::FileSystem> fs, std::string root_path, bool is_s3)
+    : fs_(std::move(fs)), root_path_(std::move(root_path)), is_s3_(is_s3) {
+}
+
+ObjectArrowStore::~ObjectArrowStore() {
+  fs_.reset();
+  if (is_s3_) {
+    (void)arrow::fs::EnsureS3Finalized();
+  }
 }
 
 /*
@@ -24,19 +48,21 @@ ObjectArrowStore::ObjectArrowStore(std::shared_ptr<arrow::fs::FileSystem> fs, st
       <root_path>/<uuid>.meta.json — sidecar metadata
 */
 std::string ObjectArrowStore::ObjectPath(const PayloadID& id) const {
-  common::ValidatePayloadId(id.value());
+  const auto key = Key(id);
+  common::ValidatePayloadId(key);
   if (!root_path_.empty() && root_path_.back() == '/') {
-    return root_path_ + id.value() + ".bin";
+    return root_path_ + key + ".bin";
   }
-  return root_path_ + "/" + id.value() + ".bin";
+  return root_path_ + "/" + key + ".bin";
 }
 
 std::string ObjectArrowStore::SidecarObjectPath(const PayloadID& id) const {
-  common::ValidatePayloadId(id.value());
+  const auto key = Key(id);
+  common::ValidatePayloadId(key);
   if (!root_path_.empty() && root_path_.back() == '/') {
-    return root_path_ + id.value() + ".meta.json";
+    return root_path_ + key + ".meta.json";
   }
-  return root_path_ + "/" + id.value() + ".meta.json";
+  return root_path_ + "/" + key + ".meta.json";
 }
 
 /*
@@ -66,9 +92,12 @@ uint64_t ObjectArrowStore::Size(const PayloadID& id) {
   fsync flag ignored — object stores are atomic per PUT.
 */
 void ObjectArrowStore::Write(const PayloadID& id, const std::shared_ptr<arrow::Buffer>& buffer, bool /*fsync*/) {
-  auto out = Unwrap(fs_->OpenOutputStream(ObjectPath(id)));
+  const auto path = ObjectPath(id);
+  spdlog::debug("[obj] Write begin path={} size={}", path, buffer ? buffer->size() : -1L);
+  auto out = Unwrap(fs_->OpenOutputStream(path));
   Unwrap(out->Write(buffer->data(), buffer->size()));
   Unwrap(out->Close());
+  spdlog::debug("[obj] Write closed OK path={}", path);
 }
 
 /*

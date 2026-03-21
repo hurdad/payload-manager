@@ -1,0 +1,20 @@
+# MinIO overlay for GPU+OTel builds.
+#
+# Replaces the minio.yml command/volumes so payload-manager uses the combined
+# GPU + OTel + MinIO runtime config instead of the no-otel variant.
+#
+# Usage:
+#   docker compose \
+#     -f docker/docker-compose.gpu.sqlite.yml \
+#     -f docker/docker-compose.observability.yml \
+#     -f docker/docker-compose.minio.yml \
+#     -f docker/docker-compose.minio.init.yml \
+#     -f docker/docker-compose.minio.gpu.yml \
+#     up --build
+
+services:
+  payload-manager:
+    command:
+      ["./payload-manager", "--config", "/app/conf/runtime-docker-gpu-sqlite-minio.yaml"]
+    volumes:
+      - ../config/runtime-docker-gpu-sqlite-minio.yaml:/app/conf/runtime-docker-gpu-sqlite-minio.yaml:ro

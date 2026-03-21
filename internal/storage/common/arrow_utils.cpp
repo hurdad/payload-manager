@@ -57,8 +57,35 @@ arrow::Result<std::pair<std::shared_ptr<arrow::fs::FileSystem>, std::string>> Re
 
   switch (filesystem_options.options_case()) {
     case pb::arrow::storage::FileSystemOptions::kS3: {
-      const auto&          proto_options = filesystem_options.s3();
+      const auto& proto_options = filesystem_options.s3();
+
+      // S3Options constructor DCHECKs IsS3Initialized(), and the credentials
+      // provider (a shared_ptr) must be set via Configure*Credentials() — just
+      // assigning credentials_kind leaves it null and causes a null-deref in
+      // AWSAuthV4Signer::SignRequest when the first S3 request is signed.
+      ARROW_RETURN_NOT_OK(arrow::fs::EnsureS3Initialized());
+
       arrow::fs::S3Options options;
+
+      // Set credentials provider based on the configured kind.
+      switch (proto_options.credentials_kind()) {
+        case pb::arrow::fs::s3::S3_CREDENTIALS_KIND_ANONYMOUS:
+          options.ConfigureAnonymousCredentials();
+          break;
+        case pb::arrow::fs::s3::S3_CREDENTIALS_KIND_ROLE:
+          options.ConfigureAssumeRoleCredentials(
+              proto_options.role_arn(), proto_options.session_name(), proto_options.external_id());
+          break;
+        case pb::arrow::fs::s3::S3_CREDENTIALS_KIND_WEB_IDENTITY:
+          options.ConfigureAssumeRoleWithWebIdentityCredentials();
+          break;
+        default:
+          // DEFAULT and EXPLICIT both use the default provider chain (env vars,
+          // ~/.aws/credentials, EC2 metadata, etc.).
+          options.ConfigureDefaultCredentials();
+          break;
+      }
+
       options.smart_defaults    = proto_options.smart_defaults();
       options.region            = proto_options.region();
       options.connect_timeout   = proto_options.connect_timeout();
@@ -73,7 +100,6 @@ arrow::Result<std::pair<std::shared_ptr<arrow::fs::FileSystem>, std::string>> Re
           proto_options.proxy_options().scheme(),   proto_options.proxy_options().host(),     proto_options.proxy_options().port(),
           proto_options.proxy_options().username(), proto_options.proxy_options().password(),
       };
-      options.credentials_kind                          = static_cast<arrow::fs::S3CredentialsKind>(proto_options.credentials_kind());
       options.force_virtual_addressing                  = proto_options.force_virtual_addressing();
       options.background_writes                         = proto_options.background_writes();
       options.allow_bucket_creation                     = proto_options.allow_bucket_creation();
@@ -86,7 +112,18 @@ arrow::Result<std::pair<std::shared_ptr<arrow::fs::FileSystem>, std::string>> Re
       options.tls_ca_dir_path         = proto_options.tls_ca_dir_path();
       options.tls_verify_certificates = proto_options.tls_verify_certificates();
 
-      ARROW_RETURN_NOT_OK(resolve_uri_path());
+      // Strip the s3:// scheme prefix to get the bucket/prefix path.
+      // Avoid resolve_uri_path() for S3: that helper calls FileSystemFromUri
+      // which constructs a temporary S3FileSystem using the default AWS
+      // endpoint (not our custom endpoint_override).  Stripping the scheme
+      // manually produces the same result without any network-facing side
+      // effects and without creating a disposable S3FileSystem object that
+      // could interfere with the AWS SDK global state.
+      constexpr std::string_view kS3Scheme = "s3://";
+      if (resolved_path.size() > kS3Scheme.size() &&
+          resolved_path.substr(0, kS3Scheme.size()) == kS3Scheme) {
+        resolved_path = resolved_path.substr(kS3Scheme.size());
+      }
       ARROW_ASSIGN_OR_RAISE(auto fs, arrow::fs::S3FileSystem::Make(options));
       return std::make_pair(std::move(fs), resolved_path);
     }

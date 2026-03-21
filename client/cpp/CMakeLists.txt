@@ -1,5 +1,4 @@
 find_package(gRPC REQUIRED)
-find_package(Arrow CONFIG REQUIRED)
 
 option(PAYLOAD_MANAGER_CLIENT_ENABLE_CUDA
         "Enable Arrow CUDA support in the C++ client"
@@ -12,25 +11,22 @@ option(PAYLOAD_MANAGER_CLIENT_ENABLE_OTEL
 set(_payload_manager_client_arrow_cuda_targets)
 
 if(PAYLOAD_MANAGER_CLIENT_ENABLE_CUDA)
-    # ArrowCUDA is a separate package in many Arrow distributions.
-    find_package(ArrowCUDA CONFIG QUIET)
-
     foreach(_arrow_cuda_target IN ITEMS
+            ArrowCUDA::arrow_cuda_static
+            arrow_cuda_static
             ArrowCUDA::arrow_cuda
             Arrow::arrow_cuda
-            arrow_cuda
-            ArrowCUDA::arrow_cuda_shared)
+            arrow_cuda)
         if(TARGET ${_arrow_cuda_target})
             list(APPEND _payload_manager_client_arrow_cuda_targets ${_arrow_cuda_target})
+            break()
         endif()
     endforeach()
-
-    list(REMOVE_DUPLICATES _payload_manager_client_arrow_cuda_targets)
 
     if(NOT _payload_manager_client_arrow_cuda_targets)
         message(FATAL_ERROR
                 "PAYLOAD_MANAGER_CLIENT_ENABLE_CUDA=ON but no Arrow CUDA target was found.\n"
-                "Install Arrow CUDA artifacts (e.g. libarrow-cuda-dev) or rebuild Arrow with -DARROW_CUDA=ON.")
+                "Rebuild Arrow with -DARROW_CUDA=ON.")
     endif()
 endif()
 
@@ -63,7 +59,7 @@ endif()
 target_link_libraries(payload_manager_client
         PUBLIC
         payload_manager::proto
-        Arrow::arrow_shared
+        Arrow::arrow_static
         payload_manager::grpc
         gRPC::grpc++
         ${_payload_manager_client_arrow_cuda_targets}

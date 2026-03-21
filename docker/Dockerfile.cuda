@@ -5,22 +5,12 @@ WORKDIR /workspace
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
-        ca-certificates \
-        lsb-release \
-        wget \
-    && wget https://packages.apache.org/artifactory/arrow/$(lsb_release --id --short | tr 'A-Z' 'a-z')/apache-arrow-apt-source-latest-$(lsb_release --codename --short).deb \
-    && apt-get install -y --no-install-recommends \
-        ./apache-arrow-apt-source-latest-$(lsb_release --codename --short).deb \
-    && rm apache-arrow-apt-source-latest-$(lsb_release --codename --short).deb \
-    && apt-get update \
-    && apt-get install -y --no-install-recommends \
         build-essential \
         cmake \
         ninja-build \
         pkg-config \
+        git \
         protobuf-compiler \
-        libarrow-dev \
-        libarrow-cuda-dev \
         libprotobuf-dev \
         libgrpc++-dev \
         libgrpc-dev \
@@ -34,6 +24,17 @@ RUN apt-get update \
         python3-pip \
         python3-grpcio \
         python3-grpc-tools \
+        libssl-dev \
+        zlib1g-dev \
+        liblz4-dev \
+        libzstd-dev \
+        libsnappy-dev \
+        libbrotli-dev \
+        libbz2-dev \
+        libre2-dev \
+        libutf8proc-dev \
+        libxml2-dev \
+        nlohmann-json3-dev \
     && rm -rf /var/lib/apt/lists/*
 
 COPY . ./src
@@ -47,7 +48,9 @@ RUN cmake -S ./src -B /workspace/build -G Ninja -DCMAKE_BUILD_TYPE=Release \
     -DPAYLOAD_MANAGER_BUILD_EXAMPLES=OFF \
     -DPAYLOAD_MANAGER_BUILD_PAYLOADCTL=OFF \
     && cmake --build /workspace/build \
-    && ctest --test-dir /workspace/build --output-on-failure -E payload_manager_integration_api \
+    && ln -sf /usr/local/cuda/lib64/stubs/libcuda.so /usr/local/cuda/lib64/stubs/libcuda.so.1 \
+    && LD_LIBRARY_PATH=/usr/local/cuda/lib64/stubs:${LD_LIBRARY_PATH} \
+       ctest --test-dir /workspace/build --output-on-failure -E payload_manager_integration_api \
     && cmake --build /workspace/build --target payload-manager
 
 
@@ -59,18 +62,7 @@ WORKDIR /app
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         ca-certificates \
-        lsb-release \
-        wget \
-    && wget https://packages.apache.org/artifactory/arrow/$(lsb_release --id --short | tr 'A-Z' 'a-z')/apache-arrow-apt-source-latest-$(lsb_release --codename --short).deb \
-    && apt-get install -y --no-install-recommends \
-        ./apache-arrow-apt-source-latest-$(lsb_release --codename --short).deb \
-    && rm apache-arrow-apt-source-latest-$(lsb_release --codename --short).deb \
-    && apt-get update \
-    && apt-get install -y --no-install-recommends \
-        ca-certificates \
         sqlite3 \
-        libarrow2300 \
-        libarrow-cuda2300 \
         libprotobuf32t64 \
         libgrpc++1.51t64 \
         libgrpc29t64 \
@@ -79,6 +71,16 @@ RUN apt-get update \
         libsqlite3-0 \
         libspdlog1.12 \
         libcurl4t64 \
+        libssl3 \
+        zlib1g \
+        liblz4-1 \
+        libzstd1 \
+        libsnappy1v5 \
+        libbrotli1 \
+        libbz2-1.0 \
+        libre2-10 \
+        libutf8proc3 \
+        libxml2 \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=builder /workspace/build/bin/payload-manager ./payload-manager

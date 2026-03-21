@@ -1,8 +1,13 @@
 # Object-spill integration test overlay.
 #
-# Layers on top of a base compose file and docker-compose.minio.yml.
-# Runs the object_spill_integration_test against a live payload-manager
-# that has MinIO object storage configured.
+# Layers on top of docker-compose.sqlite.yml + docker-compose.minio.yml.
+# Runs the object_spill_integration_test against a live payload-manager that
+# has MinIO object storage configured.
+#
+# payload-manager uses allow_bucket_creation: true so it creates the 'payloads'
+# bucket on first use — no minio-init one-shot container is needed.  This
+# avoids the --abort-on-container-exit race that fired when minio-init exited
+# with 0 while the Spill RPC was in flight.
 #
 # Usage:
 #   docker compose \
@@ -12,6 +17,19 @@
 #     up --build --exit-code-from object-spill-test
 
 services:
+  payload-manager:
+    depends_on:
+      minio:
+        condition: service_healthy
+    command:
+      ["./payload-manager", "--config", "/app/conf/runtime-docker-no-otel-sqlite-minio.yaml"]
+    environment:
+      AWS_ACCESS_KEY_ID: minioadmin
+      AWS_SECRET_ACCESS_KEY: minioadmin
+      AWS_DEFAULT_REGION: us-east-1
+    volumes:
+      - ../config/runtime-docker-no-otel-sqlite-minio.yaml:/app/conf/runtime-docker-no-otel-sqlite-minio.yaml:ro
+
   object-spill-test:
     build:
       context: ..
@@ -20,8 +38,8 @@ services:
     depends_on:
       payload-manager:
         condition: service_healthy
-      minio-init:
-        condition: service_completed_successfully
+      minio:
+        condition: service_healthy
     ipc: host
     environment:
       PAYLOAD_MANAGER_ENDPOINT: "payload-manager:50051"

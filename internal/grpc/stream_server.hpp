@@ -2,6 +2,7 @@
 
 #include <grpcpp/grpcpp.h>
 
+#include <chrono>
 #include <memory>
 
 #include "internal/service/stream_service.hpp"
@@ -12,7 +13,10 @@ namespace payload::grpc {
 
 class StreamServer final : public payload::manager::v1::PayloadStreamService::Service {
  public:
-  explicit StreamServer(std::shared_ptr<payload::service::StreamService> svc);
+  static constexpr std::chrono::milliseconds kDefaultPollInterval{50};
+
+  explicit StreamServer(std::shared_ptr<payload::service::StreamService> svc,
+                        std::chrono::milliseconds poll_interval = kDefaultPollInterval);
 
   ::grpc::Status CreateStream(::grpc::ServerContext*, const payload::manager::v1::CreateStreamRequest*, google::protobuf::Empty*) override;
 
@@ -34,6 +38,7 @@ class StreamServer final : public payload::manager::v1::PayloadStreamService::Se
 
  private:
   std::shared_ptr<payload::service::StreamService> service_;
+  std::chrono::milliseconds                        poll_interval_;
 };
 
 } // namespace payload::grpc

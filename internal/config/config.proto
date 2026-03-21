@@ -94,6 +94,12 @@ message LoggingConfig {
   bool include_trace_context = 3;
 }
 
+message StreamConfig {
+  // Polling interval for the Subscribe long-poll loop when no new entries
+  // are available. Lower values reduce tail latency at the cost of CPU.
+  // Defaults to 50 ms when unset (zero).
+  uint32 subscribe_poll_interval_ms = 1;
+}
 
 // ------------------------------------------------------------------
 // Top-level
@@ -107,4 +113,5 @@ message RuntimeConfig {
   LeaseConfig leases = 5;
   LoggingConfig logging = 6;
   ObservabilityConfig observability = 7;
+  StreamConfig stream = 8;
 }

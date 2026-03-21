@@ -50,6 +50,10 @@ void PayloadManager::UpdateTierBytes(Tier tier, int64_t delta) {
     std::lock_guard<std::mutex> lock(tier_bytes_guard_);
     auto&                       val = tier_bytes_[static_cast<int>(tier)];
     if (delta < 0 && static_cast<uint64_t>(-delta) > val) {
+      PAYLOAD_LOG_WARN("tier byte accounting underflow clamped to zero",
+                       {payload::observability::StringField("tier", TierName(tier)),
+                        payload::observability::IntField("delta", delta),
+                        payload::observability::IntField("current", static_cast<int64_t>(val))});
       val = 0;
     } else {
       val = static_cast<uint64_t>(static_cast<int64_t>(val) + delta);
@@ -65,6 +69,10 @@ void PayloadManager::UpdateTierCount(Tier tier, int64_t delta) {
     std::lock_guard<std::mutex> lock(tier_count_guard_);
     auto&                       val = tier_count_[static_cast<int>(tier)];
     if (delta < 0 && static_cast<uint64_t>(-delta) > val) {
+      PAYLOAD_LOG_WARN("tier count accounting underflow clamped to zero",
+                       {payload::observability::StringField("tier", TierName(tier)),
+                        payload::observability::IntField("delta", delta),
+                        payload::observability::IntField("current", static_cast<int64_t>(val))});
       val = 0;
     } else {
       val = static_cast<uint64_t>(static_cast<int64_t>(val) + delta);

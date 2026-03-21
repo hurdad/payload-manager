@@ -1,5 +1,6 @@
 #include "factory.hpp"
 
+#include <chrono>
 #include <memory>
 #include <stdexcept>
 #include <string>
@@ -317,7 +318,10 @@ Application Build(const payload::runtime::config::RuntimeConfig& config) {
   app.grpc_services.push_back(std::make_unique<grpc::DataServer>(data_service));
   app.grpc_services.push_back(std::make_unique<grpc::CatalogServer>(catalog_service));
   app.grpc_services.push_back(std::make_unique<grpc::AdminServer>(admin_service));
-  app.grpc_services.push_back(std::make_unique<grpc::StreamServer>(stream_service));
+  const uint32_t poll_ms = config.stream().subscribe_poll_interval_ms();
+  const auto     poll_interval =
+      poll_ms > 0 ? std::chrono::milliseconds(poll_ms) : grpc::StreamServer::kDefaultPollInterval;
+  app.grpc_services.push_back(std::make_unique<grpc::StreamServer>(stream_service, poll_interval));
 
   // Keep ownership of workers so they live for process lifetime.
   // TieringManager is stopped first so it stops enqueuing new tasks before

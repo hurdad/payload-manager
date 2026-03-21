@@ -5,21 +5,12 @@ WORKDIR /workspace
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
-        ca-certificates \
-        lsb-release \
-        wget \
-    && wget https://packages.apache.org/artifactory/arrow/$(lsb_release --id --short | tr 'A-Z' 'a-z')/apache-arrow-apt-source-latest-$(lsb_release --codename --short).deb \
-    && apt-get install -y --no-install-recommends \
-    ./apache-arrow-apt-source-latest-$(lsb_release --codename --short).deb \
-    && rm apache-arrow-apt-source-latest-$(lsb_release --codename --short).deb \
-    && apt-get update \
-    && apt-get install -y --no-install-recommends \
         build-essential \
         cmake \
         ninja-build \
         pkg-config \
+        git \
         protobuf-compiler \
-        libarrow-dev \
         libprotobuf-dev \
         libgrpc++-dev \
         libgrpc-dev \
@@ -33,6 +24,16 @@ RUN apt-get update \
         python3-pip \
         python3-grpcio \
         python3-grpc-tools \
+        libssl-dev \
+        zlib1g-dev \
+        liblz4-dev \
+        libzstd-dev \
+        libsnappy-dev \
+        libbrotli-dev \
+        libbz2-dev \
+        libre2-dev \
+        libutf8proc-dev \
+        libxml2-dev \
     && rm -rf /var/lib/apt/lists/*
 
 COPY . ./src
@@ -57,17 +58,7 @@ WORKDIR /app
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         ca-certificates \
-        lsb-release \
-        wget \
-    && wget https://packages.apache.org/artifactory/arrow/$(lsb_release --id --short | tr 'A-Z' 'a-z')/apache-arrow-apt-source-latest-$(lsb_release --codename --short).deb \
-    && apt-get install -y --no-install-recommends \
-    ./apache-arrow-apt-source-latest-$(lsb_release --codename --short).deb \
-    && rm apache-arrow-apt-source-latest-$(lsb_release --codename --short).deb \
-    && apt-get update \
-    && apt-get install -y --no-install-recommends \
-        ca-certificates \
         sqlite3 \
-        libarrow2300 \
         libprotobuf32t64 \
         libgrpc++1.51t64 \
         libgrpc29t64 \
@@ -76,6 +67,16 @@ RUN apt-get update \
         libsqlite3-0 \
         libspdlog1.12 \
         libcurl4t64 \
+        libssl3 \
+        zlib1g \
+        liblz4-1 \
+        libzstd1 \
+        libsnappy1v5 \
+        libbrotli1 \
+        libbz2-1.0 \
+        libre2-10 \
+        libutf8proc3 \
+        libxml2 \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=builder /workspace/build/bin/payload-manager ./payload-manager

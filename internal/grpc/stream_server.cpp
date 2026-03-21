@@ -8,7 +8,8 @@
 
 namespace payload::grpc {
 
-StreamServer::StreamServer(std::shared_ptr<payload::service::StreamService> svc) : service_(std::move(svc)) {
+StreamServer::StreamServer(std::shared_ptr<payload::service::StreamService> svc, std::chrono::milliseconds poll_interval)
+    : service_(std::move(svc)), poll_interval_(poll_interval) {
 }
 
 ::grpc::Status StreamServer::CreateStream(::grpc::ServerContext*, const payload::manager::v1::CreateStreamRequest* req, google::protobuf::Empty*) {
@@ -60,8 +61,7 @@ StreamServer::StreamServer(std::shared_ptr<payload::service::StreamService> svc)
     }
 
     // Long-poll loop: keep reading new entries until the client disconnects.
-    // Poll at 50 ms when idle; advance immediately when entries arrive.
-    constexpr auto kPollInterval = std::chrono::milliseconds(50);
+    // Poll at poll_interval_ when idle; advance immediately when entries arrive.
 
     payload::manager::v1::SubscribeRequest poll_req;
     *poll_req.mutable_stream() = req->stream();
@@ -77,7 +77,7 @@ StreamServer::StreamServer(std::shared_ptr<payload::service::StreamService> svc)
       }
       next_offset = batch.next_offset;
       if (batch.responses.empty()) {
-        std::this_thread::sleep_for(kPollInterval);
+        std::this_thread::sleep_for(poll_interval_);
       }
     }
 

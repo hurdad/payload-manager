@@ -104,7 +104,6 @@ endif()
 find_package(gRPC REQUIRED)
 find_package(Threads REQUIRED)
 find_package(yaml-cpp REQUIRED)
-find_package(Arrow CONFIG REQUIRED)
 
 target_link_libraries(payload_manager_internal
         PUBLIC
@@ -116,7 +115,7 @@ target_link_libraries(payload_manager_internal
         payload_manager::db
         yaml-cpp::yaml-cpp
         spdlog::spdlog
-        Arrow::arrow_shared
+        Arrow::arrow_static
         rt
 )
 
@@ -158,10 +157,6 @@ if(PAYLOAD_MANAGER_ENABLE_OTEL)
     )
 endif()
 
-option(PAYLOAD_MANAGER_ENABLE_ARROW_CUDA
-        "Enable Arrow CUDA integration for internal runtime"
-        OFF)
-
 set(_payload_manager_arrow_cuda_targets)
 
 if(PAYLOAD_MANAGER_ENABLE_ARROW_CUDA)
@@ -171,19 +166,16 @@ if(PAYLOAD_MANAGER_ENABLE_ARROW_CUDA)
             storage/gpu/cuda_arrow_store.cpp
     )
 
-    # ArrowCUDA is a separate config in many installs
-    find_package(ArrowCUDA CONFIG QUIET)
-
-    # -------------------------------------------------------
-    # Detect valid targets across Arrow versions/distros
-    # -------------------------------------------------------
+    # Detect valid CUDA targets (in-source vendored build or installed package)
     foreach(_arrow_cuda_target IN ITEMS
+            ArrowCUDA::arrow_cuda_static
+            arrow_cuda_static
             ArrowCUDA::arrow_cuda
             Arrow::arrow_cuda
-            arrow_cuda
-            ArrowCUDA::arrow_cuda_shared)
+            arrow_cuda)
         if(TARGET ${_arrow_cuda_target})
             list(APPEND _payload_manager_arrow_cuda_targets ${_arrow_cuda_target})
+            break()
         endif()
     endforeach()
 

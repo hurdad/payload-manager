@@ -15,6 +15,10 @@ storage:
     root_path: "/var/lib/payload-manager/payloads"
     capacity_bytes: 107374182400  # 100 GiB
     fsync: true
+  gpu:
+    devices:
+      - device_id: 0
+        capacity_bytes: 12884901888  # 12 GiB
   object:
     root_path: "s3://payloads"
     filesystem: FILE_SYSTEM_S3
@@ -25,9 +29,6 @@ storage:
         scheme: "http"
         credentials_kind: S3_CREDENTIALS_KIND_DEFAULT
         tls_verify_certificates: false
-        allow_delayed_open: false
-        background_writes: false
-        allow_bucket_creation: true
 
 spill_workers:
   threads: 4
@@ -40,9 +41,21 @@ leases:
 logging:
   level: "info"
   pattern: "%+"
-  include_trace_context: false
+  include_trace_context: true
 
 observability:
-  metrics_enabled: false
-  tracing_enabled: false
+  metrics_enabled: true
+  tracing_enabled: true
   logs_enabled: false
+  otlp_endpoint: "alloy:4317"
+  transport: OTLP_TRANSPORT_GRPC
+  metrics:
+    request_metrics_enabled: true
+    spill_metrics_enabled: true
+    tier_occupancy_metrics_enabled: true
+    request_latency_histograms_enabled: true
+    route_labels_enabled: true
+    tier_labels_enabled: true
+    min_collection_interval_ms: 1000
+    collection_interval_ms: 10000
+    export_timeout_ms: 3000

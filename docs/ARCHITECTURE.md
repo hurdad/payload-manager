@@ -73,7 +73,31 @@ A common interface allows placement/tiering logic to stay backend-agnostic.
 5. Service returns descriptor + lease metadata to caller.
 6. Caller accesses payload bytes directly from resolved storage tier.
 
-## 5. Non-goals (explicit)
+## 5. Deployment security considerations
+
+### Configuration file permissions
+
+The runtime configuration file (YAML) contains sensitive values including database connection URIs and object storage credentials. Restrict access so only the service account running `payload-manager` can read it:
+
+```sh
+chmod 600 /etc/payload-manager/runtime.yaml
+chown payload-manager:payload-manager /etc/payload-manager/runtime.yaml
+```
+
+### Secrets and credentials
+
+- **Database passwords** are embedded in `database.postgres.connection_uri`. Prefer a secrets manager (e.g. Vault, AWS Secrets Manager) and inject the URI via the `PAYLOAD_MANAGER_CONFIG` environment variable or a runtime-mounted file rather than baking credentials into static config files.
+- **Object storage credentials** (`filesystem_options.s3.*`) should use IAM instance roles or workload identity where available; avoid long-lived static keys in config files.
+- **Secret rotation** requires a service restart to pick up a new connection URI unless an external secret manager with dynamic injection is used.
+
+### Network exposure
+
+The gRPC server (`server.bind_address`) defaults to `0.0.0.0:50051`. In production:
+
+- Bind to a loopback or internal address when the service is only accessed within the same node or cluster.
+- Place a TLS-terminating proxy (e.g. Envoy) in front of `payload-manager` for external-facing deployments; the server currently uses insecure credentials and relies on the surrounding infrastructure for transport security.
+
+## 6. Non-goals (explicit)
 
 - Payload Manager is not intended to proxy large payload byte streams through gRPC.
 - Payload Manager is not intended to collapse all storage tiers into a single physical medium.

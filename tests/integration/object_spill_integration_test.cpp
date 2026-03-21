@@ -128,15 +128,35 @@ std::string ReadS3Object(const std::shared_ptr<arrow::fs::FileSystem>& fs, const
   return std::string(reinterpret_cast<const char*>(buf->data()), static_cast<size_t>(buf->size()));
 }
 
-// The ObjectArrowStore path layout is:  <root_path>/<id.value()>.bin
+// Convert a PayloadID to its hex-string key.
+// PayloadID.value() may be a 16-byte binary UUID; convert to hex just as the server does.
+std::string PayloadIdKey(const PayloadID& id) {
+  const auto& v = id.value();
+  if (v.size() == 16) {
+    // Binary UUID → xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
+    static constexpr char kHex[] = "0123456789abcdef";
+    const auto* b = reinterpret_cast<const uint8_t*>(v.data());
+    std::string s;
+    s.reserve(36);
+    for (int i = 0; i < 16; ++i) {
+      if (i == 4 || i == 6 || i == 8 || i == 10) s += '-';
+      s += kHex[b[i] >> 4];
+      s += kHex[b[i] & 0xf];
+    }
+    return s;
+  }
+  return v;
+}
+
+// The ObjectArrowStore path layout is:  <root_path>/<uuid>.bin
 // root_path is the resolved URI path of "s3://bucket", which becomes "bucket".
-// So the Arrow S3 path for a payload is:  "<bucket>/<id.value()>.bin"
+// So the Arrow S3 path for a payload is:  "<bucket>/<uuid>.bin"
 std::string BinPath(const std::string& bucket, const PayloadID& id) {
-  return bucket + "/" + id.value() + ".bin";
+  return bucket + "/" + PayloadIdKey(id) + ".bin";
 }
 
 std::string SidecarPath(const std::string& bucket, const PayloadID& id) {
-  return bucket + "/" + id.value() + ".meta.json";
+  return bucket + "/" + PayloadIdKey(id) + ".meta.json";
 }
 
 // ---------------------------------------------------------------------------
@@ -331,6 +351,20 @@ int main(int argc, char** argv) {
 
   std::cout << "object_spill_integration_test: connecting to " << endpoint << '\n';
   std::cout << "  MinIO: " << minio_endpoint << "  bucket: " << bucket << '\n';
+
+  // Pre-create the bucket so payload-manager does not need allow_bucket_creation.
+  // Arrow's S3FileSystem::CreateDir at the bucket level (top-level path) maps
+  // to CreateBucket in the S3 API.  Failures are ignored in case the bucket
+  // already exists.
+  {
+    ASSERT_OK(arrow::fs::EnsureS3Initialized());
+    arrow::fs::S3Options opts = arrow::fs::S3Options::Defaults();
+    opts.endpoint_override        = minio_endpoint;
+    opts.scheme                   = "http";
+    opts.force_virtual_addressing = false;
+    auto s3fs = DieOnErr(arrow::fs::S3FileSystem::Make(opts), "pre-create bucket: S3FileSystem::Make");
+    (void)s3fs->CreateDir(bucket, /*recursive=*/false);
+  }
 
   TestSpillToObject(endpoint, minio_endpoint, bucket);
 

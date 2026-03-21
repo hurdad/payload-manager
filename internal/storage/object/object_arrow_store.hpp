@@ -23,7 +23,8 @@ namespace payload::storage {
 
 class ObjectArrowStore final : public StorageBackend {
  public:
-  ObjectArrowStore(std::shared_ptr<arrow::fs::FileSystem> fs, std::string root_path);
+  ObjectArrowStore(std::shared_ptr<arrow::fs::FileSystem> fs, std::string root_path, bool is_s3 = false);
+  ~ObjectArrowStore() override;
 
   std::shared_ptr<arrow::Buffer> Allocate(const payload::manager::v1::PayloadID& id, uint64_t size_bytes) override;
 
@@ -47,6 +48,7 @@ class ObjectArrowStore final : public StorageBackend {
 
   std::shared_ptr<arrow::fs::FileSystem> fs_;
   std::string                            root_path_;
+  bool                                   is_s3_;
 };
 
 } // namespace payload::storage

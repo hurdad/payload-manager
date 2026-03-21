@@ -1,8 +1,11 @@
 #include <chrono>
 #include <csignal>
+#include <cstdio>
+#include <execinfo.h>
 #include <iostream>
 #include <string>
 #include <thread>
+#include <unistd.h>
 
 #include "internal/config/config_loader.hpp"
 #include "internal/factory.hpp"
@@ -17,6 +20,16 @@ static volatile std::sig_atomic_t g_running = 1;
 
 void HandleSignal(int) {
   g_running = 0;
+}
+
+static void HandleSigsegv(int /*sig*/) {
+  void*  buf[64];
+  int    n   = backtrace(buf, 64);
+  char** sym = backtrace_symbols(buf, n);
+  fprintf(stderr, "\n[SIGSEGV] backtrace (%d frames):\n", n);
+  for (int i = 0; i < n; ++i) fprintf(stderr, "  %s\n", sym ? sym[i] : "??");
+  fflush(stderr);
+  _exit(139);
 }
 
 int main(int argc, char** argv) {
@@ -53,6 +66,7 @@ int main(int argc, char** argv) {
     // Register signal handlers before starting server to avoid race window.
     std::signal(SIGINT, HandleSignal);
     std::signal(SIGTERM, HandleSignal);
+    std::signal(SIGSEGV, HandleSigsegv);
 
     server.Start();
     PAYLOAD_LOG_INFO("Payload Manager started", {payload::observability::StringField("bind_address", config.server().bind_address())});

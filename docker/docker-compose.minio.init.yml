@@ -1,0 +1,39 @@
+# MinIO bucket-init overlay.
+#
+# Adds a one-shot minio-init container that creates the 'payloads' bucket and
+# configures payload-manager to depend on it before starting.  Layer this on
+# top of docker-compose.minio.yml for development / manual stacks where you
+# want the bucket pre-created rather than relying on allow_bucket_creation.
+#
+# Usage:
+#   docker compose \
+#     -f docker/docker-compose.sqlite.yml \
+#     -f docker/docker-compose.minio.yml \
+#     -f docker/docker-compose.minio.init.yml \
+#     up --build
+
+services:
+  minio-init:
+    image: minio/mc:latest
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+        mc alias set local http://minio:9000 minioadmin minioadmin &&
+        mc mb --ignore-existing local/payloads
+      "
+    restart: "no"
+
+  payload-manager:
+    depends_on:
+      minio-init:
+        condition: service_completed_successfully
+    command:
+      ["./payload-manager", "--config", "/app/conf/runtime-docker-no-otel-sqlite-minio.yaml"]
+    environment:
+      AWS_ACCESS_KEY_ID: minioadmin
+      AWS_SECRET_ACCESS_KEY: minioadmin
+      AWS_DEFAULT_REGION: us-east-1
+    volumes:
+      - ../config/runtime-docker-no-otel-sqlite-minio.yaml:/app/conf/runtime-docker-no-otel-sqlite-minio.yaml:ro

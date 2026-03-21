@@ -10,6 +10,7 @@ function(payload_manager_add_unit_test target source labels)
   payload_manager_register_test(${target} "unit;${labels}")
 endfunction()
 
+payload_manager_add_unit_test(payload_manager_unit_placement_engine placement_engine_test.cpp "placement;core")
 payload_manager_add_unit_test(payload_manager_unit_lease_table lease_table_test.cpp "lease")
 payload_manager_add_unit_test(payload_manager_unit_config_loader config_loader_test.cpp "config")
 payload_manager_add_unit_test(payload_manager_unit_grpc_status grpc_status_test.cpp "grpc")
