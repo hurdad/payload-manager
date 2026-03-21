@@ -36,6 +36,12 @@ jobs:
             dockerfile: ./docker/Dockerfile.cuda
             image: ghcr.io/${{ github.repository }}-cuda
 
+          # Jetson Orin (aarch64 / L4T R36 / JetPack 6) with CUDA + OpenTelemetry
+          - component: payload-manager-jetson
+            dockerfile: ./docker/Dockerfile.jetson
+            image: ghcr.io/${{ github.repository }}-jetson
+            platforms: linux/arm64
+
           # CLI management tool
           - component: payloadctl
             dockerfile: ./docker/Dockerfile.payloadctl
@@ -76,6 +82,7 @@ jobs:
         with:
           context: .
           file: ${{ matrix.dockerfile }}
+          platforms: ${{ matrix.platforms || 'linux/amd64' }}
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}

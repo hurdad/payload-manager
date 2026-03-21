@@ -4,6 +4,7 @@
 #include <stdexcept>
 
 #include "internal/core/placement_engine.hpp"
+#include "internal/db/api/result.hpp"
 #include "internal/db/model/payload_record.hpp"
 #include "internal/lease/lease_manager.hpp"
 #include "internal/storage/ram/ram_arrow_store.hpp"
@@ -708,10 +709,19 @@ PayloadDescriptor PayloadManager::PromoteUnlocked(const PayloadID& id, Tier targ
   tx->Commit();
 
   // Remove source data only after DB commit so a crash cannot lose bytes.
+  // Suppress Remove() exceptions: the DB commit is the authoritative tier
+  // change; orphaned source bytes are preferable to surfacing an error after
+  // a successful commit (the next spill/promote will be a no-op).
   if (source_tier != target) {
     auto src_it = storage_.find(source_tier);
     if (src_it != storage_.end() && src_it->second) {
-      src_it->second->Remove(id);
+      try {
+        src_it->second->Remove(id);
+      } catch (const std::exception& e) {
+        PAYLOAD_LOG_WARN("promote: source removal failed after DB commit (orphaned source bytes)",
+                         {payload::observability::StringField("payload_id", Key(id)),
+                          payload::observability::StringField("error", e.what())});
+      }
     }
   }
 
@@ -773,7 +783,12 @@ void PayloadManager::HydrateCaches() {
       }
       db::model::PayloadRecord bumped = record;
       bumped.version++;
-      repository_->UpdatePayload(*bump_tx, bumped);
+      const auto bump_result = repository_->UpdatePayload(*bump_tx, bumped);
+      if (!bump_result && bump_result.code != payload::db::ErrorCode::NotFound) {
+        PAYLOAD_LOG_WARN("hydrate: version bump update failed",
+                         {payload::observability::StringField("payload_id", record.id),
+                          payload::observability::StringField("error", bump_result.message)});
+      }
       auto it = new_snapshot_cache.find(record.id);
       if (it != new_snapshot_cache.end()) {
         it->second.set_version(bumped.version);
@@ -881,10 +896,18 @@ void PayloadManager::ExecuteSpill(const PayloadID& id, Tier target, bool fsync) 
   tx->Commit();
 
   // Remove source data only after DB commit so a crash cannot lose bytes.
+  // Suppress Remove() exceptions: the DB commit is authoritative; orphaned
+  // source bytes are preferable to surfacing an error after a successful commit.
   if (source_tier != target) {
     auto src_it = storage_.find(source_tier);
     if (src_it != storage_.end() && src_it->second) {
-      src_it->second->Remove(id);
+      try {
+        src_it->second->Remove(id);
+      } catch (const std::exception& e) {
+        PAYLOAD_LOG_WARN("spill: source removal failed after DB commit (orphaned source bytes)",
+                         {payload::observability::StringField("payload_id", Key(id)),
+                          payload::observability::StringField("error", e.what())});
+      }
     }
   }
 

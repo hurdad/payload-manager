@@ -5,7 +5,11 @@ function(payload_manager_add_unit_test target source labels)
 
   target_compile_features(${target} PRIVATE cxx_std_20)
   target_include_directories(${target} PRIVATE ${PROJECT_SOURCE_DIR})
-  target_link_libraries(${target} PRIVATE payload_manager::internal)
+  target_link_libraries(${target} PRIVATE
+    payload_manager::internal
+    GTest::gtest
+    GTest::gtest_main
+  )
 
   payload_manager_register_test(${target} "unit;${labels}")
 endfunction()
@@ -38,6 +42,11 @@ payload_manager_add_unit_test(payload_manager_unit_tiering_manager_stop tiering_
 payload_manager_add_unit_test(payload_manager_unit_data_service_best_effort data_service_best_effort_test.cpp "data;lease")
 payload_manager_add_unit_test(payload_manager_unit_storage_sidecar storage_sidecar_test.cpp "storage;sidecar;disk")
 
+# New tests covering previously missing scenarios
+payload_manager_add_unit_test(payload_manager_unit_concurrency payload_manager_concurrency_test.cpp "payload;concurrency")
+payload_manager_add_unit_test(payload_manager_unit_spill_source_remove_failure payload_manager_spill_source_remove_failure_test.cpp "payload;spill")
+payload_manager_add_unit_test(payload_manager_unit_spill_wait_timeout catalog_service_spill_wait_timeout_test.cpp "catalog;spill")
+
 if(TARGET payload_manager::client)
   payload_manager_add_unit_test(payload_manager_unit_client_payload_manager_client client/payload_manager_client_test.cpp "client")
   target_link_libraries(payload_manager_unit_client_payload_manager_client PRIVATE payload_manager::client)
@@ -54,6 +63,8 @@ if(PAYLOAD_MANAGER_ENABLE_OTEL)
   target_link_libraries(payload_manager_unit_otel_interceptor
           PRIVATE
           payload_manager::internal
+          GTest::gtest
+          GTest::gtest_main
   )
   payload_manager_register_test(payload_manager_unit_otel_interceptor "unit;observability;otel")
 endif()

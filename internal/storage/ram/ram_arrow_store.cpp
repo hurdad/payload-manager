@@ -80,7 +80,12 @@ std::shared_ptr<arrow::Buffer> RamArrowStore::OpenShm(const std::string& name, s
       throw std::runtime_error("shm_open(create) failed for " + name + ": " + strerror(errno));
     }
     // fchmod overrides the process umask so cross-user access works.
-    fchmod(fd, 0666);
+    // Non-fatal if it fails (e.g. NFS-mounted tmpfs); access may be
+    // restricted to the creating process only on those filesystems.
+    if (fchmod(fd, 0666) != 0) {
+      // Best-effort; segment remains usable by the owning process.
+      (void)errno; // suppress unused-result warning on strict compilers
+    }
     if (ftruncate(fd, static_cast<off_t>(size_bytes)) != 0) {
       const int saved = errno;
       close(fd);

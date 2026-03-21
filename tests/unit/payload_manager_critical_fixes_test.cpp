@@ -1,6 +1,6 @@
-#include <cassert>
+#include <gtest/gtest.h>
+
 #include <cstring>
-#include <iostream>
 #include <memory>
 #include <stdexcept>
 #include <string>
@@ -210,210 +210,7 @@ int FindLog(const std::vector<std::string>& log, const std::string& needle, int 
 }
 
 // ---------------------------------------------------------------------------
-// Test: Promote commits DB before removing source data
-// ---------------------------------------------------------------------------
-void TestPromoteCommitsDbBeforeSourceRemoval() {
-  auto log          = std::make_shared<std::vector<std::string>>();
-  auto ram_backend  = std::make_shared<OrderTrackingBackend>(TIER_RAM, log);
-  auto disk_backend = std::make_shared<OrderTrackingBackend>(TIER_DISK, log);
-  auto inner_repo   = std::make_shared<payload::db::memory::MemoryRepository>();
-  auto repo         = std::make_shared<LoggingRepository>(inner_repo, log);
-  auto lease_mgr    = std::make_shared<LeaseManager>();
-
-  payload::storage::StorageFactory::TierMap storage;
-  storage[TIER_RAM]  = ram_backend;
-  storage[TIER_DISK] = disk_backend;
-
-  PayloadManager manager(std::move(storage), lease_mgr, repo);
-
-  auto desc = manager.Commit(manager.Allocate(256, TIER_RAM).payload_id());
-  assert(desc.tier() == TIER_RAM);
-
-  // Clear log so we only see promote operations.
-  log->clear();
-
-  auto promoted = manager.Promote(desc.payload_id(), TIER_DISK);
-  assert(promoted.tier() == TIER_DISK);
-
-  // Verify ordering: disk:write must come before db:commit,
-  // and db:commit must come before ram:remove.
-  int disk_write_idx = FindLog(*log, "disk:write");
-  int db_commit_idx  = FindLog(*log, "db:commit");
-  int ram_remove_idx = FindLog(*log, "ram:remove");
-
-  assert(disk_write_idx >= 0 && "disk write must occur");
-  assert(db_commit_idx >= 0 && "db commit must occur");
-  assert(ram_remove_idx >= 0 && "ram remove must occur");
-  assert(disk_write_idx < db_commit_idx && "disk write must happen before db commit");
-  assert(db_commit_idx < ram_remove_idx && "db commit must happen before ram remove");
-}
-
-// ---------------------------------------------------------------------------
-// Test: ExecuteSpill commits DB before removing source data
-// ---------------------------------------------------------------------------
-void TestSpillCommitsDbBeforeSourceRemoval() {
-  auto log          = std::make_shared<std::vector<std::string>>();
-  auto ram_backend  = std::make_shared<OrderTrackingBackend>(TIER_RAM, log);
-  auto disk_backend = std::make_shared<OrderTrackingBackend>(TIER_DISK, log);
-  auto inner_repo   = std::make_shared<payload::db::memory::MemoryRepository>();
-  auto repo         = std::make_shared<LoggingRepository>(inner_repo, log);
-  auto lease_mgr    = std::make_shared<LeaseManager>();
-
-  payload::storage::StorageFactory::TierMap storage;
-  storage[TIER_RAM]  = ram_backend;
-  storage[TIER_DISK] = disk_backend;
-
-  PayloadManager manager(std::move(storage), lease_mgr, repo);
-
-  auto desc = manager.Commit(manager.Allocate(128, TIER_RAM).payload_id());
-  assert(desc.tier() == TIER_RAM);
-
-  log->clear();
-
-  manager.ExecuteSpill(desc.payload_id(), TIER_DISK, /*fsync=*/false);
-
-  int disk_write_idx = FindLog(*log, "disk:write");
-  int db_commit_idx  = FindLog(*log, "db:commit");
-  int ram_remove_idx = FindLog(*log, "ram:remove");
-
-  assert(disk_write_idx >= 0 && "disk write must occur");
-  assert(db_commit_idx >= 0 && "db commit must occur");
-  assert(ram_remove_idx >= 0 && "ram remove must occur");
-  assert(disk_write_idx < db_commit_idx && "disk write must happen before db commit");
-  assert(db_commit_idx < ram_remove_idx && "db commit must happen before ram remove");
-}
-
-// ---------------------------------------------------------------------------
-// Test: Promote with same tier does not remove data
-// ---------------------------------------------------------------------------
-void TestPromoteSameTierIsNoop() {
-  auto log          = std::make_shared<std::vector<std::string>>();
-  auto ram_backend  = std::make_shared<OrderTrackingBackend>(TIER_RAM, log);
-  auto disk_backend = std::make_shared<OrderTrackingBackend>(TIER_DISK, log);
-  auto inner_repo   = std::make_shared<payload::db::memory::MemoryRepository>();
-  auto repo         = std::make_shared<LoggingRepository>(inner_repo, log);
-  auto lease_mgr    = std::make_shared<LeaseManager>();
-
-  payload::storage::StorageFactory::TierMap storage;
-  storage[TIER_RAM]  = ram_backend;
-  storage[TIER_DISK] = disk_backend;
-
-  PayloadManager manager(std::move(storage), lease_mgr, repo);
-
-  auto desc = manager.Commit(manager.Allocate(64, TIER_RAM).payload_id());
-  log->clear();
-
-  auto promoted = manager.Promote(desc.payload_id(), TIER_RAM);
-  assert(promoted.tier() == TIER_RAM);
-
-  // No remove should happen when promoting to the same tier.
-  assert(FindLog(*log, "ram:remove") == -1 && "no remove for same-tier promote");
-  assert(FindLog(*log, "disk:write") == -1 && "no write for same-tier promote");
-}
-
-// ---------------------------------------------------------------------------
-// Test: Delete prunes per-payload mutex from the map
-// ---------------------------------------------------------------------------
-void TestDeletePrunesPayloadMutex() {
-  auto lease_mgr = std::make_shared<LeaseManager>();
-  auto log       = std::make_shared<std::vector<std::string>>();
-
-  auto                                      ram_backend = std::make_shared<OrderTrackingBackend>(TIER_RAM, log);
-  payload::storage::StorageFactory::TierMap storage;
-  storage[TIER_RAM]  = ram_backend;
-  storage[TIER_DISK] = std::make_shared<OrderTrackingBackend>(TIER_DISK, log);
-
-  PayloadManager manager(std::move(storage), lease_mgr, std::make_shared<payload::db::memory::MemoryRepository>());
-
-  // Allocate and commit several payloads, then delete them all.
-  std::vector<payload::manager::v1::PayloadID> ids;
-  for (int i = 0; i < 10; ++i) {
-    auto desc = manager.Commit(manager.Allocate(64, TIER_RAM).payload_id());
-    ids.push_back(desc.payload_id());
-  }
-
-  // Access each one to ensure mutexes are created.
-  for (const auto& id : ids) {
-    (void)manager.ResolveSnapshot(id);
-  }
-
-  // Delete all payloads.
-  for (const auto& id : ids) {
-    manager.Delete(id, /*force=*/true);
-  }
-
-  // Verify deleted payloads are truly gone by confirming ResolveSnapshot throws.
-  for (const auto& id : ids) {
-    bool threw = false;
-    try {
-      (void)manager.ResolveSnapshot(id);
-    } catch (const std::runtime_error&) {
-      threw = true;
-    }
-    assert(threw && "deleted payload should not be resolvable");
-  }
-
-  // After deletion, new allocations should work fine (no stale mutex interference).
-  auto fresh    = manager.Commit(manager.Allocate(64, TIER_RAM).payload_id());
-  auto snapshot = manager.ResolveSnapshot(fresh.payload_id());
-  assert(snapshot.state() == PAYLOAD_STATE_ACTIVE);
-}
-
-// ---------------------------------------------------------------------------
-// Test: Spill preserves data in destination after source removal
-// ---------------------------------------------------------------------------
-void TestSpillDataAvailableInDestAfterComplete() {
-  auto log          = std::make_shared<std::vector<std::string>>();
-  auto ram_backend  = std::make_shared<OrderTrackingBackend>(TIER_RAM, log);
-  auto disk_backend = std::make_shared<OrderTrackingBackend>(TIER_DISK, log);
-  auto inner_repo   = std::make_shared<payload::db::memory::MemoryRepository>();
-  auto repo         = std::make_shared<LoggingRepository>(inner_repo, log);
-  auto lease_mgr    = std::make_shared<LeaseManager>();
-
-  payload::storage::StorageFactory::TierMap storage;
-  storage[TIER_RAM]  = ram_backend;
-  storage[TIER_DISK] = disk_backend;
-
-  PayloadManager manager(std::move(storage), lease_mgr, repo);
-
-  auto desc = manager.Commit(manager.Allocate(128, TIER_RAM).payload_id());
-
-  manager.ExecuteSpill(desc.payload_id(), TIER_DISK, false);
-
-  // Data should now be in disk, not in ram.
-  assert(!ram_backend->Contains(desc.payload_id()) && "ram should be cleaned up");
-  assert(disk_backend->Contains(desc.payload_id()) && "disk should have the data");
-
-  // DB should reflect the new tier.
-  auto snapshot = manager.ResolveSnapshot(desc.payload_id());
-  assert(snapshot.tier() == TIER_DISK);
-}
-
-// ---------------------------------------------------------------------------
-// Test: Allocate with zero bytes throws
-// ---------------------------------------------------------------------------
-void TestAllocateZeroBytesThrows() {
-  auto log       = std::make_shared<std::vector<std::string>>();
-  auto backend   = std::make_shared<OrderTrackingBackend>(TIER_RAM, log);
-  auto lease_mgr = std::make_shared<LeaseManager>();
-
-  payload::storage::StorageFactory::TierMap storage;
-  storage[TIER_RAM] = backend;
-
-  PayloadManager manager(std::move(storage), lease_mgr, std::make_shared<payload::db::memory::MemoryRepository>());
-
-  bool threw = false;
-  try {
-    (void)manager.Allocate(0, TIER_RAM);
-  } catch (const payload::util::InvalidArgument&) {
-    threw = true;
-  }
-  assert(threw && "Allocate(0) must throw payload::util::InvalidArgument");
-}
-
-// ---------------------------------------------------------------------------
-// Test: Delete succeeds even when storage Remove throws (orphaned bytes are
-// preferable to a visible failure after a committed DB deletion).
+// ThrowingRemoveBackend (used by TestDeleteSucceedsWhenStorageRemoveThrows)
 // ---------------------------------------------------------------------------
 class ThrowingRemoveBackend final : public StorageBackend {
  public:
@@ -449,7 +246,202 @@ class ThrowingRemoveBackend final : public StorageBackend {
   std::unordered_map<std::string, std::shared_ptr<arrow::Buffer>> buffers_;
 };
 
-void TestDeleteSucceedsWhenStorageRemoveThrows() {
+} // namespace
+
+// ---------------------------------------------------------------------------
+// Test: Promote commits DB before removing source data
+// ---------------------------------------------------------------------------
+TEST(PayloadManagerCriticalFixes, PromoteCommitsDbBeforeSourceRemoval) {
+  auto log          = std::make_shared<std::vector<std::string>>();
+  auto ram_backend  = std::make_shared<OrderTrackingBackend>(TIER_RAM, log);
+  auto disk_backend = std::make_shared<OrderTrackingBackend>(TIER_DISK, log);
+  auto inner_repo   = std::make_shared<payload::db::memory::MemoryRepository>();
+  auto repo         = std::make_shared<LoggingRepository>(inner_repo, log);
+  auto lease_mgr    = std::make_shared<LeaseManager>();
+
+  payload::storage::StorageFactory::TierMap storage;
+  storage[TIER_RAM]  = ram_backend;
+  storage[TIER_DISK] = disk_backend;
+
+  PayloadManager manager(std::move(storage), lease_mgr, repo);
+
+  auto desc = manager.Commit(manager.Allocate(256, TIER_RAM).payload_id());
+  EXPECT_EQ(desc.tier(), TIER_RAM);
+
+  // Clear log so we only see promote operations.
+  log->clear();
+
+  auto promoted = manager.Promote(desc.payload_id(), TIER_DISK);
+  EXPECT_EQ(promoted.tier(), TIER_DISK);
+
+  // Verify ordering: disk:write must come before db:commit,
+  // and db:commit must come before ram:remove.
+  int disk_write_idx = FindLog(*log, "disk:write");
+  int db_commit_idx  = FindLog(*log, "db:commit");
+  int ram_remove_idx = FindLog(*log, "ram:remove");
+
+  EXPECT_GE(disk_write_idx, 0) << "disk write must occur";
+  EXPECT_GE(db_commit_idx, 0) << "db commit must occur";
+  EXPECT_GE(ram_remove_idx, 0) << "ram remove must occur";
+  EXPECT_LT(disk_write_idx, db_commit_idx) << "disk write must happen before db commit";
+  EXPECT_LT(db_commit_idx, ram_remove_idx) << "db commit must happen before ram remove";
+}
+
+// ---------------------------------------------------------------------------
+// Test: ExecuteSpill commits DB before removing source data
+// ---------------------------------------------------------------------------
+TEST(PayloadManagerCriticalFixes, SpillCommitsDbBeforeSourceRemoval) {
+  auto log          = std::make_shared<std::vector<std::string>>();
+  auto ram_backend  = std::make_shared<OrderTrackingBackend>(TIER_RAM, log);
+  auto disk_backend = std::make_shared<OrderTrackingBackend>(TIER_DISK, log);
+  auto inner_repo   = std::make_shared<payload::db::memory::MemoryRepository>();
+  auto repo         = std::make_shared<LoggingRepository>(inner_repo, log);
+  auto lease_mgr    = std::make_shared<LeaseManager>();
+
+  payload::storage::StorageFactory::TierMap storage;
+  storage[TIER_RAM]  = ram_backend;
+  storage[TIER_DISK] = disk_backend;
+
+  PayloadManager manager(std::move(storage), lease_mgr, repo);
+
+  auto desc = manager.Commit(manager.Allocate(128, TIER_RAM).payload_id());
+  EXPECT_EQ(desc.tier(), TIER_RAM);
+
+  log->clear();
+
+  manager.ExecuteSpill(desc.payload_id(), TIER_DISK, /*fsync=*/false);
+
+  int disk_write_idx = FindLog(*log, "disk:write");
+  int db_commit_idx  = FindLog(*log, "db:commit");
+  int ram_remove_idx = FindLog(*log, "ram:remove");
+
+  EXPECT_GE(disk_write_idx, 0) << "disk write must occur";
+  EXPECT_GE(db_commit_idx, 0) << "db commit must occur";
+  EXPECT_GE(ram_remove_idx, 0) << "ram remove must occur";
+  EXPECT_LT(disk_write_idx, db_commit_idx) << "disk write must happen before db commit";
+  EXPECT_LT(db_commit_idx, ram_remove_idx) << "db commit must happen before ram remove";
+}
+
+// ---------------------------------------------------------------------------
+// Test: Promote with same tier does not remove data
+// ---------------------------------------------------------------------------
+TEST(PayloadManagerCriticalFixes, PromoteSameTierIsNoop) {
+  auto log          = std::make_shared<std::vector<std::string>>();
+  auto ram_backend  = std::make_shared<OrderTrackingBackend>(TIER_RAM, log);
+  auto disk_backend = std::make_shared<OrderTrackingBackend>(TIER_DISK, log);
+  auto inner_repo   = std::make_shared<payload::db::memory::MemoryRepository>();
+  auto repo         = std::make_shared<LoggingRepository>(inner_repo, log);
+  auto lease_mgr    = std::make_shared<LeaseManager>();
+
+  payload::storage::StorageFactory::TierMap storage;
+  storage[TIER_RAM]  = ram_backend;
+  storage[TIER_DISK] = disk_backend;
+
+  PayloadManager manager(std::move(storage), lease_mgr, repo);
+
+  auto desc = manager.Commit(manager.Allocate(64, TIER_RAM).payload_id());
+  log->clear();
+
+  auto promoted = manager.Promote(desc.payload_id(), TIER_RAM);
+  EXPECT_EQ(promoted.tier(), TIER_RAM);
+
+  // No remove should happen when promoting to the same tier.
+  EXPECT_EQ(FindLog(*log, "ram:remove"), -1) << "no remove for same-tier promote";
+  EXPECT_EQ(FindLog(*log, "disk:write"), -1) << "no write for same-tier promote";
+}
+
+// ---------------------------------------------------------------------------
+// Test: Delete prunes per-payload mutex from the map
+// ---------------------------------------------------------------------------
+TEST(PayloadManagerCriticalFixes, DeletePrunesPayloadMutex) {
+  auto lease_mgr = std::make_shared<LeaseManager>();
+  auto log       = std::make_shared<std::vector<std::string>>();
+
+  auto                                      ram_backend = std::make_shared<OrderTrackingBackend>(TIER_RAM, log);
+  payload::storage::StorageFactory::TierMap storage;
+  storage[TIER_RAM]  = ram_backend;
+  storage[TIER_DISK] = std::make_shared<OrderTrackingBackend>(TIER_DISK, log);
+
+  PayloadManager manager(std::move(storage), lease_mgr, std::make_shared<payload::db::memory::MemoryRepository>());
+
+  // Allocate and commit several payloads, then delete them all.
+  std::vector<payload::manager::v1::PayloadID> ids;
+  for (int i = 0; i < 10; ++i) {
+    auto desc = manager.Commit(manager.Allocate(64, TIER_RAM).payload_id());
+    ids.push_back(desc.payload_id());
+  }
+
+  // Access each one to ensure mutexes are created.
+  for (const auto& id : ids) {
+    (void)manager.ResolveSnapshot(id);
+  }
+
+  // Delete all payloads.
+  for (const auto& id : ids) {
+    manager.Delete(id, /*force=*/true);
+  }
+
+  // Verify deleted payloads are truly gone by confirming ResolveSnapshot throws.
+  for (const auto& id : ids) {
+    EXPECT_THROW((void)manager.ResolveSnapshot(id), std::runtime_error) << "deleted payload should not be resolvable";
+  }
+
+  // After deletion, new allocations should work fine (no stale mutex interference).
+  auto fresh    = manager.Commit(manager.Allocate(64, TIER_RAM).payload_id());
+  auto snapshot = manager.ResolveSnapshot(fresh.payload_id());
+  EXPECT_EQ(snapshot.state(), PAYLOAD_STATE_ACTIVE);
+}
+
+// ---------------------------------------------------------------------------
+// Test: Spill preserves data in destination after source removal
+// ---------------------------------------------------------------------------
+TEST(PayloadManagerCriticalFixes, SpillDataAvailableInDestAfterComplete) {
+  auto log          = std::make_shared<std::vector<std::string>>();
+  auto ram_backend  = std::make_shared<OrderTrackingBackend>(TIER_RAM, log);
+  auto disk_backend = std::make_shared<OrderTrackingBackend>(TIER_DISK, log);
+  auto inner_repo   = std::make_shared<payload::db::memory::MemoryRepository>();
+  auto repo         = std::make_shared<LoggingRepository>(inner_repo, log);
+  auto lease_mgr    = std::make_shared<LeaseManager>();
+
+  payload::storage::StorageFactory::TierMap storage;
+  storage[TIER_RAM]  = ram_backend;
+  storage[TIER_DISK] = disk_backend;
+
+  PayloadManager manager(std::move(storage), lease_mgr, repo);
+
+  auto desc = manager.Commit(manager.Allocate(128, TIER_RAM).payload_id());
+
+  manager.ExecuteSpill(desc.payload_id(), TIER_DISK, false);
+
+  // Data should now be in disk, not in ram.
+  EXPECT_FALSE(ram_backend->Contains(desc.payload_id())) << "ram should be cleaned up";
+  EXPECT_TRUE(disk_backend->Contains(desc.payload_id())) << "disk should have the data";
+
+  // DB should reflect the new tier.
+  auto snapshot = manager.ResolveSnapshot(desc.payload_id());
+  EXPECT_EQ(snapshot.tier(), TIER_DISK);
+}
+
+// ---------------------------------------------------------------------------
+// Test: Allocate with zero bytes throws
+// ---------------------------------------------------------------------------
+TEST(PayloadManagerCriticalFixes, AllocateZeroBytesThrows) {
+  auto log       = std::make_shared<std::vector<std::string>>();
+  auto backend   = std::make_shared<OrderTrackingBackend>(TIER_RAM, log);
+  auto lease_mgr = std::make_shared<LeaseManager>();
+
+  payload::storage::StorageFactory::TierMap storage;
+  storage[TIER_RAM] = backend;
+
+  PayloadManager manager(std::move(storage), lease_mgr, std::make_shared<payload::db::memory::MemoryRepository>());
+
+  EXPECT_THROW((void)manager.Allocate(0, TIER_RAM), payload::util::InvalidArgument) << "Allocate(0) must throw payload::util::InvalidArgument";
+}
+
+// ---------------------------------------------------------------------------
+// Test: Delete succeeds even when storage Remove throws
+// ---------------------------------------------------------------------------
+TEST(PayloadManagerCriticalFixes, DeleteSucceedsWhenStorageRemoveThrows) {
   auto lease_mgr = std::make_shared<LeaseManager>();
   auto backend   = std::make_shared<ThrowingRemoveBackend>(TIER_RAM);
 
@@ -462,35 +454,8 @@ void TestDeleteSucceedsWhenStorageRemoveThrows() {
   auto desc = manager.Commit(manager.Allocate(64, TIER_RAM).payload_id());
 
   // Delete must not throw even though Remove() throws internally.
-  bool threw = false;
-  try {
-    manager.Delete(desc.payload_id(), /*force=*/true);
-  } catch (...) {
-    threw = true;
-  }
-  assert(!threw && "Delete must not propagate storage Remove failures after DB commit");
+  EXPECT_NO_THROW(manager.Delete(desc.payload_id(), /*force=*/true)) << "Delete must not propagate storage Remove failures after DB commit";
 
   // The payload must no longer be resolvable.
-  bool not_found = false;
-  try {
-    (void)manager.ResolveSnapshot(desc.payload_id());
-  } catch (const std::runtime_error&) {
-    not_found = true;
-  }
-  assert(not_found && "payload must be gone from DB even if storage Remove failed");
-}
-
-} // namespace
-
-int main() {
-  TestPromoteCommitsDbBeforeSourceRemoval();
-  TestSpillCommitsDbBeforeSourceRemoval();
-  TestPromoteSameTierIsNoop();
-  TestDeletePrunesPayloadMutex();
-  TestSpillDataAvailableInDestAfterComplete();
-  TestAllocateZeroBytesThrows();
-  TestDeleteSucceedsWhenStorageRemoveThrows();
-
-  std::cout << "payload_manager_critical_fixes_test: pass\n";
-  return 0;
+  EXPECT_THROW((void)manager.ResolveSnapshot(desc.payload_id()), std::runtime_error) << "payload must be gone from DB even if storage Remove failed";
 }

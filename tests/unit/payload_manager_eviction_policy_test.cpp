@@ -1,20 +1,10 @@
 /*
   Unit tests for persist and eviction_policy fields introduced in AllocatePayloadRequest.
-
-  Covered:
-    - persist=true suppresses TTL expiry
-    - persist=true marks payload as eviction-exempt
-    - eviction_policy.priority=NEVER marks payload as eviction-exempt
-    - eviction_policy.spill_target is returned by GetSpillTarget
-    - delete removes eviction-exempt status
-    - eviction policy fields round-trip through the memory repository
-    - TieringPolicy skips eviction-exempt payloads when choosing victims
-    - TieringPolicy still selects non-exempt LRU victim when exempt IDs exist
 */
 
-#include <cassert>
+#include <gtest/gtest.h>
+
 #include <cstring>
-#include <iostream>
 #include <memory>
 #include <stdexcept>
 #include <thread>
@@ -131,96 +121,94 @@ void SetPressure(PressureState& s) {
   s.gpu_bytes.store(1);
 }
 
-// ---------------------------------------------------------------------------
-// Tests
-// ---------------------------------------------------------------------------
+} // namespace
 
 // persist=true — TTL is ignored; payload survives ExpireStale.
-void TestPersistSuppressesTTL() {
+TEST(PayloadManagerEvictionPolicy, PersistSuppressesTTL) {
   Fixture f;
 
   const auto desc = f.manager.Commit(f.manager.Allocate(128, TIER_RAM, /*ttl_ms=*/1, /*persist=*/true).payload_id());
-  assert(f.ram->Has(desc.payload_id()));
+  EXPECT_TRUE(f.ram->Has(desc.payload_id()));
 
   std::this_thread::sleep_for(std::chrono::milliseconds(5));
   f.manager.ExpireStale();
 
   // Must still exist despite TTL.
-  assert(f.ram->Has(desc.payload_id()));
+  EXPECT_TRUE(f.ram->Has(desc.payload_id()));
   const auto snap = f.manager.ResolveSnapshot(desc.payload_id());
-  assert(snap.payload_id().value() == desc.payload_id().value());
+  EXPECT_EQ(snap.payload_id().value(), desc.payload_id().value());
 }
 
 // persist=true marks payload as eviction-exempt immediately after Allocate.
-void TestPersistMarksEvictionExempt() {
+TEST(PayloadManagerEvictionPolicy, PersistMarksEvictionExempt) {
   Fixture f;
 
   const auto desc = f.manager.Allocate(64, TIER_RAM, /*ttl_ms=*/0, /*persist=*/true);
-  assert(f.manager.IsEvictionExempt(desc.payload_id()));
+  EXPECT_TRUE(f.manager.IsEvictionExempt(desc.payload_id()));
 }
 
 // Non-persisted payload is not eviction-exempt.
-void TestNonPersistIsNotEvictionExempt() {
+TEST(PayloadManagerEvictionPolicy, NonPersistIsNotEvictionExempt) {
   Fixture f;
 
   const auto desc = f.manager.Allocate(64, TIER_RAM);
-  assert(!f.manager.IsEvictionExempt(desc.payload_id()));
+  EXPECT_FALSE(f.manager.IsEvictionExempt(desc.payload_id()));
 }
 
 // eviction_policy.priority = NEVER marks payload as eviction-exempt.
-void TestEvictionPriorityNeverMarksExempt() {
+TEST(PayloadManagerEvictionPolicy, EvictionPriorityNeverMarksExempt) {
   Fixture f;
 
   EvictionPolicy policy;
   policy.set_priority(EVICTION_PRIORITY_NEVER);
 
   const auto desc = f.manager.Allocate(64, TIER_RAM, /*ttl_ms=*/0, /*persist=*/false, policy);
-  assert(f.manager.IsEvictionExempt(desc.payload_id()));
+  EXPECT_TRUE(f.manager.IsEvictionExempt(desc.payload_id()));
 }
 
 // eviction_policy.priority != NEVER does not mark as exempt.
-void TestEvictionPriorityHighIsNotExempt() {
+TEST(PayloadManagerEvictionPolicy, EvictionPriorityHighIsNotExempt) {
   Fixture f;
 
   EvictionPolicy policy;
   policy.set_priority(EVICTION_PRIORITY_HIGH);
 
   const auto desc = f.manager.Allocate(64, TIER_RAM, /*ttl_ms=*/0, /*persist=*/false, policy);
-  assert(!f.manager.IsEvictionExempt(desc.payload_id()));
+  EXPECT_FALSE(f.manager.IsEvictionExempt(desc.payload_id()));
 }
 
 // eviction_policy.spill_target is returned by GetSpillTarget.
-void TestSpillTargetIsRespected() {
+TEST(PayloadManagerEvictionPolicy, SpillTargetIsRespected) {
   Fixture f;
 
   EvictionPolicy policy;
   policy.set_spill_target(TIER_OBJECT);
 
   const auto desc = f.manager.Allocate(64, TIER_RAM, /*ttl_ms=*/0, /*persist=*/false, policy);
-  assert(f.manager.GetSpillTarget(desc.payload_id()) == TIER_OBJECT);
+  EXPECT_EQ(f.manager.GetSpillTarget(desc.payload_id()), TIER_OBJECT);
 }
 
 // Default spill target (no policy set) falls back to TIER_DISK.
-void TestDefaultSpillTargetIsDisk() {
+TEST(PayloadManagerEvictionPolicy, DefaultSpillTargetIsDisk) {
   Fixture f;
 
   const auto desc = f.manager.Allocate(64, TIER_RAM);
-  assert(f.manager.GetSpillTarget(desc.payload_id()) == TIER_DISK);
+  EXPECT_EQ(f.manager.GetSpillTarget(desc.payload_id()), TIER_DISK);
 }
 
 // Deleting a persisted payload clears its eviction-exempt status.
-void TestDeleteClearsEvictionExempt() {
+TEST(PayloadManagerEvictionPolicy, DeleteClearsEvictionExempt) {
   Fixture f;
 
   const auto desc = f.manager.Commit(f.manager.Allocate(64, TIER_RAM, 0, /*persist=*/true).payload_id());
-  assert(f.manager.IsEvictionExempt(desc.payload_id()));
+  EXPECT_TRUE(f.manager.IsEvictionExempt(desc.payload_id()));
 
   f.manager.Delete(desc.payload_id(), /*force=*/true);
-  assert(!f.manager.IsEvictionExempt(desc.payload_id()));
+  EXPECT_FALSE(f.manager.IsEvictionExempt(desc.payload_id()));
 }
 
 // eviction_policy fields round-trip through the memory repository.
-void TestEvictionFieldsRoundTripThroughRepository() {
+TEST(PayloadManagerEvictionPolicy, EvictionFieldsRoundTripThroughRepository) {
   auto repo = std::make_shared<payload::db::memory::MemoryRepository>();
 
   payload::db::model::PayloadRecord r;
@@ -243,27 +231,27 @@ void TestEvictionFieldsRoundTripThroughRepository() {
   auto loaded = repo->GetPayload(*tx, "evict-roundtrip");
   tx->Commit();
 
-  assert(loaded.has_value());
-  assert(loaded->persist == true);
-  assert(loaded->eviction_priority == static_cast<int>(EVICTION_PRIORITY_NEVER));
-  assert(loaded->spill_target == static_cast<int>(TIER_OBJECT));
+  ASSERT_TRUE(loaded.has_value());
+  EXPECT_EQ(loaded->persist, true);
+  EXPECT_EQ(loaded->eviction_priority, static_cast<int>(EVICTION_PRIORITY_NEVER));
+  EXPECT_EQ(loaded->spill_target, static_cast<int>(TIER_OBJECT));
 }
 
 // HydrateCaches restores eviction-exempt status from the repository.
-void TestHydrateCachesRestoresEvictionExempt() {
+TEST(PayloadManagerEvictionPolicy, HydrateCachesRestoresEvictionExempt) {
   Fixture f;
 
   // Allocate and persist — creates entry in repo + in-memory set.
   const auto desc = f.manager.Allocate(64, TIER_RAM, 0, /*persist=*/true);
-  assert(f.manager.IsEvictionExempt(desc.payload_id()));
+  EXPECT_TRUE(f.manager.IsEvictionExempt(desc.payload_id()));
 
   // Hydrate from the repo — must remain exempt.
   f.manager.HydrateCaches();
-  assert(f.manager.IsEvictionExempt(desc.payload_id()));
+  EXPECT_TRUE(f.manager.IsEvictionExempt(desc.payload_id()));
 }
 
 // TieringPolicy with a filter skips eviction-exempt payloads.
-void TestTieringPolicySkipsExemptPayloads() {
+TEST(PayloadManagerEvictionPolicy, TieringPolicySkipsExemptPayloads) {
   auto cache = std::make_shared<MetadataCache>();
 
   PutCacheEntry(*cache, "exempt-a");
@@ -277,11 +265,11 @@ void TestTieringPolicySkipsExemptPayloads() {
   SetPressure(state);
   const auto victim = policy.ChooseRamEviction(state);
 
-  assert(!victim.has_value());
+  EXPECT_FALSE(victim.has_value());
 }
 
 // TieringPolicy selects the LRU non-exempt ID when exempt ones are present.
-void TestTieringPolicySelectsNonExemptLRUVictim() {
+TEST(PayloadManagerEvictionPolicy, TieringPolicySelectsNonExemptLRUVictim) {
   auto cache = std::make_shared<MetadataCache>();
 
   PutCacheEntry(*cache, "oldest"); // LRU
@@ -299,12 +287,12 @@ void TestTieringPolicySelectsNonExemptLRUVictim() {
   SetPressure(state);
   const auto victim = policy.ChooseRamEviction(state);
 
-  assert(victim.has_value());
-  assert(victim->value() == "oldest");
+  ASSERT_TRUE(victim.has_value());
+  EXPECT_EQ(victim->value(), "oldest");
 }
 
 // TieringPolicy with no filter still works (backward compatibility).
-void TestTieringPolicyNoFilterStillWorks() {
+TEST(PayloadManagerEvictionPolicy, TieringPolicyNoFilterStillWorks) {
   auto cache = std::make_shared<MetadataCache>();
   PutCacheEntry(*cache, "only");
 
@@ -313,27 +301,6 @@ void TestTieringPolicyNoFilterStillWorks() {
   SetPressure(state);
   const auto victim = policy.ChooseRamEviction(state);
 
-  assert(victim.has_value());
-  assert(victim->value() == "only");
-}
-
-} // namespace
-
-int main() {
-  TestPersistSuppressesTTL();
-  TestPersistMarksEvictionExempt();
-  TestNonPersistIsNotEvictionExempt();
-  TestEvictionPriorityNeverMarksExempt();
-  TestEvictionPriorityHighIsNotExempt();
-  TestSpillTargetIsRespected();
-  TestDefaultSpillTargetIsDisk();
-  TestDeleteClearsEvictionExempt();
-  TestEvictionFieldsRoundTripThroughRepository();
-  TestHydrateCachesRestoresEvictionExempt();
-  TestTieringPolicySkipsExemptPayloads();
-  TestTieringPolicySelectsNonExemptLRUVictim();
-  TestTieringPolicyNoFilterStillWorks();
-
-  std::cout << "payload_manager_unit_eviction_policy: pass\n";
-  return 0;
+  ASSERT_TRUE(victim.has_value());
+  EXPECT_EQ(victim->value(), "only");
 }

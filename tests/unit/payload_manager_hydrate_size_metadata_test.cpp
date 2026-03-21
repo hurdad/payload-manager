@@ -1,5 +1,5 @@
-#include <cassert>
-#include <iostream>
+#include <gtest/gtest.h>
+
 #include <memory>
 #include <stdexcept>
 #include <string>
@@ -54,7 +54,9 @@ class SizeOnlyStorageBackend final : public StorageBackend {
   std::unordered_map<std::string, uint64_t> sizes_;
 };
 
-void TestHydrateCachesUsesSizeMetadataWithoutRead() {
+} // namespace
+
+TEST(PayloadManagerHydrate, HydrateCachesUsesSizeMetadataWithoutRead) {
   auto repository = std::make_shared<MemoryRepository>();
   auto backend    = std::make_shared<SizeOnlyStorageBackend>();
 
@@ -68,7 +70,7 @@ void TestHydrateCachesUsesSizeMetadataWithoutRead() {
   {
     auto tx = repository->Begin();
     auto ok = repository->InsertPayload(*tx, seed);
-    assert(ok);
+    ASSERT_TRUE(ok);
     tx->Commit();
   }
 
@@ -85,15 +87,6 @@ void TestHydrateCachesUsesSizeMetadataWithoutRead() {
   id.set_value(seed.id);
 
   const auto descriptor = manager.ResolveSnapshot(id);
-  assert(descriptor.has_disk());
-  assert(descriptor.disk().length_bytes() == 4096);
-}
-
-} // namespace
-
-int main() {
-  TestHydrateCachesUsesSizeMetadataWithoutRead();
-
-  std::cout << "payload_manager_unit_hydrate_size_metadata: pass\n";
-  return 0;
+  EXPECT_TRUE(descriptor.has_disk());
+  EXPECT_EQ(descriptor.disk().length_bytes(), 4096u);
 }

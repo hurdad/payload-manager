@@ -1,6 +1,6 @@
-#include <cassert>
+#include <gtest/gtest.h>
+
 #include <cstring>
-#include <iostream>
 #include <memory>
 #include <stdexcept>
 #include <thread>
@@ -71,46 +71,42 @@ struct Fixture {
                          lease_mgr, repo};
 };
 
+} // namespace
+
 // Allocate with TTL=1ms, sleep past expiry, call ExpireStale —
 // payload must be gone from storage and unresolvable.
-void TestExpireStaleDeletesExpiredPayload() {
+TEST(PayloadManagerTTL, ExpireStaleDeletesExpiredPayload) {
   Fixture f;
 
   const auto desc = f.manager.Commit(f.manager.Allocate(128, TIER_RAM, /*ttl_ms=*/1).payload_id());
-  assert(f.ram->Has(desc.payload_id()));
+  EXPECT_TRUE(f.ram->Has(desc.payload_id()));
 
   std::this_thread::sleep_for(std::chrono::milliseconds(5));
 
   f.manager.ExpireStale();
 
-  assert(!f.ram->Has(desc.payload_id()));
+  EXPECT_FALSE(f.ram->Has(desc.payload_id()));
 
-  bool threw = false;
-  try {
-    (void)f.manager.ResolveSnapshot(desc.payload_id());
-  } catch (const std::runtime_error&) {
-    threw = true;
-  }
-  assert(threw);
+  EXPECT_THROW((void)f.manager.ResolveSnapshot(desc.payload_id()), std::runtime_error);
 }
 
 // Allocate with TTL=10000ms (not yet expired), call ExpireStale —
 // payload must still exist.
-void TestExpireStaleDoesNotDeleteLivingPayload() {
+TEST(PayloadManagerTTL, ExpireStaleDoesNotDeleteLivingPayload) {
   Fixture f;
 
   const auto desc = f.manager.Commit(f.manager.Allocate(128, TIER_RAM, /*ttl_ms=*/10'000).payload_id());
-  assert(f.ram->Has(desc.payload_id()));
+  EXPECT_TRUE(f.ram->Has(desc.payload_id()));
 
   f.manager.ExpireStale();
 
-  assert(f.ram->Has(desc.payload_id()));
+  EXPECT_TRUE(f.ram->Has(desc.payload_id()));
   const auto snapshot = f.manager.ResolveSnapshot(desc.payload_id());
-  assert(snapshot.payload_id().value() == desc.payload_id().value());
+  EXPECT_EQ(snapshot.payload_id().value(), desc.payload_id().value());
 }
 
 // Allocate with no TTL (ttl_ms=0) — ExpireStale must never touch it.
-void TestExpireStaleIgnoresPayloadWithNoTtl() {
+TEST(PayloadManagerTTL, ExpireStaleIgnoresPayloadWithNoTtl) {
   Fixture f;
 
   const auto desc = f.manager.Commit(f.manager.Allocate(128, TIER_RAM).payload_id());
@@ -118,26 +114,26 @@ void TestExpireStaleIgnoresPayloadWithNoTtl() {
   std::this_thread::sleep_for(std::chrono::milliseconds(5));
   f.manager.ExpireStale();
 
-  assert(f.ram->Has(desc.payload_id()));
+  EXPECT_TRUE(f.ram->Has(desc.payload_id()));
 }
 
 // Expired payload that has been spilled to disk — ExpireStale removes from disk.
-void TestExpireStaleRemovesExpiredSpilledPayload() {
+TEST(PayloadManagerTTL, ExpireStaleRemovesExpiredSpilledPayload) {
   Fixture f;
 
   const auto desc = f.manager.Commit(f.manager.Allocate(128, TIER_RAM, /*ttl_ms=*/1).payload_id());
   f.manager.ExecuteSpill(desc.payload_id(), TIER_DISK, /*fsync=*/false);
-  assert(f.disk->Has(desc.payload_id()));
-  assert(!f.ram->Has(desc.payload_id()));
+  EXPECT_TRUE(f.disk->Has(desc.payload_id()));
+  EXPECT_FALSE(f.ram->Has(desc.payload_id()));
 
   std::this_thread::sleep_for(std::chrono::milliseconds(5));
   f.manager.ExpireStale();
 
-  assert(!f.disk->Has(desc.payload_id()));
+  EXPECT_FALSE(f.disk->Has(desc.payload_id()));
 }
 
 // Two payloads: one expired, one not. Only the expired one is removed.
-void TestExpireStaleIsSelective() {
+TEST(PayloadManagerTTL, ExpireStaleIsSelective) {
   Fixture f;
 
   const auto expired = f.manager.Commit(f.manager.Allocate(64, TIER_RAM, /*ttl_ms=*/1).payload_id());
@@ -146,23 +142,17 @@ void TestExpireStaleIsSelective() {
   std::this_thread::sleep_for(std::chrono::milliseconds(5));
   f.manager.ExpireStale();
 
-  assert(!f.ram->Has(expired.payload_id()));
-  assert(f.ram->Has(alive.payload_id()));
+  EXPECT_FALSE(f.ram->Has(expired.payload_id()));
+  EXPECT_TRUE(f.ram->Has(alive.payload_id()));
 
-  bool threw = false;
-  try {
-    (void)f.manager.ResolveSnapshot(expired.payload_id());
-  } catch (const std::runtime_error&) {
-    threw = true;
-  }
-  assert(threw);
+  EXPECT_THROW((void)f.manager.ResolveSnapshot(expired.payload_id()), std::runtime_error);
 
   const auto snapshot = f.manager.ResolveSnapshot(alive.payload_id());
-  assert(snapshot.payload_id().value() == alive.payload_id().value());
+  EXPECT_EQ(snapshot.payload_id().value(), alive.payload_id().value());
 }
 
 // ListExpiredPayloads via the memory repository directly.
-void TestMemoryRepositoryListExpiredPayloads() {
+TEST(PayloadManagerTTL, MemoryRepositoryListExpiredPayloads) {
   auto repo = std::make_shared<payload::db::memory::MemoryRepository>();
 
   payload::db::model::PayloadRecord r1;
@@ -201,12 +191,12 @@ void TestMemoryRepositoryListExpiredPayloads() {
   const auto expired = repo->ListExpiredPayloads(*tx, /*now_ms=*/1000);
   tx->Commit();
 
-  assert(expired.size() == 1);
-  assert(expired[0].id == "aaaa");
+  EXPECT_EQ(expired.size(), 1u);
+  EXPECT_EQ(expired[0].id, "aaaa");
 }
 
 // TTL is stored and round-trips through the memory repository.
-void TestTtlRoundTripsThroughRepository() {
+TEST(PayloadManagerTTL, TtlRoundTripsThroughRepository) {
   auto repo = std::make_shared<payload::db::memory::MemoryRepository>();
 
   payload::db::model::PayloadRecord r;
@@ -227,21 +217,6 @@ void TestTtlRoundTripsThroughRepository() {
   auto loaded = repo->GetPayload(*tx, "test-ttl");
   tx->Commit();
 
-  assert(loaded.has_value());
-  assert(loaded->expires_at_ms == 123456789ULL);
-}
-
-} // namespace
-
-int main() {
-  TestMemoryRepositoryListExpiredPayloads();
-  TestTtlRoundTripsThroughRepository();
-  TestExpireStaleDoesNotDeleteLivingPayload();
-  TestExpireStaleIgnoresPayloadWithNoTtl();
-  TestExpireStaleDeletesExpiredPayload();
-  TestExpireStaleRemovesExpiredSpilledPayload();
-  TestExpireStaleIsSelective();
-
-  std::cout << "payload_manager_unit_ttl: pass\n";
-  return 0;
+  ASSERT_TRUE(loaded.has_value());
+  EXPECT_EQ(loaded->expires_at_ms, 123456789ULL);
 }

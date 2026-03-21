@@ -1,16 +1,10 @@
 /*
   Tests for Critical Fix #1: TieringManager + PressureState wiring.
-
-  Covered:
-    - PayloadManager::GetTierBytes() reflects allocate / spill / delete
-    - PressureState::RamPressure() triggers correctly from synced byte counts
-    - TieringPolicy::ChooseRamEviction returns a victim only when pressure is
-      above the configured limit (the same check TieringManager::Loop runs)
 */
 
-#include <cassert>
+#include <gtest/gtest.h>
+
 #include <cstring>
-#include <iostream>
 #include <memory>
 #include <stdexcept>
 #include <unordered_map>
@@ -75,24 +69,26 @@ struct Fixture {
   }()};
 };
 
+} // namespace
+
 // ---------------------------------------------------------------------------
 // Test: GetTierBytes reflects the allocated size after Allocate+Commit
 // ---------------------------------------------------------------------------
-void TestGetTierBytesAfterAllocate() {
+TEST(TieringPressure, GetTierBytesAfterAllocate) {
   Fixture f;
 
   auto desc = f.manager->Commit(f.manager->Allocate(256, TIER_RAM).payload_id());
 
   const auto bytes = f.manager->GetTierBytes();
   const auto it    = bytes.find(static_cast<int>(TIER_RAM));
-  assert(it != bytes.end() && "RAM tier must appear in GetTierBytes after allocate");
-  assert(it->second == 256 && "GetTierBytes must report the allocated size");
+  ASSERT_NE(it, bytes.end()) << "RAM tier must appear in GetTierBytes after allocate";
+  EXPECT_EQ(it->second, 256u) << "GetTierBytes must report the allocated size";
 }
 
 // ---------------------------------------------------------------------------
 // Test: GetTierBytes decrements after Delete
 // ---------------------------------------------------------------------------
-void TestGetTierBytesAfterDelete() {
+TEST(TieringPressure, GetTierBytesAfterDelete) {
   Fixture f;
 
   auto desc = f.manager->Commit(f.manager->Allocate(128, TIER_RAM).payload_id());
@@ -101,13 +97,13 @@ void TestGetTierBytesAfterDelete() {
   const auto bytes     = f.manager->GetTierBytes();
   const auto it_ram    = bytes.find(static_cast<int>(TIER_RAM));
   uint64_t   ram_bytes = (it_ram != bytes.end()) ? it_ram->second : 0;
-  assert(ram_bytes == 0 && "RAM bytes must be zero after Delete");
+  EXPECT_EQ(ram_bytes, 0u) << "RAM bytes must be zero after Delete";
 }
 
 // ---------------------------------------------------------------------------
 // Test: GetTierBytes transfers bytes from source tier to dest tier after Spill
 // ---------------------------------------------------------------------------
-void TestGetTierBytesAfterSpill() {
+TEST(TieringPressure, GetTierBytesAfterSpill) {
   Fixture f;
 
   auto desc = f.manager->Commit(f.manager->Allocate(64, TIER_RAM).payload_id());
@@ -115,8 +111,8 @@ void TestGetTierBytesAfterSpill() {
   // Verify RAM has bytes before spill.
   {
     const auto bytes = f.manager->GetTierBytes();
-    assert(bytes.count(static_cast<int>(TIER_RAM)) && bytes.at(static_cast<int>(TIER_RAM)) == 64);
-    assert(!bytes.count(static_cast<int>(TIER_DISK)) || bytes.at(static_cast<int>(TIER_DISK)) == 0);
+    EXPECT_TRUE(bytes.count(static_cast<int>(TIER_RAM)) && bytes.at(static_cast<int>(TIER_RAM)) == 64);
+    EXPECT_TRUE(!bytes.count(static_cast<int>(TIER_DISK)) || bytes.at(static_cast<int>(TIER_DISK)) == 0);
   }
 
   f.manager->ExecuteSpill(desc.payload_id(), TIER_DISK, /*fsync=*/false);
@@ -126,17 +122,16 @@ void TestGetTierBytesAfterSpill() {
     const auto bytes    = f.manager->GetTierBytes();
     uint64_t   ram_val  = bytes.count(static_cast<int>(TIER_RAM)) ? bytes.at(static_cast<int>(TIER_RAM)) : 0;
     uint64_t   disk_val = bytes.count(static_cast<int>(TIER_DISK)) ? bytes.at(static_cast<int>(TIER_DISK)) : 0;
-    assert(ram_val == 0 && "RAM bytes must be zero after spill");
-    assert(disk_val == 64 && "disk bytes must equal original size after spill");
+    EXPECT_EQ(ram_val, 0u) << "RAM bytes must be zero after spill";
+    EXPECT_EQ(disk_val, 64u) << "disk bytes must equal original size after spill";
   }
 }
 
 // ---------------------------------------------------------------------------
 // Test: PressureState.RamPressure() fires only when bytes exceed the limit,
 //       and TieringPolicy.ChooseRamEviction returns a victim exactly then.
-//       This mirrors the sync TieringManager::Loop performs each iteration.
 // ---------------------------------------------------------------------------
-void TestPressureStateAndPolicyIntegration() {
+TEST(TieringPressure, PressureStateAndPolicyIntegration) {
   Fixture f;
   auto    cache = std::make_shared<payload::metadata::MetadataCache>();
 
@@ -159,41 +154,28 @@ void TestPressureStateAndPolicyIntegration() {
   const auto tier_bytes = f.manager->GetTierBytes();
   state_ok.ram_bytes.store(tier_bytes.count(static_cast<int>(TIER_RAM)) ? tier_bytes.at(static_cast<int>(TIER_RAM)) : 0);
 
-  assert(!state_ok.RamPressure() && "no pressure when bytes are below limit");
-  assert(!policy->ChooseRamEviction(state_ok).has_value() && "policy must not emit victim when not under pressure");
+  EXPECT_FALSE(state_ok.RamPressure()) << "no pressure when bytes are below limit";
+  EXPECT_FALSE(policy->ChooseRamEviction(state_ok).has_value()) << "policy must not emit victim when not under pressure";
 
   // ---- Case 2: limit exceeded ----
   payload::tiering::PressureState state_over;
   state_over.ram_limit = 100; // 200 > 100 → pressure
   state_over.ram_bytes.store(tier_bytes.count(static_cast<int>(TIER_RAM)) ? tier_bytes.at(static_cast<int>(TIER_RAM)) : 0);
 
-  assert(state_over.RamPressure() && "pressure must be detected when bytes exceed limit");
+  EXPECT_TRUE(state_over.RamPressure()) << "pressure must be detected when bytes exceed limit";
   const auto victim = policy->ChooseRamEviction(state_over);
-  assert(victim.has_value() && "policy must return a victim when under pressure");
-  assert(victim->value() == desc.payload_id().value() && "victim must be the allocated payload");
+  ASSERT_TRUE(victim.has_value()) << "policy must return a victim when under pressure";
+  EXPECT_EQ(victim->value(), desc.payload_id().value()) << "victim must be the allocated payload";
 }
 
 // ---------------------------------------------------------------------------
 // Test: PressureState GPU limit works analogously to RAM
 // ---------------------------------------------------------------------------
-void TestGpuPressureStateLimit() {
+TEST(TieringPressure, GpuPressureStateLimit) {
   payload::tiering::PressureState state;
   state.gpu_limit = 512;
   state.gpu_bytes.store(256);
-  assert(!state.GpuPressure() && "no GPU pressure when bytes < limit");
+  EXPECT_FALSE(state.GpuPressure()) << "no GPU pressure when bytes < limit";
   state.gpu_bytes.store(1024);
-  assert(state.GpuPressure() && "GPU pressure when bytes > limit");
-}
-
-} // namespace
-
-int main() {
-  TestGetTierBytesAfterAllocate();
-  TestGetTierBytesAfterDelete();
-  TestGetTierBytesAfterSpill();
-  TestPressureStateAndPolicyIntegration();
-  TestGpuPressureStateLimit();
-
-  std::cout << "tiering_pressure_test: pass\n";
-  return 0;
+  EXPECT_TRUE(state.GpuPressure()) << "GPU pressure when bytes > limit";
 }

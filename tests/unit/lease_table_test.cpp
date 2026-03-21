@@ -1,8 +1,8 @@
 #include "internal/lease/lease_table.hpp"
 
-#include <cassert>
+#include <gtest/gtest.h>
+
 #include <chrono>
-#include <iostream>
 
 namespace {
 
@@ -32,50 +32,44 @@ Lease MakeLease(const std::string& lease_id, const PayloadID& payload_id, std::c
   return lease;
 }
 
-void TestExpiredLeaseIsInactive() {
+} // namespace
+
+TEST(LeaseTable, ExpiredLeaseIsInactive) {
   LeaseTable table;
   const auto payload = MakePayloadID("payload-expired");
 
   table.Insert(MakeLease("lease-expired", payload, std::chrono::system_clock::now() - std::chrono::seconds(1)));
 
-  assert(!table.HasActive(payload));
+  EXPECT_FALSE(table.HasActive(payload));
 }
 
-void TestMixedExpiredAndActiveLeases() {
+TEST(LeaseTable, MixedExpiredAndActiveLeases) {
   LeaseTable table;
   const auto payload = MakePayloadID("payload-mixed");
 
   table.Insert(MakeLease("lease-expired", payload, std::chrono::system_clock::now() - std::chrono::seconds(1)));
   table.Insert(MakeLease("lease-active", payload, std::chrono::system_clock::now() + std::chrono::seconds(30)));
 
-  assert(table.HasActive(payload));
+  EXPECT_TRUE(table.HasActive(payload));
 
   table.Remove(MakeLeaseID("lease-active"));
-  assert(!table.HasActive(payload));
+  EXPECT_FALSE(table.HasActive(payload));
 }
 
-void TestSecondaryIndexCleanupOnInsertAndRemoveAll() {
+TEST(LeaseTable, SecondaryIndexCleanupOnInsertAndRemoveAll) {
   LeaseTable table;
   const auto payload_a = MakePayloadID("payload-a");
   const auto payload_b = MakePayloadID("payload-b");
 
-  table.Insert(MakeLease("lease-shared", payload_a, std::chrono::system_clock::now() + std::chrono::seconds(30)));
-  table.Insert(MakeLease("lease-shared", payload_b, std::chrono::system_clock::now() + std::chrono::seconds(30)));
+  // Use DISTINCT lease IDs so we actually test two independent leases.
+  table.Insert(MakeLease("lease-for-a", payload_a, std::chrono::system_clock::now() + std::chrono::seconds(30)));
+  table.Insert(MakeLease("lease-for-b", payload_b, std::chrono::system_clock::now() + std::chrono::seconds(30)));
 
-  assert(!table.HasActive(payload_a));
-  assert(table.HasActive(payload_b));
+  EXPECT_TRUE(table.HasActive(payload_a));
+  EXPECT_TRUE(table.HasActive(payload_b));
 
+  // RemoveAll on payload_b must not touch payload_a.
   table.RemoveAll(payload_b);
-  assert(!table.HasActive(payload_b));
-}
-
-} // namespace
-
-int main() {
-  TestExpiredLeaseIsInactive();
-  TestMixedExpiredAndActiveLeases();
-  TestSecondaryIndexCleanupOnInsertAndRemoveAll();
-
-  std::cout << "payload_manager_unit_lease_table: pass\n";
-  return 0;
+  EXPECT_TRUE(table.HasActive(payload_a));
+  EXPECT_FALSE(table.HasActive(payload_b));
 }

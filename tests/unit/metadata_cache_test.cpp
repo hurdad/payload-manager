@@ -1,7 +1,6 @@
 #include "internal/metadata/metadata_cache.hpp"
 
-#include <cassert>
-#include <iostream>
+#include <gtest/gtest.h>
 
 namespace {
 
@@ -15,7 +14,9 @@ PayloadID MakePayloadID(const std::string& value) {
   return id;
 }
 
-void TestPutAndGetRoundTripsMetadata() {
+} // namespace
+
+TEST(MetadataCache, PutAndGetRoundTripsMetadata) {
   MetadataCache cache;
   const auto    id = MakePayloadID("payload-1");
 
@@ -27,13 +28,13 @@ void TestPutAndGetRoundTripsMetadata() {
   cache.Put(id, metadata);
 
   const auto cached = cache.Get(id);
-  assert(cached.has_value());
-  assert(cached->id().value() == "payload-1");
-  assert(cached->data() == "{\"status\":\"ok\"}");
-  assert(cached->schema() == "schema.v1");
+  ASSERT_TRUE(cached.has_value());
+  EXPECT_EQ(cached->id().value(), "payload-1");
+  EXPECT_EQ(cached->data(), "{\"status\":\"ok\"}");
+  EXPECT_EQ(cached->schema(), "schema.v1");
 }
 
-void TestMergeKeepsExistingFieldsWhenUpdateIsEmpty() {
+TEST(MetadataCache, MergeKeepsExistingFieldsWhenUpdateIsEmpty) {
   MetadataCache cache;
   const auto    id = MakePayloadID("payload-merge");
 
@@ -47,13 +48,13 @@ void TestMergeKeepsExistingFieldsWhenUpdateIsEmpty() {
   cache.Merge(id, update);
 
   const auto cached = cache.Get(id);
-  assert(cached.has_value());
-  assert(cached->id().value() == "payload-merge");
-  assert(cached->data() == "initial-data");
-  assert(cached->schema() == "schema.v1");
+  ASSERT_TRUE(cached.has_value());
+  EXPECT_EQ(cached->id().value(), "payload-merge");
+  EXPECT_EQ(cached->data(), "initial-data");
+  EXPECT_EQ(cached->schema(), "schema.v1");
 }
 
-void TestMergeOnMissingEntrySeedsIdAndProvidedFields() {
+TEST(MetadataCache, MergeOnMissingEntrySeedsIdAndProvidedFields) {
   MetadataCache cache;
   const auto    id = MakePayloadID("payload-new");
 
@@ -63,13 +64,13 @@ void TestMergeOnMissingEntrySeedsIdAndProvidedFields() {
   cache.Merge(id, update);
 
   const auto cached = cache.Get(id);
-  assert(cached.has_value());
-  assert(cached->id().value() == "payload-new");
-  assert(cached->data().empty());
-  assert(cached->schema() == "schema.v2");
+  ASSERT_TRUE(cached.has_value());
+  EXPECT_EQ(cached->id().value(), "payload-new");
+  EXPECT_TRUE(cached->data().empty());
+  EXPECT_EQ(cached->schema(), "schema.v2");
 }
 
-void TestListIdsReturnsAllCachedPayloadIds() {
+TEST(MetadataCache, ListIdsReturnsAllCachedPayloadIds) {
   MetadataCache cache;
 
   PayloadMetadata first;
@@ -83,7 +84,7 @@ void TestListIdsReturnsAllCachedPayloadIds() {
   cache.Put(id2, second);
 
   const auto ids = cache.ListIds();
-  assert(ids.size() == 2);
+  EXPECT_EQ(ids.size(), 2u);
 
   bool found_first  = false;
   bool found_second = false;
@@ -92,11 +93,11 @@ void TestListIdsReturnsAllCachedPayloadIds() {
     if (id.value() == "payload-ids-2") found_second = true;
   }
 
-  assert(found_first);
-  assert(found_second);
+  EXPECT_TRUE(found_first);
+  EXPECT_TRUE(found_second);
 }
 
-void TestLeastRecentlyUsedTracksAccessOrder() {
+TEST(MetadataCache, LeastRecentlyUsedTracksAccessOrder) {
   MetadataCache cache;
 
   PayloadMetadata first;
@@ -110,17 +111,17 @@ void TestLeastRecentlyUsedTracksAccessOrder() {
   cache.Put(id2, second);
 
   auto lru = cache.GetLeastRecentlyUsedId();
-  assert(lru.has_value());
-  assert(lru->value() == "payload-lru-1");
+  ASSERT_TRUE(lru.has_value());
+  EXPECT_EQ(lru->value(), "payload-lru-1");
 
   // Access first item; second should now become LRU.
   (void)cache.Get(id1);
   lru = cache.GetLeastRecentlyUsedId();
-  assert(lru.has_value());
-  assert(lru->value() == "payload-lru-2");
+  ASSERT_TRUE(lru.has_value());
+  EXPECT_EQ(lru->value(), "payload-lru-2");
 }
 
-void TestRemoveErasesEntry() {
+TEST(MetadataCache, RemoveErasesEntry) {
   MetadataCache cache;
   const auto    id = MakePayloadID("payload-remove");
 
@@ -131,10 +132,10 @@ void TestRemoveErasesEntry() {
 
   cache.Remove(id);
 
-  assert(!cache.Get(id).has_value());
+  EXPECT_FALSE(cache.Get(id).has_value());
 }
 
-void TestRemoveUpdatesLeastRecentlyUsed() {
+TEST(MetadataCache, RemoveUpdatesLeastRecentlyUsed) {
   MetadataCache cache;
 
   PayloadMetadata first;
@@ -150,21 +151,6 @@ void TestRemoveUpdatesLeastRecentlyUsed() {
   cache.Remove(id1);
 
   const auto lru = cache.GetLeastRecentlyUsedId();
-  assert(lru.has_value());
-  assert(lru->value() == "payload-remove-lru-2");
-}
-
-} // namespace
-
-int main() {
-  TestPutAndGetRoundTripsMetadata();
-  TestMergeKeepsExistingFieldsWhenUpdateIsEmpty();
-  TestMergeOnMissingEntrySeedsIdAndProvidedFields();
-  TestListIdsReturnsAllCachedPayloadIds();
-  TestLeastRecentlyUsedTracksAccessOrder();
-  TestRemoveErasesEntry();
-  TestRemoveUpdatesLeastRecentlyUsed();
-
-  std::cout << "payload_manager_unit_metadata_cache: pass\n";
-  return 0;
+  ASSERT_TRUE(lru.has_value());
+  EXPECT_EQ(lru->value(), "payload-remove-lru-2");
 }

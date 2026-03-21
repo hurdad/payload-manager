@@ -8,6 +8,7 @@
 #include <stdexcept>
 
 #include "internal/db/api/repository.hpp"
+#include "internal/util/errors.hpp"
 #include "internal/db/model/stream_consumer_offset_record.hpp"
 #include "internal/db/model/stream_entry_record.hpp"
 #include "internal/db/model/stream_record.hpp"
@@ -38,7 +39,17 @@ google::protobuf::Timestamp FromMillis(uint64_t ms) {
 
 void ThrowIfError(const payload::db::Result& result, const std::string& prefix) {
   if (!result) {
-    throw std::runtime_error(prefix + ": " + result.message);
+    const auto message = result.message.empty() ? prefix : prefix + ": " + result.message;
+    switch (result.code) {
+      case payload::db::ErrorCode::AlreadyExists:
+        throw payload::util::AlreadyExists(message);
+      case payload::db::ErrorCode::NotFound:
+        throw payload::util::NotFound(message);
+      case payload::db::ErrorCode::Conflict:
+        throw payload::util::InvalidState(message);
+      default:
+        throw std::runtime_error(message);
+    }
   }
 }
 

@@ -1,7 +1,7 @@
 #include <grpcpp/grpcpp.h>
 
-#include <cassert>
-#include <iostream>
+#include <gtest/gtest.h>
+
 #include <memory>
 
 #include "internal/core/payload_manager.hpp"
@@ -40,7 +40,9 @@ payload::manager::v1::PayloadID AllocateAndCommit(payload::service::ServiceConte
   return desc.payload_id();
 }
 
-void TestCommitMissingPayloadReturnsNotFound() {
+} // namespace
+
+TEST(GrpcStatus, CommitMissingPayloadReturnsNotFound) {
   auto                         ctx             = BuildServiceContext();
   auto                         catalog_service = std::make_shared<payload::service::CatalogService>(ctx);
   payload::grpc::CatalogServer server(catalog_service);
@@ -51,10 +53,10 @@ void TestCommitMissingPayloadReturnsNotFound() {
   ::grpc::ServerContext                       grpc_ctx;
 
   const auto status = server.CommitPayload(&grpc_ctx, &req, &resp);
-  assert(status.error_code() == ::grpc::StatusCode::NOT_FOUND);
+  EXPECT_EQ(status.error_code(), ::grpc::StatusCode::NOT_FOUND);
 }
 
-void TestAcquireUnsupportedLeaseModeReturnsFailedPrecondition() {
+TEST(GrpcStatus, AcquireUnsupportedLeaseModeReturnsFailedPrecondition) {
   auto                      ctx          = BuildServiceContext();
   auto                      data_service = std::make_shared<payload::service::DataService>(ctx);
   payload::grpc::DataServer server(data_service);
@@ -67,10 +69,10 @@ void TestAcquireUnsupportedLeaseModeReturnsFailedPrecondition() {
   ::grpc::ServerContext                          grpc_ctx;
 
   const auto status = server.AcquireReadLease(&grpc_ctx, &req, &resp);
-  assert(status.error_code() == ::grpc::StatusCode::FAILED_PRECONDITION);
+  EXPECT_EQ(status.error_code(), ::grpc::StatusCode::FAILED_PRECONDITION);
 }
 
-void TestDeleteWithActiveLeaseReturnsAborted() {
+TEST(GrpcStatus, DeleteWithActiveLeaseReturnsAborted) {
   auto                         ctx             = BuildServiceContext();
   auto                         catalog_service = std::make_shared<payload::service::CatalogService>(ctx);
   payload::grpc::CatalogServer server(catalog_service);
@@ -86,10 +88,10 @@ void TestDeleteWithActiveLeaseReturnsAborted() {
   ::grpc::ServerContext   grpc_ctx;
 
   const auto status = server.Delete(&grpc_ctx, &req, &resp);
-  assert(status.error_code() == ::grpc::StatusCode::ABORTED);
+  EXPECT_EQ(status.error_code(), ::grpc::StatusCode::ABORTED);
 }
 
-void TestPinMissingPayloadReturnsNotFound() {
+TEST(GrpcStatus, PinMissingPayloadReturnsNotFound) {
   auto                         ctx             = BuildServiceContext();
   auto                         catalog_service = std::make_shared<payload::service::CatalogService>(ctx);
   payload::grpc::CatalogServer server(catalog_service);
@@ -102,10 +104,10 @@ void TestPinMissingPayloadReturnsNotFound() {
   ::grpc::ServerContext   grpc_ctx;
 
   const auto status = server.Pin(&grpc_ctx, &req, &resp);
-  assert(status.error_code() == ::grpc::StatusCode::NOT_FOUND);
+  EXPECT_EQ(status.error_code(), ::grpc::StatusCode::NOT_FOUND);
 }
 
-void TestCreateStreamMissingNameReturnsFailedPrecondition() {
+TEST(GrpcStatus, CreateStreamMissingNameReturnsFailedPrecondition) {
   auto                        ctx            = BuildServiceContext();
   auto                        stream_service = std::make_shared<payload::service::StreamService>(ctx);
   payload::grpc::StreamServer server(stream_service);
@@ -117,10 +119,10 @@ void TestCreateStreamMissingNameReturnsFailedPrecondition() {
   ::grpc::ServerContext   grpc_ctx;
 
   const auto status = server.CreateStream(&grpc_ctx, &req, &resp);
-  assert(status.error_code() == ::grpc::StatusCode::FAILED_PRECONDITION);
+  EXPECT_EQ(status.error_code(), ::grpc::StatusCode::FAILED_PRECONDITION);
 }
 
-void TestDeleteStreamMissingNameReturnsFailedPrecondition() {
+TEST(GrpcStatus, DeleteStreamMissingNameReturnsFailedPrecondition) {
   auto                        ctx            = BuildServiceContext();
   auto                        stream_service = std::make_shared<payload::service::StreamService>(ctx);
   payload::grpc::StreamServer server(stream_service);
@@ -132,11 +134,11 @@ void TestDeleteStreamMissingNameReturnsFailedPrecondition() {
   ::grpc::ServerContext   grpc_ctx;
 
   const auto status = server.DeleteStream(&grpc_ctx, &req, &resp);
-  assert(status.error_code() == ::grpc::StatusCode::FAILED_PRECONDITION);
+  EXPECT_EQ(status.error_code(), ::grpc::StatusCode::FAILED_PRECONDITION);
 }
 
 // Fix 3: Allocate with zero bytes must return INVALID_ARGUMENT (not INTERNAL).
-void TestAllocateZeroBytesReturnsInvalidArgument() {
+TEST(GrpcStatus, AllocateZeroBytesReturnsInvalidArgument) {
   auto                         ctx             = BuildServiceContext();
   auto                         catalog_service = std::make_shared<payload::service::CatalogService>(ctx);
   payload::grpc::CatalogServer server(catalog_service);
@@ -149,11 +151,11 @@ void TestAllocateZeroBytesReturnsInvalidArgument() {
   ::grpc::ServerContext                         grpc_ctx;
 
   const auto status = server.AllocatePayload(&grpc_ctx, &req, &resp);
-  assert(status.error_code() == ::grpc::StatusCode::INVALID_ARGUMENT);
+  EXPECT_EQ(status.error_code(), ::grpc::StatusCode::INVALID_ARGUMENT);
 }
 
 // Fix 3: Allocate with oversized bytes (> 128 GiB) must return INVALID_ARGUMENT.
-void TestAllocateOversizedBytesReturnsInvalidArgument() {
+TEST(GrpcStatus, AllocateOversizedBytesReturnsInvalidArgument) {
   auto                         ctx             = BuildServiceContext();
   auto                         catalog_service = std::make_shared<payload::service::CatalogService>(ctx);
   payload::grpc::CatalogServer server(catalog_service);
@@ -166,21 +168,5 @@ void TestAllocateOversizedBytesReturnsInvalidArgument() {
   ::grpc::ServerContext                         grpc_ctx;
 
   const auto status = server.AllocatePayload(&grpc_ctx, &req, &resp);
-  assert(status.error_code() == ::grpc::StatusCode::INVALID_ARGUMENT);
-}
-
-} // namespace
-
-int main() {
-  TestCommitMissingPayloadReturnsNotFound();
-  TestAcquireUnsupportedLeaseModeReturnsFailedPrecondition();
-  TestDeleteWithActiveLeaseReturnsAborted();
-  TestPinMissingPayloadReturnsNotFound();
-  TestCreateStreamMissingNameReturnsFailedPrecondition();
-  TestDeleteStreamMissingNameReturnsFailedPrecondition();
-  TestAllocateZeroBytesReturnsInvalidArgument();
-  TestAllocateOversizedBytesReturnsInvalidArgument();
-
-  std::cout << "payload_manager_unit_grpc_status: pass\n";
-  return 0;
+  EXPECT_EQ(status.error_code(), ::grpc::StatusCode::INVALID_ARGUMENT);
 }

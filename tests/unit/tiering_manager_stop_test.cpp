@@ -1,32 +1,11 @@
 /*
   Tests for TieringManager lifecycle fixes.
-
-  Before the fix:
-    - Stop() set running_=false and called thread_.join() with no wakeup
-      mechanism.  The Loop() slept for 100ms between iterations, so Stop()
-      would block for up to 100ms even though the work was done.
-    - Start() had no guard against being called a second time, which would
-      overwrite thread_ while it was still joinable — undefined behaviour.
-
-  After the fix:
-    - Stop() notifies a condition_variable so the sleeping Loop() wakes
-      immediately, checks !running_, and exits.  Stop() should return in
-      well under 100ms even though the loop interval is 100ms.
-    - Start() checks thread_.joinable() and returns early on second call,
-      so the thread_ member is never overwritten.
-
-  Covered:
-    - Stop() returns in under 30ms (three orders of magnitude below the
-      100ms sleep interval) after Start().
-    - Calling Start() a second time while the worker is running does not
-      create a second thread; the manager remains stable and Stop() joins
-      cleanly.
 */
 
-#include <cassert>
+#include <gtest/gtest.h>
+
 #include <chrono>
 #include <cstring>
-#include <iostream>
 #include <memory>
 #include <stdexcept>
 #include <unordered_map>
@@ -97,12 +76,14 @@ struct Env {
       std::make_shared<payload::tiering::TieringManager>(policy, scheduler, manager, pressure);
 };
 
+} // namespace
+
 // ---------------------------------------------------------------------------
 // Test: Stop() wakes the sleeping loop and returns in well under 100ms.
 //       We allow 30ms — generous enough to avoid flakiness on loaded CI
 //       machines but far below the 100ms loop sleep interval.
 // ---------------------------------------------------------------------------
-void TestStopReturnsQuickly() {
+TEST(TieringManagerStop, StopReturnsQuickly) {
   Env env;
   env.tiering->Start();
 
@@ -110,14 +91,14 @@ void TestStopReturnsQuickly() {
   env.tiering->Stop();
   const auto elapsed_ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
 
-  assert(elapsed_ms < 30.0 && "Stop() must return in under 30ms (loop sleep is 100ms; CV must wake it)");
+  EXPECT_LT(elapsed_ms, 30.0) << "Stop() must return in under 30ms (loop sleep is 100ms; CV must wake it)";
 }
 
 // ---------------------------------------------------------------------------
 // Test: Calling Start() twice does not spawn a second thread.
 //       The second Start() is a no-op; Stop() joins cleanly exactly once.
 // ---------------------------------------------------------------------------
-void TestDoubleStartIsIdempotent() {
+TEST(TieringManagerStop, DoubleStartIsIdempotent) {
   Env env;
   env.tiering->Start();
   env.tiering->Start(); // must not replace thread_ or spawn a second thread
@@ -126,14 +107,4 @@ void TestDoubleStartIsIdempotent() {
   // is waiting for a thread that will never finish.
   env.tiering->Stop();
   // Reaching here means the join returned exactly once without deadlock.
-}
-
-} // namespace
-
-int main() {
-  TestStopReturnsQuickly();
-  TestDoubleStartIsIdempotent();
-
-  std::cout << "tiering_manager_stop_test: pass\n";
-  return 0;
 }

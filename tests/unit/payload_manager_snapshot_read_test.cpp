@@ -1,5 +1,5 @@
-#include <cassert>
-#include <iostream>
+#include <gtest/gtest.h>
+
 #include <memory>
 
 #include "internal/core/payload_manager.hpp"
@@ -16,7 +16,9 @@ using payload::manager::v1::PAYLOAD_STATE_ACTIVE;
 using payload::manager::v1::TIER_DISK;
 using payload::manager::v1::TIER_RAM;
 
-void TestResolveSnapshotUsesCachedDescriptorUntilRefresh() {
+} // namespace
+
+TEST(PayloadManagerSnapshotRead, ResolveSnapshotUsesCachedDescriptorUntilRefresh) {
   auto repository = std::make_shared<MemoryRepository>();
   {
     auto tx = repository->Begin();
@@ -29,7 +31,7 @@ void TestResolveSnapshotUsesCachedDescriptorUntilRefresh() {
     seed.version    = 1;
 
     auto insert_result = repository->InsertPayload(*tx, seed);
-    assert(insert_result);
+    ASSERT_TRUE(insert_result);
     tx->Commit();
   }
 
@@ -39,36 +41,27 @@ void TestResolveSnapshotUsesCachedDescriptorUntilRefresh() {
   id.set_value("payload-preloaded");
 
   const auto first = manager.ResolveSnapshot(id);
-  assert(first.tier() == TIER_RAM);
-  assert(first.version() == 1);
+  EXPECT_EQ(first.tier(), TIER_RAM);
+  EXPECT_EQ(first.version(), 1);
 
   {
     auto tx      = repository->Begin();
     auto current = repository->GetPayload(*tx, "payload-preloaded");
-    assert(current.has_value());
+    ASSERT_TRUE(current.has_value());
     current->tier      = TIER_DISK;
     current->version   = 2;
     auto update_result = repository->UpdatePayload(*tx, *current);
-    assert(update_result);
+    ASSERT_TRUE(update_result);
     tx->Commit();
   }
 
   const auto stale_from_cache = manager.ResolveSnapshot(id);
-  assert(stale_from_cache.tier() == TIER_RAM);
-  assert(stale_from_cache.version() == 1);
+  EXPECT_EQ(stale_from_cache.tier(), TIER_RAM);
+  EXPECT_EQ(stale_from_cache.version(), 1);
 
   manager.HydrateCaches();
 
   const auto refreshed = manager.ResolveSnapshot(id);
-  assert(refreshed.tier() == TIER_DISK);
-  assert(refreshed.version() > 1 && "HydrateCaches must serve a fresher version than the stale cached one");
-}
-
-} // namespace
-
-int main() {
-  TestResolveSnapshotUsesCachedDescriptorUntilRefresh();
-
-  std::cout << "payload_manager_unit_snapshot_reads: pass\n";
-  return 0;
+  EXPECT_EQ(refreshed.tier(), TIER_DISK);
+  EXPECT_GT(refreshed.version(), 1) << "HydrateCaches must serve a fresher version than the stale cached one";
 }

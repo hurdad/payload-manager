@@ -1,7 +1,7 @@
 #include "internal/tiering/tiering_policy.hpp"
 
-#include <cassert>
-#include <iostream>
+#include <gtest/gtest.h>
+
 #include <memory>
 
 #include "internal/metadata/metadata_cache.hpp"
@@ -28,7 +28,9 @@ void PutMetadata(MetadataCache& cache, const std::string& id_value) {
   cache.Put(id, metadata);
 }
 
-void TestNoPressureReturnsNoVictim() {
+} // namespace
+
+TEST(TieringPolicy, NoPressureReturnsNoVictim) {
   auto cache  = std::make_shared<MetadataCache>();
   auto policy = TieringPolicy(cache);
 
@@ -38,11 +40,11 @@ void TestNoPressureReturnsNoVictim() {
   state.ram_bytes.store(100);
   state.gpu_bytes.store(100);
 
-  assert(!policy.ChooseRamEviction(state).has_value());
-  assert(!policy.ChooseGpuEviction(state).has_value());
+  EXPECT_FALSE(policy.ChooseRamEviction(state).has_value());
+  EXPECT_FALSE(policy.ChooseGpuEviction(state).has_value());
 }
 
-void TestPressureWithEmptyCacheReturnsNoVictim() {
+TEST(TieringPolicy, PressureWithEmptyCacheReturnsNoVictim) {
   auto cache  = std::make_shared<MetadataCache>();
   auto policy = TieringPolicy(cache);
 
@@ -52,11 +54,11 @@ void TestPressureWithEmptyCacheReturnsNoVictim() {
   state.ram_bytes.store(1);
   state.gpu_bytes.store(1);
 
-  assert(!policy.ChooseRamEviction(state).has_value());
-  assert(!policy.ChooseGpuEviction(state).has_value());
+  EXPECT_FALSE(policy.ChooseRamEviction(state).has_value());
+  EXPECT_FALSE(policy.ChooseGpuEviction(state).has_value());
 }
 
-void TestPressureSelectsLeastRecentlyUsedVictim() {
+TEST(TieringPolicy, PressureSelectsLeastRecentlyUsedVictim) {
   auto cache  = std::make_shared<MetadataCache>();
   auto policy = TieringPolicy(cache);
 
@@ -77,16 +79,15 @@ void TestPressureSelectsLeastRecentlyUsedVictim() {
   const auto ram_victim = policy.ChooseRamEviction(state);
   const auto gpu_victim = policy.ChooseGpuEviction(state);
 
-  assert(ram_victim.has_value());
-  assert(gpu_victim.has_value());
-  assert(ram_victim->value() == "payload-b");
-  assert(gpu_victim->value() == "payload-b");
+  ASSERT_TRUE(ram_victim.has_value());
+  ASSERT_TRUE(gpu_victim.has_value());
+  EXPECT_EQ(ram_victim->value(), "payload-b");
+  EXPECT_EQ(gpu_victim->value(), "payload-b");
 }
 
 // Fix 2: RAM predicate only admits RAM-tier payloads; GPU predicate admits only
-// GPU-tier payloads.  Both predicates receive the same cache but different
-// tier-checks, so the two eviction methods return different victims.
-void TestTierSpecificPredicatesSelectCorrectVictim() {
+// GPU-tier payloads.
+TEST(TieringPolicy, TierSpecificPredicatesSelectCorrectVictim) {
   auto cache = std::make_shared<MetadataCache>();
 
   PutMetadata(*cache, "ram-payload");
@@ -108,15 +109,15 @@ void TestTierSpecificPredicatesSelectCorrectVictim() {
   const auto ram_victim = policy.ChooseRamEviction(state);
   const auto gpu_victim = policy.ChooseGpuEviction(state);
 
-  assert(ram_victim.has_value());
-  assert(gpu_victim.has_value());
-  assert(ram_victim->value() == "ram-payload");
-  assert(gpu_victim->value() == "gpu-payload");
+  ASSERT_TRUE(ram_victim.has_value());
+  ASSERT_TRUE(gpu_victim.has_value());
+  EXPECT_EQ(ram_victim->value(), "ram-payload");
+  EXPECT_EQ(gpu_victim->value(), "gpu-payload");
 }
 
 // Fix 2: When the RAM predicate rejects all payloads, no RAM victim is chosen
 // even under pressure.
-void TestRamPredicateRejectingAllYieldsNoVictim() {
+TEST(TieringPolicy, RamPredicateRejectingAllYieldsNoVictim) {
   auto cache = std::make_shared<MetadataCache>();
   PutMetadata(*cache, "payload-a");
   PutMetadata(*cache, "payload-b");
@@ -133,19 +134,6 @@ void TestRamPredicateRejectingAllYieldsNoVictim() {
   state.ram_bytes.store(1);
   state.gpu_bytes.store(1);
 
-  assert(!policy.ChooseRamEviction(state).has_value());
-  assert(!policy.ChooseGpuEviction(state).has_value());
-}
-
-} // namespace
-
-int main() {
-  TestNoPressureReturnsNoVictim();
-  TestPressureWithEmptyCacheReturnsNoVictim();
-  TestPressureSelectsLeastRecentlyUsedVictim();
-  TestTierSpecificPredicatesSelectCorrectVictim();
-  TestRamPredicateRejectingAllYieldsNoVictim();
-
-  std::cout << "payload_manager_unit_tiering_policy: pass\n";
-  return 0;
+  EXPECT_FALSE(policy.ChooseRamEviction(state).has_value());
+  EXPECT_FALSE(policy.ChooseGpuEviction(state).has_value());
 }
