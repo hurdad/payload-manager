@@ -53,12 +53,13 @@ RUN apt-get update \
         pkg-config \
         git \
         ca-certificates \
-        # protobuf / gRPC
-        protobuf-compiler \
-        libprotobuf-dev \
-        libgrpc++-dev \
-        libgrpc-dev \
-        protobuf-compiler-grpc \
+        # protobuf / gRPC — intentionally omitted: protobuf-compiler,
+        # libprotobuf-dev, libgrpc++-dev, libgrpc-dev, protobuf-compiler-grpc.
+        # OTel FetchContents gRPC 1.49.2 which builds protoc, libprotobuf 3.21.6,
+        # and grpc_cpp_plugin from source.  Installing the system packages (3.12.4)
+        # alongside the FetchContent ones causes cmake to find the wrong version and
+        # generates .pb.cc files with the old SCCInfoBase API that no longer exists
+        # in the 3.21.x headers, breaking the build.
         # compression libs (Arrow codec support)
         zlib1g-dev \
         liblz4-dev \

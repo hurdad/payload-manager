@@ -4,9 +4,21 @@ cmake_minimum_required(VERSION 3.20)
 # Protobuf generation for internal config
 # ================================================================
 
-find_package(Protobuf CONFIG QUIET)
-if(NOT Protobuf_FOUND)
+# Promote FetchContent protobuf targets to protobuf:: aliases in this scope
+# before find_package() can find the system 3.12.4 packages.
+# See api/CMakeLists.txt for full explanation.
+if(TARGET libprotobuf AND NOT TARGET protobuf::libprotobuf)
+  add_library(protobuf::libprotobuf ALIAS libprotobuf)
+endif()
+if(TARGET protoc AND NOT TARGET protobuf::protoc)
+  add_executable(protobuf::protoc ALIAS protoc)
+endif()
+
+if(NOT TARGET protobuf::libprotobuf)
+  find_package(Protobuf CONFIG QUIET)
+  if(NOT Protobuf_FOUND)
     find_package(Protobuf REQUIRED)
+  endif()
 endif()
 
 if(TARGET protobuf::protoc)
@@ -35,9 +47,20 @@ foreach(_proto_abs IN LISTS CONFIG_PROTO_ABS)
     list(APPEND CONFIG_PROTO_HDRS ${INTERNAL_GEN_DIR}/${_proto_hdr})
 endforeach()
 
+include(FetchContent)
+FetchContent_GetProperties(grpc)
+set(_CONFIG_WELLKNOWN_ARGS)
+if(grpc_POPULATED AND EXISTS "${grpc_SOURCE_DIR}/third_party/protobuf/src")
+  list(APPEND _CONFIG_WELLKNOWN_ARGS --proto_path=${grpc_SOURCE_DIR}/third_party/protobuf/src)
+elseif(DEFINED Protobuf_INCLUDE_DIRS AND Protobuf_INCLUDE_DIRS)
+  list(APPEND _CONFIG_WELLKNOWN_ARGS --proto_path=${Protobuf_INCLUDE_DIRS})
+elseif(DEFINED Protobuf_INCLUDE_DIR AND Protobuf_INCLUDE_DIR)
+  list(APPEND _CONFIG_WELLKNOWN_ARGS --proto_path=${Protobuf_INCLUDE_DIR})
+endif()
+
 add_custom_command(
         OUTPUT ${CONFIG_PROTO_SRCS} ${CONFIG_PROTO_HDRS}
-        COMMAND ${PROTOC} --proto_path=${INTERNAL_PROTO_ROOT} --cpp_out=${INTERNAL_GEN_DIR} ${CONFIG_PROTO_FILES}
+        COMMAND ${PROTOC} --proto_path=${INTERNAL_PROTO_ROOT} ${_CONFIG_WELLKNOWN_ARGS} --cpp_out=${INTERNAL_GEN_DIR} ${CONFIG_PROTO_FILES}
         DEPENDS ${CONFIG_PROTO_ABS}
         WORKING_DIRECTORY ${INTERNAL_PROTO_ROOT}
         COMMENT "Generating internal config protobufs"

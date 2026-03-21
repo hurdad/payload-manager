@@ -101,10 +101,26 @@ endif()
 # Dependencies
 # ================================================================
 
-find_package(Protobuf REQUIRED)
-find_package(gRPC CONFIG QUIET)
-if(NOT gRPC_FOUND AND NOT TARGET gRPC::grpc++)
-  find_package(gRPC REQUIRED)
+# Promote FetchContent protobuf targets (globally visible non-namespaced) to
+# protobuf:: aliases in this scope before find_package() can find the system
+# 3.12.4 packages.  See api/CMakeLists.txt for full explanation.
+if(TARGET libprotobuf AND NOT TARGET protobuf::libprotobuf)
+  add_library(protobuf::libprotobuf ALIAS libprotobuf)
+endif()
+if(TARGET libprotobuf-lite AND NOT TARGET protobuf::libprotobuf-lite)
+  add_library(protobuf::libprotobuf-lite ALIAS libprotobuf-lite)
+endif()
+if(TARGET protoc AND NOT TARGET protobuf::protoc)
+  add_executable(protobuf::protoc ALIAS protoc)
+endif()
+if(NOT TARGET protobuf::libprotobuf)
+  find_package(Protobuf REQUIRED)
+endif()
+if(NOT TARGET gRPC::grpc++)
+  find_package(gRPC CONFIG QUIET)
+  if(NOT gRPC_FOUND)
+    find_package(gRPC REQUIRED)
+  endif()
 endif()
 find_package(Threads REQUIRED)
 find_package(yaml-cpp REQUIRED)

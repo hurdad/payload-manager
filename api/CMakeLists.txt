@@ -6,20 +6,36 @@ project(payload_manager_api LANGUAGES CXX)
 # Dependencies
 # ------------------------------------------------------------------------------
 
-find_package(Protobuf CONFIG QUIET)
-if(NOT Protobuf_FOUND)
-  find_package(Protobuf REQUIRED)
+# When PAYLOAD_MANAGER_ENABLE_OTEL=ON, opentelemetry-cpp is processed before
+# this subdirectory and its FetchContent gRPC build compiles protobuf 3.21.x as
+# regular (non-namespaced) targets: libprotobuf, libprotobuf-lite, protoc.
+# Regular build targets ARE globally visible; ALIAS targets created inside a
+# nested FetchContent are directory-scoped and NOT visible here.  Promote them
+# to the protobuf:: namespace in this scope BEFORE find_package() runs, so that
+# protoc (3.21.x) and libprotobuf (3.21.x) are used consistently for both code
+# generation and compilation — preventing the SCCInfoBase mismatch that arises
+# when the system protoc 3.12.4 generates .pb.cc files that are then compiled
+# against FetchContent 3.21.x headers (pulled in transitively via gRPC::grpc++).
+if(TARGET libprotobuf AND NOT TARGET protobuf::libprotobuf)
+  add_library(protobuf::libprotobuf ALIAS libprotobuf)
+endif()
+if(TARGET libprotobuf-lite AND NOT TARGET protobuf::libprotobuf-lite)
+  add_library(protobuf::libprotobuf-lite ALIAS libprotobuf-lite)
+endif()
+if(TARGET protoc AND NOT TARGET protobuf::protoc)
+  add_executable(protobuf::protoc ALIAS protoc)
 endif()
 
-find_package(gRPC CONFIG QUIET)
-if(NOT gRPC_FOUND)
-  # gRPC may have been populated via FetchContent (e.g. by opentelemetry-cpp).
-  # On Linux, cmake's auto-redirect uses the lowercase FetchContent name ("grpc")
-  # so it doesn't match the mixed-case "gRPC" searched here.  If the required
-  # targets already exist from the FetchContent pass, accept them directly.
-  if(TARGET gRPC::grpc++)
-    set(gRPC_FOUND TRUE)
-  else()
+if(NOT TARGET protobuf::libprotobuf)
+  find_package(Protobuf CONFIG QUIET)
+  if(NOT Protobuf_FOUND)
+    find_package(Protobuf REQUIRED)
+  endif()
+endif()
+
+if(NOT TARGET gRPC::grpc++)
+  find_package(gRPC CONFIG QUIET)
+  if(NOT gRPC_FOUND)
     find_package(gRPC CONFIG REQUIRED)
   endif()
 endif()
@@ -195,9 +211,16 @@ endif()
 
 # When protoc comes from a FetchContent build (e.g. the one bundled in gRPC
 # 1.49.2 pulled by opentelemetry-cpp) it has no built-in search path for
-# well-known Google proto types.  Pass the protobuf include dir explicitly.
+# well-known Google proto types.  Resolve the path in priority order:
+#   1. FetchContent gRPC's bundled protobuf submodule (grpc_SOURCE_DIR set by
+#      FetchContent_GetProperties after OTel populates gRPC)
+#   2. System-installed protobuf headers (Protobuf_INCLUDE_DIRS / _DIR)
 set(_PROTOC_WELLKNOWN_ARGS)
-if(DEFINED Protobuf_INCLUDE_DIRS AND Protobuf_INCLUDE_DIRS)
+include(FetchContent)
+FetchContent_GetProperties(grpc)
+if(grpc_POPULATED AND EXISTS "${grpc_SOURCE_DIR}/third_party/protobuf/src")
+  list(APPEND _PROTOC_WELLKNOWN_ARGS --proto_path=${grpc_SOURCE_DIR}/third_party/protobuf/src)
+elseif(DEFINED Protobuf_INCLUDE_DIRS AND Protobuf_INCLUDE_DIRS)
   list(APPEND _PROTOC_WELLKNOWN_ARGS --proto_path=${Protobuf_INCLUDE_DIRS})
 elseif(DEFINED Protobuf_INCLUDE_DIR AND Protobuf_INCLUDE_DIR)
   list(APPEND _PROTOC_WELLKNOWN_ARGS --proto_path=${Protobuf_INCLUDE_DIR})
@@ -298,7 +321,9 @@ target_include_directories(payload_manager_proto
 )
 
 target_link_libraries(payload_manager_proto
-        PUBLIC protobuf::libprotobuf
+        PUBLIC
+        protobuf::libprotobuf
+        gRPC::grpc++
 )
 
 add_dependencies(payload_manager_proto generate_protos)
