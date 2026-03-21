@@ -28,13 +28,27 @@ FROM nvcr.io/nvidia/l4t-jetpack:r36.2.0 AS builder
 ENV DEBIAN_FRONTEND=noninteractive
 WORKDIR /workspace
 
+# Install a recent CMake (3.25+) via the Kitware APT repository.
+# The Ubuntu 22.04 default (3.22.1) is too old for the Arrow submodule.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        ca-certificates \
+        gpg \
+        wget \
+    && wget -qO - https://apt.kitware.com/keys/kitware-archive-latest.asc \
+       | gpg --dearmor -o /usr/share/keyrings/kitware-archive-keyring.gpg \
+    && echo 'deb [signed-by=/usr/share/keyrings/kitware-archive-keyring.gpg] https://apt.kitware.com/ubuntu/ jammy main' \
+       > /etc/apt/sources.list.d/kitware.list \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends cmake \
+    && rm -rf /var/lib/apt/lists/*
+
 # Install build dependencies.
 # Ubuntu 22.04 (Jammy) package names are used throughout.
 # nlohmann-json3-dev is required by the opentelemetry-cpp submodule.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         build-essential \
-        cmake \
         ninja-build \
         pkg-config \
         git \
@@ -70,6 +84,8 @@ RUN apt-get update \
         python3-grpc-tools \
         # OpenTelemetry-cpp dependency
         nlohmann-json3-dev \
+        # unit test framework
+        libgtest-dev \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy the entire source tree (including initialised submodules).
@@ -81,14 +97,26 @@ COPY . ./src
 # Key flags:
 #   PAYLOAD_MANAGER_ENABLE_ARROW_CUDA=ON   – Arrow CUDA IPC tier (requires CUDA dev kit)
 #   PAYLOAD_MANAGER_ENABLE_OTEL=ON         – OpenTelemetry OTLP/gRPC tracing
+#   gRPC_SSL_PROVIDER=package              – Ubuntu 22.04 ships gRPC 1.30.2 with no cmake
+#                                            config files, so OTel FetchContents gRPC 1.49.2
+#                                            from GitHub.  Without this flag that fetched gRPC
+#                                            bundles BoringSSL and creates cmake targets named
+#                                            "crypto" and "ssl".  Arrow's bundled AWS SDK also
+#                                            creates those names (via aws-lc), causing a fatal
+#                                            target-name collision.  Setting this flag makes the
+#                                            FetchContent-built gRPC use system OpenSSL
+#                                            (OpenSSL::SSL / OpenSSL::Crypto targets) instead,
+#                                            eliminating the conflict.
 #   ARROW_OPENSSL_USE_SHARED=ON            – share system OpenSSL so Arrow's AWS SDK
 #                                            and gRPC don't link two libcrypto copies
 #   AWS_USE_CRYPTO_SHARED_LIBS=ON          – same shared-crypto fix for aws-c-cal
 #   S2N_USE_CRYPTO_SHARED_LIBS=ON         – same fix for s2n-tls
 RUN cmake -S ./src -B /workspace/build -G Ninja \
+        -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
         -DCMAKE_BUILD_TYPE=Release \
         -DPAYLOAD_MANAGER_ENABLE_OTEL=ON \
         -DPAYLOAD_MANAGER_ENABLE_ARROW_CUDA=ON \
+        -DgRPC_SSL_PROVIDER=package \
         -DARROW_OPENSSL_USE_SHARED=ON \
         -DAWS_USE_CRYPTO_SHARED_LIBS=ON \
         -DS2N_USE_CRYPTO_SHARED_LIBS=ON \
@@ -113,9 +141,9 @@ ENV DEBIAN_FRONTEND=noninteractive
 WORKDIR /app
 
 # Install only runtime (non-dev) libraries.
-# Ubuntu 22.04 (Jammy) soname versions:
-#   libprotobuf23, libgrpc++1.46, libgrpc22,
-#   libyaml-cpp0.7, libpqxx-6.4, libspdlog1.9,
+# Ubuntu 22.04 (Jammy) soname versions on l4t-base:r36.2.0:
+#   libprotobuf23, libgrpc++1, libgrpc10,
+#   libyaml-cpp0.7, libpqxx-6.4, libspdlog1,
 #   libre2-9, libutf8proc2
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
@@ -123,13 +151,13 @@ RUN apt-get update \
         sqlite3 \
         # protobuf / gRPC
         libprotobuf23 \
-        libgrpc++1.46 \
-        libgrpc22 \
+        libgrpc++1 \
+        libgrpc10 \
         # misc service deps
         libyaml-cpp0.7 \
         libpqxx-6.4 \
         libsqlite3-0 \
-        libspdlog1.9 \
+        libspdlog1 \
         libcurl4 \
         # TLS / crypto
         libssl3 \
