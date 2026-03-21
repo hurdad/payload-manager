@@ -16,6 +16,7 @@ RUN apt-get update \
         libgrpc-dev \
         libspdlog-dev \
         protobuf-compiler-grpc \
+        libgtest-dev \
     && rm -rf /var/lib/apt/lists/*
 
 COPY . ./src
