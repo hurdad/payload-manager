@@ -1,8 +1,8 @@
 #include "internal/lineage/lineage_graph.hpp"
 
+#include <gtest/gtest.h>
+
 #include <algorithm>
-#include <cassert>
-#include <iostream>
 #include <string>
 #include <vector>
 
@@ -37,7 +37,9 @@ bool ContainsOperation(const std::vector<LineageEdge>& edges, const std::string&
   return std::any_of(edges.begin(), edges.end(), [&](const LineageEdge& edge) { return edge.operation() == operation; });
 }
 
-void TestUpstreamTraversalRespectsMaxDepth() {
+} // namespace
+
+TEST(LineageGraph, UpstreamTraversalRespectsMaxDepth) {
   LineageGraph graph;
 
   AddParents(graph, "B", {MakeEdge("A", "op_a_to_b")});
@@ -49,9 +51,9 @@ void TestUpstreamTraversalRespectsMaxDepth() {
   full.set_max_depth(0);
 
   const auto all_upstream = graph.Query(full);
-  assert(all_upstream.size() == 2);
-  assert(ContainsOperation(all_upstream, "op_b_to_c"));
-  assert(ContainsOperation(all_upstream, "op_a_to_b"));
+  EXPECT_EQ(all_upstream.size(), 2u);
+  EXPECT_TRUE(ContainsOperation(all_upstream, "op_b_to_c"));
+  EXPECT_TRUE(ContainsOperation(all_upstream, "op_a_to_b"));
 
   GetLineageRequest shallow;
   shallow.mutable_id()->set_value("C");
@@ -59,11 +61,11 @@ void TestUpstreamTraversalRespectsMaxDepth() {
   shallow.set_max_depth(1);
 
   const auto depth_limited = graph.Query(shallow);
-  assert(depth_limited.size() == 1);
-  assert(depth_limited.front().operation() == "op_b_to_c");
+  EXPECT_EQ(depth_limited.size(), 1u);
+  EXPECT_EQ(depth_limited.front().operation(), "op_b_to_c");
 }
 
-void TestDownstreamTraversalHandlesCyclesWithoutLooping() {
+TEST(LineageGraph, DownstreamTraversalHandlesCyclesWithoutLooping) {
   LineageGraph graph;
 
   AddParents(graph, "B", {MakeEdge("A", "op_a_to_b")});
@@ -76,18 +78,8 @@ void TestDownstreamTraversalHandlesCyclesWithoutLooping() {
   request.set_max_depth(0);
 
   const auto downstream = graph.Query(request);
-  assert(downstream.size() == 3);
-  assert(ContainsOperation(downstream, "op_a_to_b"));
-  assert(ContainsOperation(downstream, "op_b_to_c"));
-  assert(ContainsOperation(downstream, "op_c_to_a"));
-}
-
-} // namespace
-
-int main() {
-  TestUpstreamTraversalRespectsMaxDepth();
-  TestDownstreamTraversalHandlesCyclesWithoutLooping();
-
-  std::cout << "payload_manager_unit_lineage_graph: pass\n";
-  return 0;
+  EXPECT_EQ(downstream.size(), 3u);
+  EXPECT_TRUE(ContainsOperation(downstream, "op_a_to_b"));
+  EXPECT_TRUE(ContainsOperation(downstream, "op_b_to_c"));
+  EXPECT_TRUE(ContainsOperation(downstream, "op_c_to_a"));
 }

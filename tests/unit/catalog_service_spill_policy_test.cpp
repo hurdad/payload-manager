@@ -1,23 +1,11 @@
 /*
   Tests for TODO #13: Spill RPC policy and wait_for_leases.
-
-  Before the fix both fields were silently ignored; every Spill call executed
-  synchronously regardless of policy, and wait_for_leases had no effect.
-
-  Covered:
-    - SPILL_POLICY_BEST_EFFORT enqueues to the scheduler and returns immediately
-      without moving data (disk backend must be empty after the call)
-    - SPILL_POLICY_BLOCKING (and UNSPECIFIED) executes synchronously; disk
-      backend must have the data when the call returns
-    - wait_for_leases=true makes the call wait until active read leases expire
-      before the spill proceeds, rather than failing immediately with a
-      LeaseConflict error
 */
 
-#include <cassert>
+#include <gtest/gtest.h>
+
 #include <chrono>
 #include <cstring>
-#include <iostream>
 #include <memory>
 #include <stdexcept>
 #include <unordered_map>
@@ -120,11 +108,12 @@ struct Fixture {
   }
 };
 
+} // namespace
+
 // ---------------------------------------------------------------------------
 // Test: SPILL_POLICY_BEST_EFFORT enqueues the task but does NOT move data.
-//       The disk backend must remain empty because no worker is running.
 // ---------------------------------------------------------------------------
-void TestBestEffortEnqueuesWithoutMovingData() {
+TEST(CatalogServiceSpillPolicy, BestEffortEnqueuesWithoutMovingData) {
   Fixture f;
 
   const auto id = f.AllocateCommit();
@@ -138,17 +127,16 @@ void TestBestEffortEnqueuesWithoutMovingData() {
   // rather than executing inline, the disk backend stays empty.
   const auto resp = f.catalog.Spill(req);
 
-  assert(resp.results_size() == 1 && "response must contain one result");
-  assert(resp.results(0).ok() && "best-effort spill must report ok=true");
-  assert(!f.disk->Has(id) && "best-effort spill must not move data inline");
-  assert(f.ram->Has(id) && "data must still be in RAM (not moved inline)");
+  EXPECT_EQ(resp.results_size(), 1) << "response must contain one result";
+  EXPECT_TRUE(resp.results(0).ok()) << "best-effort spill must report ok=true";
+  EXPECT_FALSE(f.disk->Has(id)) << "best-effort spill must not move data inline";
+  EXPECT_TRUE(f.ram->Has(id)) << "data must still be in RAM (not moved inline)";
 }
 
 // ---------------------------------------------------------------------------
 // Test: SPILL_POLICY_BLOCKING (default) executes synchronously.
-//       The disk backend must have the data when the call returns.
 // ---------------------------------------------------------------------------
-void TestBlockingSpillMovesDataInline() {
+TEST(CatalogServiceSpillPolicy, BlockingSpillMovesDataInline) {
   Fixture f;
 
   const auto id = f.AllocateCommit();
@@ -160,20 +148,20 @@ void TestBlockingSpillMovesDataInline() {
 
   const auto resp = f.catalog.Spill(req);
 
-  assert(resp.results_size() == 1);
-  assert(resp.results(0).ok() && "blocking spill must report ok=true");
-  assert(f.disk->Has(id) && "blocking spill must move data to disk inline");
-  assert(!f.ram->Has(id) && "RAM must be freed after blocking spill");
+  EXPECT_EQ(resp.results_size(), 1);
+  EXPECT_TRUE(resp.results(0).ok()) << "blocking spill must report ok=true";
+  EXPECT_TRUE(f.disk->Has(id)) << "blocking spill must move data to disk inline";
+  EXPECT_FALSE(f.ram->Has(id)) << "RAM must be freed after blocking spill";
 
   // Response must include the post-spill descriptor.
-  assert(resp.results(0).has_payload_descriptor() && "blocking result must include descriptor");
-  assert(resp.results(0).payload_descriptor().tier() == TIER_DISK);
+  EXPECT_TRUE(resp.results(0).has_payload_descriptor()) << "blocking result must include descriptor";
+  EXPECT_EQ(resp.results(0).payload_descriptor().tier(), TIER_DISK);
 }
 
 // ---------------------------------------------------------------------------
 // Test: Unspecified policy falls back to blocking.
 // ---------------------------------------------------------------------------
-void TestUnspecifiedPolicyFallsBackToBlocking() {
+TEST(CatalogServiceSpillPolicy, UnspecifiedPolicyFallsBackToBlocking) {
   Fixture f;
 
   const auto id = f.AllocateCommit();
@@ -184,16 +172,15 @@ void TestUnspecifiedPolicyFallsBackToBlocking() {
   req.set_fsync(false);
 
   const auto resp = f.catalog.Spill(req);
-  assert(resp.results(0).ok());
-  assert(f.disk->Has(id) && "unspecified policy must behave as blocking");
+  EXPECT_TRUE(resp.results(0).ok());
+  EXPECT_TRUE(f.disk->Has(id)) << "unspecified policy must behave as blocking";
 }
 
 // ---------------------------------------------------------------------------
 // Test: wait_for_leases=true waits until the active read lease expires and
-//       then successfully spills.  The fixture uses a 50 ms default lease
-//       so this completes in well under one second.
+//       then successfully spills.
 // ---------------------------------------------------------------------------
-void TestWaitForLeasesWaitsForLeaseExpiry() {
+TEST(CatalogServiceSpillPolicy, WaitForLeasesWaitsForLeaseExpiry) {
   Fixture f;
 
   const auto id = f.AllocateCommit();
@@ -204,7 +191,7 @@ void TestWaitForLeasesWaitsForLeaseExpiry() {
   lr.set_mode(LEASE_MODE_READ);
   lr.set_min_lease_duration_ms(0); // use default (50 ms)
   const auto lease_resp = f.data.AcquireReadLease(lr);
-  assert(!lease_resp.lease_id().value().empty());
+  EXPECT_FALSE(lease_resp.lease_id().value().empty());
 
   // A plain BLOCKING spill without wait_for_leases must fail (lease is active).
   {
@@ -214,8 +201,8 @@ void TestWaitForLeasesWaitsForLeaseExpiry() {
     req.set_fsync(false);
     req.set_wait_for_leases(false);
     const auto resp = f.catalog.Spill(req);
-    assert(!resp.results(0).ok() && "spill without wait_for_leases must fail while lease is held");
-    assert(!f.disk->Has(id) && "data must not move while lease is active");
+    EXPECT_FALSE(resp.results(0).ok()) << "spill without wait_for_leases must fail while lease is held";
+    EXPECT_FALSE(f.disk->Has(id)) << "data must not move while lease is active";
   }
 
   // With wait_for_leases=true the call waits for the 50 ms lease to expire
@@ -227,8 +214,8 @@ void TestWaitForLeasesWaitsForLeaseExpiry() {
     req.set_fsync(false);
     req.set_wait_for_leases(true);
     const auto resp = f.catalog.Spill(req);
-    assert(resp.results(0).ok() && "wait_for_leases spill must eventually succeed");
-    assert(f.disk->Has(id) && "data must be on disk after wait_for_leases spill");
+    EXPECT_TRUE(resp.results(0).ok()) << "wait_for_leases spill must eventually succeed";
+    EXPECT_TRUE(f.disk->Has(id)) << "data must be on disk after wait_for_leases spill";
   }
 }
 
@@ -236,7 +223,7 @@ void TestWaitForLeasesWaitsForLeaseExpiry() {
 // Test: wait_for_leases=true with an explicitly released lease succeeds
 //       without waiting for expiry.
 // ---------------------------------------------------------------------------
-void TestWaitForLeasesSucceedsImmediatelyAfterRelease() {
+TEST(CatalogServiceSpillPolicy, WaitForLeasesSucceedsImmediatelyAfterRelease) {
   Fixture f;
 
   const auto id = f.AllocateCommit();
@@ -259,19 +246,6 @@ void TestWaitForLeasesSucceedsImmediatelyAfterRelease() {
   req.set_wait_for_leases(true);
 
   const auto resp = f.catalog.Spill(req);
-  assert(resp.results(0).ok() && "wait_for_leases must succeed immediately when no leases are held");
-  assert(f.disk->Has(id));
-}
-
-} // namespace
-
-int main() {
-  TestBestEffortEnqueuesWithoutMovingData();
-  TestBlockingSpillMovesDataInline();
-  TestUnspecifiedPolicyFallsBackToBlocking();
-  TestWaitForLeasesWaitsForLeaseExpiry();
-  TestWaitForLeasesSucceedsImmediatelyAfterRelease();
-
-  std::cout << "catalog_service_spill_policy_test: pass\n";
-  return 0;
+  EXPECT_TRUE(resp.results(0).ok()) << "wait_for_leases must succeed immediately when no leases are held";
+  EXPECT_TRUE(f.disk->Has(id));
 }

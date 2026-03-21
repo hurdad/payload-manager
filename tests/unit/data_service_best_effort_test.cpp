@@ -1,31 +1,10 @@
 /*
   Tests for the DataService::AcquireReadLease PROMOTION_POLICY_BEST_EFFORT
   fix with TIER_UNSPECIFIED.
-
-  Before the fix, DataService::AcquireReadLease checked:
-    if (promotion_policy == BEST_EFFORT &&
-        IsHigherTier(min_tier, snapshot.tier()))
-
-  TIER_UNSPECIFIED has enum value 0, and IsHigherTier(a,b) returns (a < b).
-  So IsHigherTier(UNSPECIFIED=0, GPU=1) = (0 < 1) = true, meaning any request
-  with BEST_EFFORT + TIER_UNSPECIFIED would incorrectly throw InvalidState even
-  though no promotion was actually being requested.
-
-  After the fix the condition additionally guards on:
-    min_tier != TIER_UNSPECIFIED
-
-  Covered:
-    - BEST_EFFORT + TIER_UNSPECIFIED does not throw; the lease is acquired
-      on whichever tier the payload is already on.
-    - BEST_EFFORT + min_tier equal to the current tier (no promotion needed)
-      does not throw.
-    - BEST_EFFORT + min_tier strictly faster than the current tier does
-      throw InvalidState (payload is on disk, caller wants GPU).
-    - BLOCKING policy + a higher min_tier promotes and acquires the lease.
 */
 
-#include <cassert>
-#include <iostream>
+#include <gtest/gtest.h>
+
 #include <memory>
 #include <stdexcept>
 
@@ -112,11 +91,12 @@ struct Fixture {
   }
 };
 
+} // namespace
+
 // ---------------------------------------------------------------------------
 // Test: BEST_EFFORT + TIER_UNSPECIFIED must not throw.
-//       Payload is on RAM; min_tier=UNSPECIFIED means "no tier requirement".
 // ---------------------------------------------------------------------------
-void TestBestEffortWithUnspecifiedTierDoesNotThrow() {
+TEST(DataServiceBestEffort, BestEffortWithUnspecifiedTierDoesNotThrow) {
   Fixture    f;
   const auto id = f.AllocateOnRam();
 
@@ -128,14 +108,13 @@ void TestBestEffortWithUnspecifiedTierDoesNotThrow() {
 
   // Must not throw.
   const auto resp = f.data.AcquireReadLease(req);
-  assert(!resp.lease_id().value().empty() && "lease must be granted");
+  EXPECT_FALSE(resp.lease_id().value().empty()) << "lease must be granted";
 }
 
 // ---------------------------------------------------------------------------
 // Test: BEST_EFFORT + min_tier == current tier does not throw
-//       (no promotion is needed).
 // ---------------------------------------------------------------------------
-void TestBestEffortWithSameTierDoesNotThrow() {
+TEST(DataServiceBestEffort, BestEffortWithSameTierDoesNotThrow) {
   Fixture    f;
   const auto id = f.AllocateOnRam();
 
@@ -146,15 +125,13 @@ void TestBestEffortWithSameTierDoesNotThrow() {
   req.set_promotion_policy(PROMOTION_POLICY_BEST_EFFORT);
 
   const auto resp = f.data.AcquireReadLease(req);
-  assert(!resp.lease_id().value().empty() && "lease must be granted when tier requirement is already met");
+  EXPECT_FALSE(resp.lease_id().value().empty()) << "lease must be granted when tier requirement is already met";
 }
 
 // ---------------------------------------------------------------------------
 // Test: BEST_EFFORT + min_tier faster than current tier throws InvalidState.
-//       Payload is on DISK; caller requests TIER_RAM — not satisfiable
-//       without a promotion that BEST_EFFORT refuses to do.
 // ---------------------------------------------------------------------------
-void TestBestEffortThrowsWhenTierRequiresPromotion() {
+TEST(DataServiceBestEffort, BestEffortThrowsWhenTierRequiresPromotion) {
   Fixture    f;
   const auto id = f.AllocateOnDisk();
 
@@ -164,22 +141,14 @@ void TestBestEffortThrowsWhenTierRequiresPromotion() {
   req.set_min_tier(TIER_RAM); // faster than DISK → promotion required
   req.set_promotion_policy(PROMOTION_POLICY_BEST_EFFORT);
 
-  bool threw = false;
-  try {
-    f.data.AcquireReadLease(req);
-  } catch (const payload::util::InvalidState&) {
-    threw = true;
-  } catch (...) {
-    threw = true;
-  }
-  assert(threw && "BEST_EFFORT must throw when it cannot satisfy min_tier without promotion");
+  EXPECT_THROW(f.data.AcquireReadLease(req), std::exception) << "BEST_EFFORT must throw when it cannot satisfy min_tier without promotion";
 }
 
 // ---------------------------------------------------------------------------
 // Test: BLOCKING policy promotes and grants the lease even when the payload
 //       is on a slower tier than min_tier.
 // ---------------------------------------------------------------------------
-void TestBlockingPolicyPromotesAndGrantsLease() {
+TEST(DataServiceBestEffort, BlockingPolicyPromotesAndGrantsLease) {
   Fixture    f;
   const auto id = f.AllocateOnDisk();
 
@@ -190,21 +159,9 @@ void TestBlockingPolicyPromotesAndGrantsLease() {
   req.set_promotion_policy(PROMOTION_POLICY_BLOCKING);
 
   const auto resp = f.data.AcquireReadLease(req);
-  assert(!resp.lease_id().value().empty() && "BLOCKING must promote and grant the lease");
+  EXPECT_FALSE(resp.lease_id().value().empty()) << "BLOCKING must promote and grant the lease";
 
   // After promotion the payload must be on RAM.
   const auto desc = f.manager->ResolveSnapshot(id);
-  assert(desc.tier() == TIER_RAM && "payload must be on RAM after BLOCKING promotion");
-}
-
-} // namespace
-
-int main() {
-  TestBestEffortWithUnspecifiedTierDoesNotThrow();
-  TestBestEffortWithSameTierDoesNotThrow();
-  TestBestEffortThrowsWhenTierRequiresPromotion();
-  TestBlockingPolicyPromotesAndGrantsLease();
-
-  std::cout << "data_service_best_effort_test: pass\n";
-  return 0;
+  EXPECT_EQ(desc.tier(), TIER_RAM) << "payload must be on RAM after BLOCKING promotion";
 }

@@ -14,12 +14,11 @@
 #include <arrow/buffer.h>
 #include <arrow/filesystem/localfs.h>
 #include <google/protobuf/util/json_util.h>
+#include <gtest/gtest.h>
 
-#include <cassert>
 #include <cstring>
 #include <filesystem>
 #include <fstream>
-#include <iostream>
 #include <memory>
 #include <sstream>
 #include <stdexcept>
@@ -44,10 +43,6 @@ using namespace payload::manager::catalog::v1;
 using payload::core::PayloadManager;
 using payload::lease::LeaseManager;
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
 namespace {
 
 // RAII temp directory — removed on destruction.
@@ -67,15 +62,15 @@ struct TempDir {
 
 PayloadArchiveMetadata ParseSidecar(const std::filesystem::path& path) {
   std::ifstream in(path, std::ios::binary);
-  assert(in && "sidecar file must exist");
+  EXPECT_TRUE(in) << "sidecar file must exist";
   std::ostringstream ss;
   ss << in.rdbuf();
   const std::string json = ss.str();
-  assert(!json.empty() && "sidecar must not be empty");
+  EXPECT_FALSE(json.empty()) << "sidecar must not be empty";
 
   PayloadArchiveMetadata meta;
   auto                   status = google::protobuf::util::JsonStringToMessage(json, &meta);
-  assert(status.ok() && "sidecar must parse as valid PayloadArchiveMetadata JSON");
+  EXPECT_TRUE(status.ok()) << "sidecar must parse as valid PayloadArchiveMetadata JSON";
   return meta;
 }
 
@@ -93,7 +88,7 @@ class RamBackend final : public payload::storage::StorageBackend {
 
   std::shared_ptr<arrow::Buffer> Allocate(const PayloadID& id, uint64_t size) override {
     auto r = arrow::AllocateBuffer(size);
-    assert(r.ok());
+    EXPECT_TRUE(r.ok());
     auto buf = std::shared_ptr<arrow::Buffer>(std::move(*r));
     if (size > 0) std::memset(buf->mutable_data(), 0, size);
     store_[id.value()] = buf;
@@ -120,144 +115,6 @@ class RamBackend final : public payload::storage::StorageBackend {
   Tier                                                            tier_;
   std::unordered_map<std::string, std::shared_ptr<arrow::Buffer>> store_;
 };
-
-// ---------------------------------------------------------------------------
-// Test 1: DiskArrowStore::WriteSidecar creates valid .meta.json
-// ---------------------------------------------------------------------------
-
-void TestDiskWriteSidecar() {
-  std::cout << "  TestDiskWriteSidecar\n";
-  TempDir tmp;
-
-  payload::storage::DiskArrowStore store(tmp.path);
-
-  const auto uuid     = payload::util::GenerateUUID();
-  const auto uuid_str = payload::util::ToString(uuid);
-  PayloadID  id       = payload::util::ToProto(uuid);
-
-  PayloadArchiveMetadata meta;
-  *meta.mutable_uuid() = id;
-  meta.set_metadata_version(1);
-  meta.mutable_archived_at()->set_seconds(1700000000);
-  meta.mutable_compression()->set_type(COMPRESSION_NONE);
-
-  store.WriteSidecar(id, meta);
-
-  const auto sidecar = tmp.path / (uuid_str + ".meta.json");
-  assert(std::filesystem::exists(sidecar) && "sidecar file must exist after WriteSidecar");
-
-  auto parsed = ParseSidecar(sidecar);
-  assert(parsed.metadata_version() == 1 && "metadata_version must round-trip");
-  assert(parsed.archived_at().seconds() == 1700000000 && "archived_at must round-trip");
-  assert(parsed.compression().type() == COMPRESSION_NONE && "compression must round-trip");
-  assert(!parsed.uuid().value().empty() && "uuid must be set");
-}
-
-// ---------------------------------------------------------------------------
-// Test 2: DiskArrowStore::Remove deletes both .bin and .meta.json
-// ---------------------------------------------------------------------------
-
-void TestDiskRemoveDeletesSidecar() {
-  std::cout << "  TestDiskRemoveDeletesSidecar\n";
-  TempDir tmp;
-
-  payload::storage::DiskArrowStore store(tmp.path);
-
-  const auto uuid = payload::util::GenerateUUID();
-  PayloadID  id   = payload::util::ToProto(uuid);
-
-  // Allocate creates .bin; WriteSidecar creates .meta.json.
-  store.Allocate(id, 64);
-
-  PayloadArchiveMetadata meta;
-  *meta.mutable_uuid() = id;
-  meta.set_metadata_version(1);
-  store.WriteSidecar(id, meta);
-
-  const auto uuid_str = payload::util::ToString(uuid);
-  assert(std::filesystem::exists(tmp.path / (uuid_str + ".bin")) && ".bin must exist before Remove");
-  assert(std::filesystem::exists(tmp.path / (uuid_str + ".meta.json")) && ".meta.json must exist before Remove");
-
-  store.Remove(id);
-
-  assert(!std::filesystem::exists(tmp.path / (uuid_str + ".bin")) && ".bin must be gone after Remove");
-  assert(!std::filesystem::exists(tmp.path / (uuid_str + ".meta.json")) && ".meta.json must be gone after Remove");
-}
-
-// ---------------------------------------------------------------------------
-// Test 3: ObjectArrowStore::WriteSidecar via Arrow LocalFileSystem
-// ---------------------------------------------------------------------------
-
-void TestObjectWriteSidecar() {
-  std::cout << "  TestObjectWriteSidecar\n";
-  TempDir tmp;
-
-  auto fs    = std::make_shared<arrow::fs::LocalFileSystem>();
-  auto store = payload::storage::ObjectArrowStore(fs, tmp.path.string());
-
-  const auto uuid     = payload::util::GenerateUUID();
-  const auto uuid_str = payload::util::ToString(uuid);
-  PayloadID  id       = payload::util::ToProto(uuid);
-
-  // ObjectArrowStore uses id.value() directly as the key prefix.
-  // For this test, set a simple ASCII value so the path is file-system safe.
-  PayloadID ascii_id;
-  ascii_id.set_value(uuid_str);
-
-  PayloadArchiveMetadata meta;
-  *meta.mutable_uuid() = ascii_id;
-  meta.set_metadata_version(2);
-  meta.mutable_archived_at()->set_seconds(1800000000);
-
-  store.WriteSidecar(ascii_id, meta);
-
-  const auto sidecar = tmp.path / (uuid_str + ".meta.json");
-  assert(std::filesystem::exists(sidecar) && "object sidecar must exist");
-
-  auto parsed = ParseSidecar(sidecar);
-  assert(parsed.metadata_version() == 2 && "metadata_version must round-trip");
-  assert(parsed.archived_at().seconds() == 1800000000 && "archived_at must round-trip");
-}
-
-// ---------------------------------------------------------------------------
-// Test 4: ObjectArrowStore::Remove deletes both .bin and .meta.json
-// ---------------------------------------------------------------------------
-
-void TestObjectRemoveDeletesSidecar() {
-  std::cout << "  TestObjectRemoveDeletesSidecar\n";
-  TempDir tmp;
-
-  auto fs    = std::make_shared<arrow::fs::LocalFileSystem>();
-  auto store = payload::storage::ObjectArrowStore(fs, tmp.path.string());
-
-  const auto uuid     = payload::util::GenerateUUID();
-  const auto uuid_str = payload::util::ToString(uuid);
-
-  // Use an ASCII id (see Test 3 note).
-  PayloadID ascii_id;
-  ascii_id.set_value(uuid_str);
-
-  // Write dummy data and sidecar.
-  auto data_buf = arrow::AllocateBuffer(4);
-  assert(data_buf.ok());
-  store.Write(ascii_id, std::shared_ptr<arrow::Buffer>(std::move(*data_buf)), false);
-
-  PayloadArchiveMetadata meta;
-  *meta.mutable_uuid() = ascii_id;
-  store.WriteSidecar(ascii_id, meta);
-
-  assert(std::filesystem::exists(tmp.path / (uuid_str + ".bin")) && ".bin must exist before Remove");
-  assert(std::filesystem::exists(tmp.path / (uuid_str + ".meta.json")) && ".meta.json must exist before Remove");
-
-  store.Remove(ascii_id);
-
-  assert(!std::filesystem::exists(tmp.path / (uuid_str + ".bin")) && ".bin must be gone");
-  assert(!std::filesystem::exists(tmp.path / (uuid_str + ".meta.json")) && ".meta.json must be gone");
-}
-
-// ---------------------------------------------------------------------------
-// Fixture: PayloadManager with real DiskArrowStore + MemoryRepository
-// ---------------------------------------------------------------------------
 
 struct DiskFixture {
   TempDir                                                tmp;
@@ -287,12 +144,123 @@ struct DiskFixture {
   }
 };
 
-// ---------------------------------------------------------------------------
-// Test 5: PayloadManager::Commit on disk-allocated payload writes sidecar
-// ---------------------------------------------------------------------------
+} // namespace
 
-void TestCommitDiskWritesSidecar() {
-  std::cout << "  TestCommitDiskWritesSidecar\n";
+TEST(StorageSidecar, DiskWriteSidecar) {
+  TempDir tmp;
+
+  payload::storage::DiskArrowStore store(tmp.path);
+
+  const auto uuid     = payload::util::GenerateUUID();
+  const auto uuid_str = payload::util::ToString(uuid);
+  PayloadID  id       = payload::util::ToProto(uuid);
+
+  PayloadArchiveMetadata meta;
+  *meta.mutable_uuid() = id;
+  meta.set_metadata_version(1);
+  meta.mutable_archived_at()->set_seconds(1700000000);
+  meta.mutable_compression()->set_type(COMPRESSION_NONE);
+
+  store.WriteSidecar(id, meta);
+
+  const auto sidecar = tmp.path / (uuid_str + ".meta.json");
+  EXPECT_TRUE(std::filesystem::exists(sidecar)) << "sidecar file must exist after WriteSidecar";
+
+  auto parsed = ParseSidecar(sidecar);
+  EXPECT_EQ(parsed.metadata_version(), 1) << "metadata_version must round-trip";
+  EXPECT_EQ(parsed.archived_at().seconds(), 1700000000) << "archived_at must round-trip";
+  EXPECT_EQ(parsed.compression().type(), COMPRESSION_NONE) << "compression must round-trip";
+  EXPECT_FALSE(parsed.uuid().value().empty()) << "uuid must be set";
+}
+
+TEST(StorageSidecar, DiskRemoveDeletesSidecar) {
+  TempDir tmp;
+
+  payload::storage::DiskArrowStore store(tmp.path);
+
+  const auto uuid = payload::util::GenerateUUID();
+  PayloadID  id   = payload::util::ToProto(uuid);
+
+  // Allocate creates .bin; WriteSidecar creates .meta.json.
+  store.Allocate(id, 64);
+
+  PayloadArchiveMetadata meta;
+  *meta.mutable_uuid() = id;
+  meta.set_metadata_version(1);
+  store.WriteSidecar(id, meta);
+
+  const auto uuid_str = payload::util::ToString(uuid);
+  EXPECT_TRUE(std::filesystem::exists(tmp.path / (uuid_str + ".bin"))) << ".bin must exist before Remove";
+  EXPECT_TRUE(std::filesystem::exists(tmp.path / (uuid_str + ".meta.json"))) << ".meta.json must exist before Remove";
+
+  store.Remove(id);
+
+  EXPECT_FALSE(std::filesystem::exists(tmp.path / (uuid_str + ".bin"))) << ".bin must be gone after Remove";
+  EXPECT_FALSE(std::filesystem::exists(tmp.path / (uuid_str + ".meta.json"))) << ".meta.json must be gone after Remove";
+}
+
+TEST(StorageSidecar, ObjectWriteSidecar) {
+  TempDir tmp;
+
+  auto fs    = std::make_shared<arrow::fs::LocalFileSystem>();
+  auto store = payload::storage::ObjectArrowStore(fs, tmp.path.string());
+
+  const auto uuid     = payload::util::GenerateUUID();
+  const auto uuid_str = payload::util::ToString(uuid);
+  PayloadID  id       = payload::util::ToProto(uuid);
+
+  // ObjectArrowStore uses id.value() directly as the key prefix.
+  // For this test, set a simple ASCII value so the path is file-system safe.
+  PayloadID ascii_id;
+  ascii_id.set_value(uuid_str);
+
+  PayloadArchiveMetadata meta;
+  *meta.mutable_uuid() = ascii_id;
+  meta.set_metadata_version(2);
+  meta.mutable_archived_at()->set_seconds(1800000000);
+
+  store.WriteSidecar(ascii_id, meta);
+
+  const auto sidecar = tmp.path / (uuid_str + ".meta.json");
+  EXPECT_TRUE(std::filesystem::exists(sidecar)) << "object sidecar must exist";
+
+  auto parsed = ParseSidecar(sidecar);
+  EXPECT_EQ(parsed.metadata_version(), 2) << "metadata_version must round-trip";
+  EXPECT_EQ(parsed.archived_at().seconds(), 1800000000) << "archived_at must round-trip";
+}
+
+TEST(StorageSidecar, ObjectRemoveDeletesSidecar) {
+  TempDir tmp;
+
+  auto fs    = std::make_shared<arrow::fs::LocalFileSystem>();
+  auto store = payload::storage::ObjectArrowStore(fs, tmp.path.string());
+
+  const auto uuid     = payload::util::GenerateUUID();
+  const auto uuid_str = payload::util::ToString(uuid);
+
+  // Use an ASCII id (see ObjectWriteSidecar note).
+  PayloadID ascii_id;
+  ascii_id.set_value(uuid_str);
+
+  // Write dummy data and sidecar.
+  auto data_buf = arrow::AllocateBuffer(4);
+  ASSERT_TRUE(data_buf.ok());
+  store.Write(ascii_id, std::shared_ptr<arrow::Buffer>(std::move(*data_buf)), false);
+
+  PayloadArchiveMetadata meta;
+  *meta.mutable_uuid() = ascii_id;
+  store.WriteSidecar(ascii_id, meta);
+
+  EXPECT_TRUE(std::filesystem::exists(tmp.path / (uuid_str + ".bin"))) << ".bin must exist before Remove";
+  EXPECT_TRUE(std::filesystem::exists(tmp.path / (uuid_str + ".meta.json"))) << ".meta.json must exist before Remove";
+
+  store.Remove(ascii_id);
+
+  EXPECT_FALSE(std::filesystem::exists(tmp.path / (uuid_str + ".bin"))) << ".bin must be gone";
+  EXPECT_FALSE(std::filesystem::exists(tmp.path / (uuid_str + ".meta.json"))) << ".meta.json must be gone";
+}
+
+TEST(StorageSidecar, CommitDiskWritesSidecar) {
   DiskFixture f;
 
   AllocatePayloadRequest alloc_req;
@@ -301,29 +269,24 @@ void TestCommitDiskWritesSidecar() {
   const auto alloc_resp = f.catalog.Allocate(alloc_req);
   const auto desc       = alloc_resp.payload_descriptor();
 
-  assert(desc.tier() == TIER_DISK && "must be allocated on disk");
-  assert(!std::filesystem::exists(f.SidecarPath(desc)) && "sidecar must not exist before commit");
+  EXPECT_EQ(desc.tier(), TIER_DISK) << "must be allocated on disk";
+  EXPECT_FALSE(std::filesystem::exists(f.SidecarPath(desc))) << "sidecar must not exist before commit";
 
   CommitPayloadRequest commit_req;
   *commit_req.mutable_id() = desc.payload_id();
   f.catalog.Commit(commit_req);
 
-  assert(std::filesystem::exists(f.SidecarPath(desc)) && "sidecar must exist after commit");
+  EXPECT_TRUE(std::filesystem::exists(f.SidecarPath(desc))) << "sidecar must exist after commit";
 
   auto meta = ParseSidecar(f.SidecarPath(desc));
-  assert(meta.metadata_version() == 1 && "metadata_version must be 1");
-  assert(!meta.uuid().value().empty() && "uuid must be populated");
-  assert(meta.has_archived_at() && "archived_at must be set");
-  assert(meta.has_payload_descriptor() && "payload_descriptor must be set");
-  assert(meta.payload_descriptor().tier() == TIER_DISK && "descriptor tier must be TIER_DISK");
+  EXPECT_EQ(meta.metadata_version(), 1) << "metadata_version must be 1";
+  EXPECT_FALSE(meta.uuid().value().empty()) << "uuid must be populated";
+  EXPECT_TRUE(meta.has_archived_at()) << "archived_at must be set";
+  EXPECT_TRUE(meta.has_payload_descriptor()) << "payload_descriptor must be set";
+  EXPECT_EQ(meta.payload_descriptor().tier(), TIER_DISK) << "descriptor tier must be TIER_DISK";
 }
 
-// ---------------------------------------------------------------------------
-// Test 6: PayloadManager::ExecuteSpill (RAM → disk) writes sidecar
-// ---------------------------------------------------------------------------
-
-void TestSpillRamToDiskWritesSidecar() {
-  std::cout << "  TestSpillRamToDiskWritesSidecar\n";
+TEST(StorageSidecar, SpillRamToDiskWritesSidecar) {
   DiskFixture f;
 
   AllocatePayloadRequest alloc_req;
@@ -338,28 +301,24 @@ void TestSpillRamToDiskWritesSidecar() {
   f.catalog.Commit(commit_req);
 
   // No sidecar yet — payload is on RAM tier.
-  assert(!std::filesystem::exists(f.SidecarPath(desc)) && "sidecar must not exist before spill");
+  EXPECT_FALSE(std::filesystem::exists(f.SidecarPath(desc))) << "sidecar must not exist before spill";
 
   SpillRequest spill_req;
   *spill_req.add_ids() = id;
   spill_req.set_fsync(false);
   const auto spill_resp = f.catalog.Spill(spill_req);
-  assert(spill_resp.results_size() == 1 && spill_resp.results(0).ok() && "spill must succeed");
+  EXPECT_EQ(spill_resp.results_size(), 1);
+  EXPECT_TRUE(spill_resp.results(0).ok()) << "spill must succeed";
 
-  assert(std::filesystem::exists(f.SidecarPath(desc)) && "sidecar must exist after spill");
+  EXPECT_TRUE(std::filesystem::exists(f.SidecarPath(desc))) << "sidecar must exist after spill";
 
   auto meta = ParseSidecar(f.SidecarPath(desc));
-  assert(meta.metadata_version() == 1);
-  assert(meta.has_archived_at());
-  assert(meta.payload_descriptor().tier() == TIER_DISK && "descriptor in sidecar must show disk tier");
+  EXPECT_EQ(meta.metadata_version(), 1);
+  EXPECT_TRUE(meta.has_archived_at());
+  EXPECT_EQ(meta.payload_descriptor().tier(), TIER_DISK) << "descriptor in sidecar must show disk tier";
 }
 
-// ---------------------------------------------------------------------------
-// Test 7: Sidecar contains lineage registered before commit
-// ---------------------------------------------------------------------------
-
-void TestSidecarContainsLineage() {
-  std::cout << "  TestSidecarContainsLineage\n";
+TEST(StorageSidecar, SidecarContainsLineage) {
   DiskFixture f;
 
   // Allocate a parent (RAM) and a child (disk).
@@ -389,31 +348,10 @@ void TestSidecarContainsLineage() {
   *commit_child.mutable_id() = child_desc.payload_id();
   f.catalog.Commit(commit_child);
 
-  assert(std::filesystem::exists(f.SidecarPath(child_desc)) && "sidecar must exist after commit");
+  EXPECT_TRUE(std::filesystem::exists(f.SidecarPath(child_desc))) << "sidecar must exist after commit";
 
   auto meta = ParseSidecar(f.SidecarPath(child_desc));
-  assert(meta.lineage_size() == 1 && "sidecar must contain one lineage edge");
-  assert(meta.lineage(0).operation() == "transform" && "lineage operation must match");
-  assert(meta.lineage(0).role() == "source" && "lineage role must match");
-}
-
-} // namespace
-
-// ---------------------------------------------------------------------------
-// Main
-// ---------------------------------------------------------------------------
-
-int main() {
-  std::cout << "storage_sidecar_test\n";
-
-  TestDiskWriteSidecar();
-  TestDiskRemoveDeletesSidecar();
-  TestObjectWriteSidecar();
-  TestObjectRemoveDeletesSidecar();
-  TestCommitDiskWritesSidecar();
-  TestSpillRamToDiskWritesSidecar();
-  TestSidecarContainsLineage();
-
-  std::cout << "storage_sidecar_test: pass\n";
-  return 0;
+  EXPECT_EQ(meta.lineage_size(), 1) << "sidecar must contain one lineage edge";
+  EXPECT_EQ(meta.lineage(0).operation(), "transform") << "lineage operation must match";
+  EXPECT_EQ(meta.lineage(0).role(), "source") << "lineage role must match";
 }

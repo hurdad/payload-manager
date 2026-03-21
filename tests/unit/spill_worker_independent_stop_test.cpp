@@ -1,26 +1,13 @@
 /*
   Tests for Critical Fix #2: SpillWorker::Stop must not shut down the shared
   SpillScheduler so that sibling workers continue to function.
-
-  Before the fix, SpillWorker::Stop() called scheduler_->Shutdown(), which
-  set shutdown_=true and woke all blocked workers.  Every sibling would then
-  drain its Dequeue() and exit, even though they were still nominally running.
-
-  After the fix each worker uses its own running_ flag.  Calling Stop() on one
-  worker calls Wakeup() (notify_all without setting shutdown_) then joins the
-  calling worker's thread.  Siblings re-check their own running_ flag, find it
-  still true, and go back to sleep.
-
-  Covered:
-    - Worker stops cleanly when its queue is empty
-    - Stopping worker A does not prevent worker B from processing subsequent tasks
 */
 
+#include <gtest/gtest.h>
+
 #include <atomic>
-#include <cassert>
 #include <chrono>
 #include <cstring>
-#include <iostream>
 #include <memory>
 #include <stdexcept>
 #include <thread>
@@ -88,10 +75,12 @@ struct Env {
   std::shared_ptr<payload::spill::SpillScheduler>        scheduler = std::make_shared<payload::spill::SpillScheduler>();
 };
 
+} // namespace
+
 // ---------------------------------------------------------------------------
 // Test: A worker with nothing in the queue stops immediately without hanging.
 // ---------------------------------------------------------------------------
-void TestWorkerStopsCleanlyOnEmptyQueue() {
+TEST(SpillWorkerStop, WorkerStopsCleanlyOnEmptyQueue) {
   Env env;
 
   auto worker = std::make_shared<payload::spill::SpillWorker>(env.scheduler, env.manager);
@@ -106,14 +95,14 @@ void TestWorkerStopsCleanlyOnEmptyQueue() {
   });
 
   stopper.join();
-  assert(completed && "Stop() must return without hanging on an empty queue");
+  EXPECT_TRUE(completed) << "Stop() must return without hanging on an empty queue";
 }
 
 // ---------------------------------------------------------------------------
 // Test: Stopping worker A does not kill worker B.
 //       After A is stopped, B must still process a newly enqueued spill task.
 // ---------------------------------------------------------------------------
-void TestStoppingOneWorkerDoesNotKillSibling() {
+TEST(SpillWorkerStop, StoppingOneWorkerDoesNotKillSibling) {
   Env env;
 
   // Allocate and commit a payload to give worker B a real task to execute.
@@ -149,15 +138,15 @@ void TestStoppingOneWorkerDoesNotKillSibling() {
 
   worker_b->Stop();
 
-  assert(processed && "worker B must process tasks after worker A has been stopped");
-  assert(env.disk->Has(desc.payload_id()) && "payload must have moved to disk");
-  assert(!env.ram->Has(desc.payload_id()) && "payload must no longer be in RAM after spill");
+  EXPECT_TRUE(processed) << "worker B must process tasks after worker A has been stopped";
+  EXPECT_TRUE(env.disk->Has(desc.payload_id())) << "payload must have moved to disk";
+  EXPECT_FALSE(env.ram->Has(desc.payload_id())) << "payload must no longer be in RAM after spill";
 }
 
 // ---------------------------------------------------------------------------
 // Test: Wakeup() does not cause a running worker to exit.
 // ---------------------------------------------------------------------------
-void TestWakeupDoesNotExitRunningWorker() {
+TEST(SpillWorkerStop, WakeupDoesNotExitRunningWorker) {
   Env env;
 
   auto worker = std::make_shared<payload::spill::SpillWorker>(env.scheduler, env.manager);
@@ -191,16 +180,5 @@ void TestWakeupDoesNotExitRunningWorker() {
 
   worker->Stop();
 
-  assert(processed && "worker must still process tasks after Wakeup() calls");
-}
-
-} // namespace
-
-int main() {
-  TestWorkerStopsCleanlyOnEmptyQueue();
-  TestStoppingOneWorkerDoesNotKillSibling();
-  TestWakeupDoesNotExitRunningWorker();
-
-  std::cout << "spill_worker_independent_stop_test: pass\n";
-  return 0;
+  EXPECT_TRUE(processed) << "worker must still process tasks after Wakeup() calls";
 }

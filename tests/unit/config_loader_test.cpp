@@ -1,9 +1,9 @@
 #include "internal/config/config_loader.hpp"
 
-#include <cassert>
+#include <gtest/gtest.h>
+
 #include <filesystem>
 #include <fstream>
-#include <iostream>
 #include <stdexcept>
 #include <string>
 
@@ -21,7 +21,9 @@ std::filesystem::path WriteYaml(const std::string& test_name, const std::string&
   return file_path;
 }
 
-void TestScalarEscapingForQuotedAndBackslashValues() {
+} // namespace
+
+TEST(ConfigLoader, ScalarEscapingForQuotedAndBackslashValues) {
   const auto yaml_path = WriteYaml("quoted_backslash",
                                    R"(server:
   bind_address: "0.0.0.0:50051"
@@ -41,10 +43,10 @@ leases:
 )");
 
   auto config = payload::config::ConfigLoader::LoadFromYaml(yaml_path.string());
-  assert(config.database().sqlite().path() == "C:\\payload\\\"quoted\"\\db.sqlite");
+  EXPECT_EQ(config.database().sqlite().path(), "C:\\payload\\\"quoted\"\\db.sqlite");
 }
 
-void TestScalarEscapingForNewlineAndUnicode() {
+TEST(ConfigLoader, ScalarEscapingForNewlineAndUnicode) {
   const auto yaml_path = WriteYaml("newline_unicode",
                                    R"(server:
   bind_address: "line1\nline2☃"
@@ -64,10 +66,10 @@ leases:
 )");
 
   auto config = payload::config::ConfigLoader::LoadFromYaml(yaml_path.string());
-  assert(config.server().bind_address() == std::string("line1\nline2☃"));
+  EXPECT_EQ(config.server().bind_address(), std::string("line1\nline2☃"));
 }
 
-void TestUnknownFieldsAreRejected() {
+TEST(ConfigLoader, UnknownFieldsAreRejected) {
   const auto yaml_path = WriteYaml("unknown_field",
                                    R"(server:
   bind_address: "0.0.0.0:50051"
@@ -87,23 +89,6 @@ leases:
   max_lease: "2s"
 )");
 
-  bool threw = false;
-  try {
-    (void)payload::config::ConfigLoader::LoadFromYaml(yaml_path.string());
-  } catch (const std::runtime_error&) {
-    threw = true;
-  }
-
-  assert(threw && "ConfigLoader must reject unknown fields.");
-}
-
-} // namespace
-
-int main() {
-  TestScalarEscapingForQuotedAndBackslashValues();
-  TestScalarEscapingForNewlineAndUnicode();
-  TestUnknownFieldsAreRejected();
-
-  std::cout << "payload_manager_unit_config_loader: pass\n";
-  return 0;
+  EXPECT_THROW((void)payload::config::ConfigLoader::LoadFromYaml(yaml_path.string()), std::runtime_error)
+      << "ConfigLoader must reject unknown fields.";
 }

@@ -1,27 +1,11 @@
 /*
   Tests confirming that LeaseTable operations are correctly scoped to the
   target payload and do not inadvertently affect other payloads' leases.
-
-  Before the fix, Insert() and HasActive() iterated every entry in the
-  by_payload_ multimap (O(total_leases)) and the loop skipped non-matching
-  keys with a continue.  That was correct but O(n); more critically, a bug
-  in RemoveAll() used the same pattern which is now replaced with
-  equal_range so only the target payload's bucket is touched.
-
-  Covered:
-    - Insert expiry sweep is scoped to the target payload: inserting a new
-      lease for payload_a causes its expired leases to be reaped, but
-      payload_b's active leases are left untouched.
-    - HasActive only reports activity for the queried payload; a completely
-      separate payload's leases do not influence the result.
-    - RemoveAll on payload_a does not remove payload_b's leases.
-    - RemoveAll leaves the table empty for the removed payload but the
-      remaining payload still reports active.
 */
 
-#include <cassert>
+#include <gtest/gtest.h>
+
 #include <chrono>
-#include <iostream>
 
 #include "internal/lease/lease_table.hpp"
 
@@ -61,19 +45,19 @@ Lease ExpiredLease(const std::string& lid, const PayloadID& pid) {
   return l;
 }
 
+} // namespace
+
 // ---------------------------------------------------------------------------
 // Test: Insert's expiry sweep only reaps leases for the target payload.
-//       payload_b's active lease must survive even after payload_a's
-//       expired leases are swept during a new Insert for payload_a.
 // ---------------------------------------------------------------------------
-void TestInsertSweepScopedToTargetPayload() {
+TEST(LeaseTableMultiPayload, InsertSweepScopedToTargetPayload) {
   LeaseTable table;
   const auto pa = MakePayload("payload-a");
   const auto pb = MakePayload("payload-b");
 
   // Give payload_b an active lease BEFORE we do anything with payload_a.
   table.Insert(ActiveLease("b-lease", pb));
-  assert(table.HasActive(pb) && "payload_b must be active before sweep");
+  EXPECT_TRUE(table.HasActive(pb)) << "payload_b must be active before sweep";
 
   // Insert an expired lease for payload_a then a new active one, which
   // triggers the expiry sweep for payload_a's bucket.
@@ -81,16 +65,14 @@ void TestInsertSweepScopedToTargetPayload() {
   table.Insert(ActiveLease("a-active", pa));
 
   // payload_b must be unaffected.
-  assert(table.HasActive(pb) && "payload_b lease must survive sweep for payload_a");
-  assert(table.HasActive(pa) && "payload_a must still have its fresh active lease");
+  EXPECT_TRUE(table.HasActive(pb)) << "payload_b lease must survive sweep for payload_a";
+  EXPECT_TRUE(table.HasActive(pa)) << "payload_a must still have its fresh active lease";
 }
 
 // ---------------------------------------------------------------------------
 // Test: HasActive on payload_a does not disturb payload_b's entries.
-//       Querying HasActive(pa) — which lazily expires stale entries —
-//       must leave payload_b's lease intact.
 // ---------------------------------------------------------------------------
-void TestHasActiveDoesNotAffectOtherPayloads() {
+TEST(LeaseTableMultiPayload, HasActiveDoesNotAffectOtherPayloads) {
   LeaseTable table;
   const auto pa = MakePayload("payload-sweep-a");
   const auto pb = MakePayload("payload-sweep-b");
@@ -99,15 +81,15 @@ void TestHasActiveDoesNotAffectOtherPayloads() {
   table.Insert(ActiveLease("b-act", pb));
 
   // Querying pa triggers lazy cleanup of pa's expired lease.
-  assert(!table.HasActive(pa) && "expired lease must make payload_a inactive");
+  EXPECT_FALSE(table.HasActive(pa)) << "expired lease must make payload_a inactive";
   // pb must remain active.
-  assert(table.HasActive(pb) && "payload_b active lease must be unaffected by HasActive(pa)");
+  EXPECT_TRUE(table.HasActive(pb)) << "payload_b active lease must be unaffected by HasActive(pa)";
 }
 
 // ---------------------------------------------------------------------------
 // Test: RemoveAll on payload_a must not remove payload_b's leases.
 // ---------------------------------------------------------------------------
-void TestRemoveAllScopedToTargetPayload() {
+TEST(LeaseTableMultiPayload, RemoveAllScopedToTargetPayload) {
   LeaseTable table;
   const auto pa = MakePayload("payload-rm-a");
   const auto pb = MakePayload("payload-rm-b");
@@ -116,20 +98,20 @@ void TestRemoveAllScopedToTargetPayload() {
   table.Insert(ActiveLease("a-2", pa));
   table.Insert(ActiveLease("b-1", pb));
 
-  assert(table.HasActive(pa));
-  assert(table.HasActive(pb));
+  EXPECT_TRUE(table.HasActive(pa));
+  EXPECT_TRUE(table.HasActive(pb));
 
   table.RemoveAll(pa);
 
-  assert(!table.HasActive(pa) && "payload_a must have no leases after RemoveAll");
-  assert(table.HasActive(pb) && "payload_b lease must survive RemoveAll(pa)");
+  EXPECT_FALSE(table.HasActive(pa)) << "payload_a must have no leases after RemoveAll";
+  EXPECT_TRUE(table.HasActive(pb)) << "payload_b lease must survive RemoveAll(pa)";
 }
 
 // ---------------------------------------------------------------------------
 // Test: RemoveAll on payload with many leases leaves the table clean for
 //       that payload while other payloads are unaffected.
 // ---------------------------------------------------------------------------
-void TestRemoveAllClearsAllLeasesForPayload() {
+TEST(LeaseTableMultiPayload, RemoveAllClearsAllLeasesForPayload) {
   LeaseTable table;
   const auto pa = MakePayload("payload-many");
   const auto pb = MakePayload("payload-bystander");
@@ -141,18 +123,6 @@ void TestRemoveAllClearsAllLeasesForPayload() {
 
   table.RemoveAll(pa);
 
-  assert(!table.HasActive(pa) && "all leases for payload_a must be gone");
-  assert(table.HasActive(pb) && "payload_b bystander lease must survive");
-}
-
-} // namespace
-
-int main() {
-  TestInsertSweepScopedToTargetPayload();
-  TestHasActiveDoesNotAffectOtherPayloads();
-  TestRemoveAllScopedToTargetPayload();
-  TestRemoveAllClearsAllLeasesForPayload();
-
-  std::cout << "lease_table_multi_payload_test: pass\n";
-  return 0;
+  EXPECT_FALSE(table.HasActive(pa)) << "all leases for payload_a must be gone";
+  EXPECT_TRUE(table.HasActive(pb)) << "payload_b bystander lease must survive";
 }

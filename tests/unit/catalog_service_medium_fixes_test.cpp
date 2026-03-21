@@ -6,9 +6,9 @@
   - Spill uses per-payload GetSpillTarget instead of hardcoded TIER_DISK
 */
 
-#include <cassert>
+#include <gtest/gtest.h>
+
 #include <cstring>
-#include <iostream>
 #include <memory>
 #include <stdexcept>
 #include <unordered_map>
@@ -104,46 +104,32 @@ struct Fixture {
   payload::service::CatalogService                       service{ctx};
 };
 
-// ---------------------------------------------------------------------------
-// Tests
-// ---------------------------------------------------------------------------
+} // namespace
 
 // Allocate with TIER_UNSPECIFIED must throw.
-void TestAllocateUnspecifiedTierThrows() {
+TEST(CatalogServiceMediumFixes, AllocateUnspecifiedTierThrows) {
   Fixture f;
 
   AllocatePayloadRequest req;
   req.set_size_bytes(64);
   req.set_preferred_tier(TIER_UNSPECIFIED);
 
-  bool threw = false;
-  try {
-    f.service.Allocate(req);
-  } catch (const std::exception&) {
-    threw = true;
-  }
-  assert(threw && "Allocate with TIER_UNSPECIFIED must throw");
+  EXPECT_THROW(f.service.Allocate(req), std::exception) << "Allocate with TIER_UNSPECIFIED must throw";
 }
 
 // Allocate with TIER_RAM succeeds (regression — valid tier still works).
-void TestAllocateValidTierSucceeds() {
+TEST(CatalogServiceMediumFixes, AllocateValidTierSucceeds) {
   Fixture f;
 
   AllocatePayloadRequest req;
   req.set_size_bytes(64);
   req.set_preferred_tier(TIER_RAM);
 
-  bool threw = false;
-  try {
-    f.service.Allocate(req);
-  } catch (const std::exception&) {
-    threw = true;
-  }
-  assert(!threw && "Allocate with TIER_RAM must not throw");
+  EXPECT_NO_THROW(f.service.Allocate(req)) << "Allocate with TIER_RAM must not throw";
 }
 
 // Promote with TIER_UNSPECIFIED must throw.
-void TestPromoteUnspecifiedTierThrows() {
+TEST(CatalogServiceMediumFixes, PromoteUnspecifiedTierThrows) {
   Fixture f;
 
   // Allocate + commit a payload first.
@@ -160,17 +146,11 @@ void TestPromoteUnspecifiedTierThrows() {
   *promote_req.mutable_id() = alloc_resp.payload_descriptor().payload_id();
   promote_req.set_target_tier(TIER_UNSPECIFIED);
 
-  bool threw = false;
-  try {
-    f.service.Promote(promote_req);
-  } catch (const std::exception&) {
-    threw = true;
-  }
-  assert(threw && "Promote with TIER_UNSPECIFIED must throw");
+  EXPECT_THROW(f.service.Promote(promote_req), std::exception) << "Promote with TIER_UNSPECIFIED must throw";
 }
 
 // Spill: default spill target (TIER_DISK) is used when no eviction policy set.
-void TestSpillDefaultTargetIsDisk() {
+TEST(CatalogServiceMediumFixes, SpillDefaultTargetIsDisk) {
   Fixture f;
 
   AllocatePayloadRequest alloc_req;
@@ -187,14 +167,14 @@ void TestSpillDefaultTargetIsDisk() {
   spill_req.set_fsync(false);
 
   const auto resp = f.service.Spill(spill_req);
-  assert(resp.results_size() == 1);
-  assert(resp.results(0).ok() && "spill to TIER_DISK (default target) must succeed");
-  assert(f.disk->Has(alloc_resp.payload_descriptor().payload_id()));
+  EXPECT_EQ(resp.results_size(), 1);
+  EXPECT_TRUE(resp.results(0).ok()) << "spill to TIER_DISK (default target) must succeed";
+  EXPECT_TRUE(f.disk->Has(alloc_resp.payload_descriptor().payload_id()));
 }
 
 // Spill: payload with spill_target=TIER_OBJECT fails because no OBJECT backend
 // is registered, confirming that GetSpillTarget (not hardcoded TIER_DISK) is used.
-void TestSpillUsesPerPayloadTarget() {
+TEST(CatalogServiceMediumFixes, SpillUsesPerPayloadTarget) {
   Fixture f; // No OBJECT backend registered.
 
   EvictionPolicy policy;
@@ -215,14 +195,14 @@ void TestSpillUsesPerPayloadTarget() {
   spill_req.set_fsync(false);
 
   const auto resp = f.service.Spill(spill_req);
-  assert(resp.results_size() == 1);
+  EXPECT_EQ(resp.results_size(), 1);
   // Must fail — no OBJECT storage backend — proving we used TIER_OBJECT, not TIER_DISK.
-  assert(!resp.results(0).ok() && "spill must fail when target tier has no backend");
-  assert(!resp.results(0).error_message().empty());
+  EXPECT_FALSE(resp.results(0).ok()) << "spill must fail when target tier has no backend";
+  EXPECT_FALSE(resp.results(0).error_message().empty());
 }
 
 // Fix 10: ListPayloads with a tier filter only returns payloads on that tier.
-void TestListPayloadsTierFilter() {
+TEST(CatalogServiceMediumFixes, ListPayloadsTierFilter) {
   Fixture f;
 
   // Allocate + commit a RAM payload.
@@ -234,8 +214,7 @@ void TestListPayloadsTierFilter() {
   *commit_ram.mutable_id() = ram_resp.payload_descriptor().payload_id();
   f.service.Commit(commit_ram);
 
-  // Allocate + commit a DISK payload (spill RAM→DISK then spill again isn't
-  // necessary; allocate directly on DISK).
+  // Allocate + commit a DISK payload.
   AllocatePayloadRequest disk_req;
   disk_req.set_size_bytes(64);
   disk_req.set_preferred_tier(TIER_DISK);
@@ -247,33 +226,19 @@ void TestListPayloadsTierFilter() {
   // List all — expect 2 payloads.
   payload::manager::v1::ListPayloadsRequest list_all;
   const auto                                all = f.service.ListPayloads(list_all);
-  assert(all.payloads_size() == 2 && "expected 2 payloads total");
+  EXPECT_EQ(all.payloads_size(), 2) << "expected 2 payloads total";
 
   // List with tier_filter=TIER_RAM — expect 1 payload (the RAM one).
   payload::manager::v1::ListPayloadsRequest list_ram;
   list_ram.set_tier_filter(TIER_RAM);
   const auto ram_only = f.service.ListPayloads(list_ram);
-  assert(ram_only.payloads_size() == 1 && "expected 1 RAM payload");
-  assert(ram_only.payloads(0).id().value() == ram_resp.payload_descriptor().payload_id().value() && "wrong payload returned for RAM filter");
+  EXPECT_EQ(ram_only.payloads_size(), 1) << "expected 1 RAM payload";
+  EXPECT_EQ(ram_only.payloads(0).id().value(), ram_resp.payload_descriptor().payload_id().value()) << "wrong payload returned for RAM filter";
 
   // List with tier_filter=TIER_DISK — expect 1 payload (the DISK one).
   payload::manager::v1::ListPayloadsRequest list_disk;
   list_disk.set_tier_filter(TIER_DISK);
   const auto disk_only = f.service.ListPayloads(list_disk);
-  assert(disk_only.payloads_size() == 1 && "expected 1 DISK payload");
-  assert(disk_only.payloads(0).id().value() == disk_resp.payload_descriptor().payload_id().value() && "wrong payload returned for DISK filter");
-}
-
-} // namespace
-
-int main() {
-  TestAllocateUnspecifiedTierThrows();
-  TestAllocateValidTierSucceeds();
-  TestPromoteUnspecifiedTierThrows();
-  TestSpillDefaultTargetIsDisk();
-  TestSpillUsesPerPayloadTarget();
-  TestListPayloadsTierFilter();
-
-  std::cout << "catalog_service_medium_fixes: pass\n";
-  return 0;
+  EXPECT_EQ(disk_only.payloads_size(), 1) << "expected 1 DISK payload";
+  EXPECT_EQ(disk_only.payloads(0).id().value(), disk_resp.payload_descriptor().payload_id().value()) << "wrong payload returned for DISK filter";
 }

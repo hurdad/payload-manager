@@ -1,24 +1,10 @@
 /*
   Tests for TODO #14: Subscribe now returns a SubscribeBatch that includes
   next_offset so the gRPC streaming handler can implement a live polling loop.
-
-  Before the fix Subscribe returned a plain vector<SubscribeResponse> and the
-  gRPC handler wrote the batch then immediately closed the stream.  There was
-  no way for the handler to know which offset to poll from next, especially
-  when the initial batch was empty (e.g. from_latest on an empty stream).
-
-  Covered:
-    - next_offset is 0 when Subscribe is called on an empty stream
-    - next_offset advances to (last_entry.offset + 1) after reading N entries
-    - Subscribing from a non-zero start_offset sets next_offset accordingly
-    - from_latest on a non-empty stream sets next_offset to one past the tail
-      and returns an empty response batch (nothing to read yet)
-    - Subscribing from next_offset after an append picks up the new entry
-      (simulates the polling loop used by StreamServer::Subscribe)
 */
 
-#include <cassert>
-#include <iostream>
+#include <gtest/gtest.h>
+
 #include <memory>
 #include <string>
 
@@ -80,10 +66,12 @@ void AppendN(StreamService& svc, const StreamID& stream, int n) {
   svc.Append(req);
 }
 
+} // namespace
+
 // ---------------------------------------------------------------------------
 // Test: next_offset is 0 when Subscribe is called on an empty stream.
 // ---------------------------------------------------------------------------
-void TestSubscribeEmptyStreamNextOffsetIsZero() {
+TEST(StreamServiceSubscribe, SubscribeEmptyStreamNextOffsetIsZero) {
   auto svc    = MakeService();
   auto stream = MakeStream("empty");
   CreateStream(svc, stream);
@@ -94,15 +82,15 @@ void TestSubscribeEmptyStreamNextOffsetIsZero() {
 
   const auto batch = svc.Subscribe(req);
 
-  assert(batch.responses.empty() && "no entries expected on empty stream");
-  assert(batch.next_offset == 0 && "next_offset must be 0 on an empty stream");
+  EXPECT_TRUE(batch.responses.empty()) << "no entries expected on empty stream";
+  EXPECT_EQ(batch.next_offset, 0u) << "next_offset must be 0 on an empty stream";
 }
 
 // ---------------------------------------------------------------------------
 // Test: next_offset is (last_offset + 1) = N after appending N entries and
 //       reading all of them from offset 0.
 // ---------------------------------------------------------------------------
-void TestSubscribeNextOffsetAdvancesWithEntries() {
+TEST(StreamServiceSubscribe, SubscribeNextOffsetAdvancesWithEntries) {
   auto svc    = MakeService();
   auto stream = MakeStream("full");
   CreateStream(svc, stream);
@@ -114,15 +102,15 @@ void TestSubscribeNextOffsetAdvancesWithEntries() {
 
   const auto batch = svc.Subscribe(req);
 
-  assert(batch.responses.size() == 5 && "must return all 5 entries");
-  assert(batch.next_offset == 5 && "next_offset must be 5 after reading offsets 0-4");
+  EXPECT_EQ(batch.responses.size(), 5u) << "must return all 5 entries";
+  EXPECT_EQ(batch.next_offset, 5u) << "next_offset must be 5 after reading offsets 0-4";
 }
 
 // ---------------------------------------------------------------------------
 // Test: Subscribing from a mid-stream offset sets next_offset relative to the
 //       last returned entry, not the beginning of the stream.
 // ---------------------------------------------------------------------------
-void TestSubscribeFromMidOffsetSetsNextOffsetCorrectly() {
+TEST(StreamServiceSubscribe, SubscribeFromMidOffsetSetsNextOffsetCorrectly) {
   auto svc    = MakeService();
   auto stream = MakeStream("mid");
   CreateStream(svc, stream);
@@ -134,16 +122,15 @@ void TestSubscribeFromMidOffsetSetsNextOffsetCorrectly() {
 
   const auto batch = svc.Subscribe(req);
 
-  assert(batch.responses.size() == 3 && "must return entries at offsets 7, 8, 9");
-  assert(batch.next_offset == 10 && "next_offset must be 10 (one past offset 9)");
+  EXPECT_EQ(batch.responses.size(), 3u) << "must return entries at offsets 7, 8, 9";
+  EXPECT_EQ(batch.next_offset, 10u) << "next_offset must be 10 (one past offset 9)";
 }
 
 // ---------------------------------------------------------------------------
 // Test: from_latest on a non-empty stream returns an empty response batch and
-//       sets next_offset to one past the tail so the polling loop starts at
-//       the correct position for future entries.
+//       sets next_offset to one past the tail.
 // ---------------------------------------------------------------------------
-void TestSubscribeFromLatestReturnsEmptyBatchWithCorrectNextOffset() {
+TEST(StreamServiceSubscribe, SubscribeFromLatestReturnsEmptyBatchWithCorrectNextOffset) {
   auto svc    = MakeService();
   auto stream = MakeStream("latest");
   CreateStream(svc, stream);
@@ -155,14 +142,14 @@ void TestSubscribeFromLatestReturnsEmptyBatchWithCorrectNextOffset() {
 
   const auto batch = svc.Subscribe(req);
 
-  assert(batch.responses.empty() && "from_latest must return no entries when already at tail");
-  assert(batch.next_offset == 3 && "from_latest next_offset must be one past the current tail (offset 2)");
+  EXPECT_TRUE(batch.responses.empty()) << "from_latest must return no entries when already at tail";
+  EXPECT_EQ(batch.next_offset, 3u) << "from_latest next_offset must be one past the current tail (offset 2)";
 }
 
 // ---------------------------------------------------------------------------
 // Test: from_latest on an empty stream returns next_offset = 0.
 // ---------------------------------------------------------------------------
-void TestSubscribeFromLatestOnEmptyStreamNextOffsetIsZero() {
+TEST(StreamServiceSubscribe, SubscribeFromLatestOnEmptyStreamNextOffsetIsZero) {
   auto svc    = MakeService();
   auto stream = MakeStream("latest-empty");
   CreateStream(svc, stream);
@@ -173,16 +160,15 @@ void TestSubscribeFromLatestOnEmptyStreamNextOffsetIsZero() {
 
   const auto batch = svc.Subscribe(req);
 
-  assert(batch.responses.empty());
-  assert(batch.next_offset == 0 && "from_latest on empty stream must start at offset 0");
+  EXPECT_TRUE(batch.responses.empty());
+  EXPECT_EQ(batch.next_offset, 0u) << "from_latest on empty stream must start at offset 0";
 }
 
 // ---------------------------------------------------------------------------
 // Test: Simulated polling loop — Subscribe, append new entry, Subscribe again
 //       from next_offset, and verify the new entry is returned.
-//       This exercises the pattern used by StreamServer::Subscribe.
 // ---------------------------------------------------------------------------
-void TestPollingLoopPicksUpNewEntry() {
+TEST(StreamServiceSubscribe, PollingLoopPicksUpNewEntry) {
   auto       repo   = std::make_shared<MemoryRepository>();
   auto       svc    = MakeService(repo);
   const auto stream = MakeStream("poll");
@@ -195,8 +181,8 @@ void TestPollingLoopPicksUpNewEntry() {
   *first_req.mutable_stream() = stream;
   first_req.set_offset(0);
   const auto first_batch = svc.Subscribe(first_req);
-  assert(first_batch.responses.size() == 2);
-  assert(first_batch.next_offset == 2);
+  EXPECT_EQ(first_batch.responses.size(), 2u);
+  EXPECT_EQ(first_batch.next_offset, 2u);
 
   // A new entry arrives.
   AppendN(svc, stream, 1); // offset 2
@@ -207,16 +193,16 @@ void TestPollingLoopPicksUpNewEntry() {
   second_req.set_offset(first_batch.next_offset); // 2
   const auto second_batch = svc.Subscribe(second_req);
 
-  assert(second_batch.responses.size() == 1 && "polling loop must pick up the new entry");
-  assert(second_batch.responses[0].entry().offset() == 2 && "new entry must be at offset 2");
-  assert(second_batch.next_offset == 3 && "next_offset must advance past the new entry");
+  EXPECT_EQ(second_batch.responses.size(), 1u) << "polling loop must pick up the new entry";
+  EXPECT_EQ(second_batch.responses[0].entry().offset(), 2u) << "new entry must be at offset 2";
+  EXPECT_EQ(second_batch.next_offset, 3u) << "next_offset must advance past the new entry";
 }
 
 // ---------------------------------------------------------------------------
 // Test: Subscribing past the last offset yields empty batch and next_offset
 //       equals the requested start (no regression into negative).
 // ---------------------------------------------------------------------------
-void TestSubscribePastEndReturnsEmptyWithSameOffset() {
+TEST(StreamServiceSubscribe, SubscribePastEndReturnsEmptyWithSameOffset) {
   auto svc    = MakeService();
   auto stream = MakeStream("past-end");
   CreateStream(svc, stream);
@@ -228,21 +214,6 @@ void TestSubscribePastEndReturnsEmptyWithSameOffset() {
 
   const auto batch = svc.Subscribe(req);
 
-  assert(batch.responses.empty() && "no entries past the end of the stream");
-  assert(batch.next_offset == 5 && "next_offset must equal start_offset when nothing is read");
-}
-
-} // namespace
-
-int main() {
-  TestSubscribeEmptyStreamNextOffsetIsZero();
-  TestSubscribeNextOffsetAdvancesWithEntries();
-  TestSubscribeFromMidOffsetSetsNextOffsetCorrectly();
-  TestSubscribeFromLatestReturnsEmptyBatchWithCorrectNextOffset();
-  TestSubscribeFromLatestOnEmptyStreamNextOffsetIsZero();
-  TestPollingLoopPicksUpNewEntry();
-  TestSubscribePastEndReturnsEmptyWithSameOffset();
-
-  std::cout << "stream_service_subscribe_next_offset_test: pass\n";
-  return 0;
+  EXPECT_TRUE(batch.responses.empty()) << "no entries past the end of the stream";
+  EXPECT_EQ(batch.next_offset, 5u) << "next_offset must equal start_offset when nothing is read";
 }

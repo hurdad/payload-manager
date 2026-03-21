@@ -25,8 +25,8 @@
       the connection is usable for a new transaction.
 */
 
-#include <cassert>
-#include <iostream>
+#include <gtest/gtest.h>
+
 #include <memory>
 #include <stdexcept>
 
@@ -43,10 +43,9 @@ std::shared_ptr<SqliteDB> MakeDB() {
   return std::make_shared<SqliteDB>(":memory:");
 }
 
-// ---------------------------------------------------------------------------
-// Test: IsCommitted() must return false after an explicit Rollback().
-// ---------------------------------------------------------------------------
-void TestIsCommittedFalseAfterRollback() {
+} // namespace
+
+TEST(SqliteTransaction, IsCommittedFalseAfterRollback) {
   auto db = MakeDB();
   db->Exec("CREATE TABLE t (x INTEGER);");
 
@@ -54,13 +53,10 @@ void TestIsCommittedFalseAfterRollback() {
   db->Exec("INSERT INTO t VALUES (1);");
   tx.Rollback();
 
-  assert(!tx.IsCommitted() && "IsCommitted() must be false after Rollback()");
+  EXPECT_FALSE(tx.IsCommitted()) << "IsCommitted() must be false after Rollback()";
 }
 
-// ---------------------------------------------------------------------------
-// Test: IsCommitted() must return true after Commit().
-// ---------------------------------------------------------------------------
-void TestIsCommittedTrueAfterCommit() {
+TEST(SqliteTransaction, IsCommittedTrueAfterCommit) {
   auto db = MakeDB();
   db->Exec("CREATE TABLE t2 (x INTEGER);");
 
@@ -68,18 +64,10 @@ void TestIsCommittedTrueAfterCommit() {
   db->Exec("INSERT INTO t2 VALUES (42);");
   tx.Commit();
 
-  assert(tx.IsCommitted() && "IsCommitted() must be true after Commit()");
+  EXPECT_TRUE(tx.IsCommitted()) << "IsCommitted() must be true after Commit()";
 }
 
-// ---------------------------------------------------------------------------
-// Test: After an explicit Rollback(), the destructor must not attempt a
-//       second ROLLBACK.  If it did, SQLite would return
-//       "cannot rollback — no transaction is active" and the destructor's
-//       silent catch would hide the problem.  We verify by checking that a
-//       new transaction can be opened immediately after the first object is
-//       destroyed, which would fail if the connection were in a corrupt state.
-// ---------------------------------------------------------------------------
-void TestDestructorAfterRollbackDoesNotDoubleRollback() {
+TEST(SqliteTransaction, DestructorAfterRollbackDoesNotDoubleRollback) {
   auto db = MakeDB();
   db->Exec("CREATE TABLE t3 (x INTEGER);");
 
@@ -102,18 +90,13 @@ void TestDestructorAfterRollbackDoesNotDoubleRollback() {
 
   // Verify only the committed row exists (the rolled-back 99 must be absent).
   auto* stmt = db->Prepare("SELECT COUNT(*) FROM t3;");
-  assert(sqlite3_step(stmt) == SQLITE_ROW);
+  ASSERT_EQ(sqlite3_step(stmt), SQLITE_ROW);
   const int count = sqlite3_column_int(stmt, 0);
   sqlite3_finalize(stmt);
-  assert(count == 1 && "only the committed row must exist; rollback must have discarded the other");
+  EXPECT_EQ(count, 1) << "only the committed row must exist; rollback must have discarded the other";
 }
 
-// ---------------------------------------------------------------------------
-// Test: When a transaction is abandoned (destructor called without explicit
-//       Commit or Rollback), the destructor's automatic rollback must leave
-//       the connection usable.
-// ---------------------------------------------------------------------------
-void TestDestructorRollsBackAbortedTransaction() {
+TEST(SqliteTransaction, DestructorRollsBackAbortedTransaction) {
   auto db = MakeDB();
   db->Exec("CREATE TABLE t4 (x INTEGER);");
 
@@ -125,10 +108,10 @@ void TestDestructorRollsBackAbortedTransaction() {
 
   // The row must not be present.
   auto* stmt = db->Prepare("SELECT COUNT(*) FROM t4;");
-  assert(sqlite3_step(stmt) == SQLITE_ROW);
+  ASSERT_EQ(sqlite3_step(stmt), SQLITE_ROW);
   const int count = sqlite3_column_int(stmt, 0);
   sqlite3_finalize(stmt);
-  assert(count == 0 && "abandoned transaction must be rolled back by the destructor");
+  EXPECT_EQ(count, 0) << "abandoned transaction must be rolled back by the destructor";
 
   // Connection must still accept new transactions.
   {
@@ -136,16 +119,4 @@ void TestDestructorRollsBackAbortedTransaction() {
     db->Exec("INSERT INTO t4 VALUES (8);");
     tx2.Commit();
   }
-}
-
-} // namespace
-
-int main() {
-  TestIsCommittedFalseAfterRollback();
-  TestIsCommittedTrueAfterCommit();
-  TestDestructorAfterRollbackDoesNotDoubleRollback();
-  TestDestructorRollsBackAbortedTransaction();
-
-  std::cout << "sqlite_transaction_test: pass\n";
-  return 0;
 }

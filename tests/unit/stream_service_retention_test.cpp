@@ -1,5 +1,5 @@
-#include <cassert>
-#include <iostream>
+#include <gtest/gtest.h>
+
 #include <limits>
 #include <memory>
 #include <string>
@@ -40,11 +40,13 @@ AppendItem MakeItem() {
   return item;
 }
 
+} // namespace
+
 // ---------------------------------------------------------------------------
 // Test: Append with max uint64_t retention_max_age_sec does not overflow and
 // does not crash or delete all entries (cutoff should clamp to 0 or far past).
 // ---------------------------------------------------------------------------
-void TestRetentionMaxAgeSecOverflowSafe() {
+TEST(StreamServiceRetention, RetentionMaxAgeSecOverflowSafe) {
   auto repo    = std::make_shared<MemoryRepository>();
   auto service = MakeService(repo);
 
@@ -62,21 +64,21 @@ void TestRetentionMaxAgeSecOverflowSafe() {
   *append.mutable_stream() = MakeStream("overflow-test");
   *append.add_items()      = MakeItem();
   auto resp                = service.Append(append);
-  assert(resp.last_offset() == 0 && "first entry should be at offset 0");
+  EXPECT_EQ(resp.last_offset(), 0u) << "first entry should be at offset 0";
 
   // Read back — entry must still be present.
   ReadRequest read;
   *read.mutable_stream() = MakeStream("overflow-test");
   read.set_start_offset(0);
   auto result = service.Read(read);
-  assert(result.entries_size() == 1 && "entry must not be pruned by overflowed cutoff");
+  EXPECT_EQ(result.entries_size(), 1) << "entry must not be pruned by overflowed cutoff";
 }
 
 // ---------------------------------------------------------------------------
 // Test: Normal retention_max_age_sec (small value) still prunes old entries.
 // This verifies that the overflow guard doesn't break the normal path.
 // ---------------------------------------------------------------------------
-void TestRetentionMaxAgeSecNormalPath() {
+TEST(StreamServiceRetention, RetentionMaxAgeSecNormalPath) {
   auto repo    = std::make_shared<MemoryRepository>();
   auto service = MakeService(repo);
 
@@ -99,13 +101,13 @@ void TestRetentionMaxAgeSecNormalPath() {
   *read.mutable_stream() = MakeStream("normal-retention");
   read.set_start_offset(0);
   auto result = service.Read(read);
-  assert(result.entries_size() == 2 && "both entries must be present with no retention policy");
+  EXPECT_EQ(result.entries_size(), 2) << "both entries must be present with no retention policy";
 }
 
 // ---------------------------------------------------------------------------
 // Test: retention_max_entries limits stream size correctly.
 // ---------------------------------------------------------------------------
-void TestRetentionMaxEntriesTruncates() {
+TEST(StreamServiceRetention, RetentionMaxEntriesTruncates) {
   auto repo    = std::make_shared<MemoryRepository>();
   auto service = MakeService(repo);
 
@@ -125,16 +127,5 @@ void TestRetentionMaxEntriesTruncates() {
   *read.mutable_stream() = MakeStream("max-entries");
   read.set_start_offset(0);
   auto result = service.Read(read);
-  assert(result.entries_size() == 3 && "only 3 most recent entries must remain");
-}
-
-} // namespace
-
-int main() {
-  TestRetentionMaxAgeSecOverflowSafe();
-  TestRetentionMaxAgeSecNormalPath();
-  TestRetentionMaxEntriesTruncates();
-
-  std::cout << "stream_service_retention_test: pass\n";
-  return 0;
+  EXPECT_EQ(result.entries_size(), 3) << "only 3 most recent entries must remain";
 }
