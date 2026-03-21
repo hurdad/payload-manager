@@ -122,39 +122,13 @@ TEST(SpillSourceRemoveFailure, SpillDoesNotPropagateRemoveException) {
 // Test: PromoteUnlocked (via Promote) succeeds even when source Remove() throws.
 // ---------------------------------------------------------------------------
 TEST(SpillSourceRemoveFailure, PromoteDoesNotPropagateRemoveException) {
-  auto lease_mgr    = std::make_shared<payload::lease::LeaseManager>();
-  auto ram_backend  = std::make_shared<SimpleBackend>(TIER_RAM);
-  auto disk_backend = std::make_shared<ThrowingRemoveBackend>(TIER_DISK);
+  auto lease_mgr = std::make_shared<payload::lease::LeaseManager>();
 
-  payload::storage::StorageFactory::TierMap storage;
-  storage[TIER_RAM]  = ram_backend;
-  storage[TIER_DISK] = disk_backend;
-
-  payload::core::PayloadManager manager(std::move(storage), lease_mgr,
-                                        std::make_shared<payload::db::memory::MemoryRepository>());
-
-  // Allocate on RAM, spill to disk (disk Remove won't be called yet), then
-  // promote back to RAM — RAM is the destination so disk's Remove() is called.
-  auto desc = manager.Commit(manager.Allocate(64, TIER_RAM).payload_id());
-
-  // Use a normal RAM backend for spill destination, then swap to a throwing
-  // RAM backend for the promote step.  Instead, directly test: allocate on
-  // disk-tier by allocating on RAM and spilling.
-
-  // For simplicity: use a second manager where DISK Remove throws and verify
-  // Promote(DISK → RAM) succeeds.
+  // Use a manager where DISK Remove throws and verify Promote(DISK → RAM) succeeds.
   auto ram2  = std::make_shared<SimpleBackend>(TIER_RAM);
   auto disk2 = std::make_shared<ThrowingRemoveBackend>(TIER_DISK);
 
-  payload::storage::StorageFactory::TierMap storage2;
-  storage2[TIER_RAM]  = ram2;
-  storage2[TIER_DISK] = disk2;
-  payload::core::PayloadManager manager2(std::move(storage2), lease_mgr,
-                                         std::make_shared<payload::db::memory::MemoryRepository>());
-
-  // Write a payload directly to disk via Allocate(TIER_RAM) → Commit then a
-  // normal spill using a manager that doesn't throw, then reconstruct.
-  // Simplest approach: pre-seed the disk backend manually with a buffer.
+  // Pre-seed the disk backend manually with a buffer.
   payload::manager::v1::PayloadID id;
   id.set_value("test-promote-remove-failure");
 
@@ -177,7 +151,10 @@ TEST(SpillSourceRemoveFailure, PromoteDoesNotPropagateRemoveException) {
     tx->Commit();
   }
 
-  payload::core::PayloadManager manager3(std::move(storage2), lease_mgr, repo2);
+  payload::storage::StorageFactory::TierMap storage3;
+  storage3[TIER_RAM]  = ram2;
+  storage3[TIER_DISK] = disk2;
+  payload::core::PayloadManager manager3(std::move(storage3), lease_mgr, repo2);
   manager3.HydrateCaches();
 
   // Promote DISK → RAM: disk Remove() will throw.
