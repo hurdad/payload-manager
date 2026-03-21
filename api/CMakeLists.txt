@@ -171,16 +171,26 @@ endif()
 # Tools
 # ------------------------------------------------------------------------------
 
-if(TARGET protobuf::protoc)
+# Prefer system-installed tools so generated stubs match the system gRPC/
+# protobuf headers used for compilation.  FetchContent targets (e.g. from
+# opentelemetry-cpp pulling gRPC 1.49.2) generate reactor-API code that older
+# system headers (e.g. gRPC 1.30 on Ubuntu 22.04 / L4T) do not provide.
+find_program(PROTOC_PROGRAM protoc)
+if(PROTOC_PROGRAM)
+  set(PROTOC ${PROTOC_PROGRAM})
+elseif(TARGET protobuf::protoc)
   set(PROTOC $<TARGET_FILE:protobuf::protoc>)
 else()
   set(PROTOC ${Protobuf_PROTOC_EXECUTABLE})
 endif()
 
-if(TARGET gRPC::grpc_cpp_plugin)
+find_program(GRPC_CPP_PLUGIN_PROGRAM grpc_cpp_plugin)
+if(GRPC_CPP_PLUGIN_PROGRAM)
+  set(GRPC_CPP_PLUGIN ${GRPC_CPP_PLUGIN_PROGRAM})
+elseif(TARGET gRPC::grpc_cpp_plugin)
   set(GRPC_CPP_PLUGIN $<TARGET_FILE:gRPC::grpc_cpp_plugin>)
 else()
-  find_program(GRPC_CPP_PLUGIN grpc_cpp_plugin REQUIRED)
+  message(FATAL_ERROR "grpc_cpp_plugin not found")
 endif()
 
 # When protoc comes from a FetchContent build (e.g. the one bundled in gRPC
