@@ -75,4 +75,6 @@ RUN apt-get update \
 
 COPY --from=builder /workspace/build/tests/integration/payload_manager_integration_object_spill ./payload_manager_integration_object_spill
 
+HEALTHCHECK NONE
+
 ENTRYPOINT ["./payload_manager_integration_object_spill"]

@@ -55,7 +55,8 @@ class ShmBuffer final : public arrow::MutableBuffer {
 std::string RamArrowStore::Key(const PayloadID& id) {
   if (id.value().size() == 16) {
     payload::util::UUID uuid{};
-    std::memcpy(uuid.data(), id.value().data(), 16);
+    static_assert(sizeof(uuid) == 16, "UUID must be exactly 16 bytes");
+    std::memcpy(uuid.data(), id.value().data(), sizeof(uuid));
     return payload::util::ToString(uuid);
   }
   return id.value();

@@ -58,18 +58,20 @@ payload::manager::v1::LeaseID ToLeaseProto(const UUID& id) {
 }
 
 UUID FromProto(const payload::manager::v1::PayloadID& p) {
-  if (p.value().size() != 16) throw std::runtime_error("Invalid PayloadID size");
+  static_assert(std::tuple_size<UUID>::value == 16, "UUID must be exactly 16 bytes");
+  if (p.value().size() != sizeof(UUID{})) throw std::runtime_error("Invalid PayloadID size");
 
   UUID id{};
-  std::memcpy(id.data(), p.value().data(), 16);
+  std::memcpy(id.data(), p.value().data(), sizeof(id));
   return id;
 }
 
 UUID FromProto(const payload::manager::v1::LeaseID& p) {
-  if (p.value().size() != 16) throw std::runtime_error("Invalid LeaseID size");
+  static_assert(std::tuple_size<UUID>::value == 16, "UUID must be exactly 16 bytes");
+  if (p.value().size() != sizeof(UUID{})) throw std::runtime_error("Invalid LeaseID size");
 
   UUID id{};
-  std::memcpy(id.data(), p.value().data(), 16);
+  std::memcpy(id.data(), p.value().data(), sizeof(id));
   return id;
 }
 

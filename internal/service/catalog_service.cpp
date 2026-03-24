@@ -3,7 +3,6 @@
 #include <chrono>
 #include <queue>
 #include <stdexcept>
-#include <thread>
 #include <unordered_set>
 
 #include "internal/core/payload_manager.hpp"
@@ -108,14 +107,9 @@ SpillResponse CatalogService::Spill(const SpillRequest& req) {
         // Leases will naturally expire; we wait up to max_lease_ms rather than
         // spinning indefinitely.
         if (req.wait_for_leases() && ctx_.lease_mgr) {
-          constexpr auto kPollInterval = std::chrono::milliseconds(20);
-          const auto     kWaitTimeout  = std::chrono::milliseconds(ctx_.spill_wait_timeout_ms);
-          const auto     deadline      = std::chrono::steady_clock::now() + kWaitTimeout;
-          while (ctx_.lease_mgr->HasActiveLeases(id)) {
-            if (std::chrono::steady_clock::now() >= deadline) {
-              throw payload::util::LeaseConflict("spill: active leases remain after wait timeout; release leases or retry without wait_for_leases");
-            }
-            std::this_thread::sleep_for(kPollInterval);
+          const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(ctx_.spill_wait_timeout_ms);
+          if (!ctx_.lease_mgr->WaitUntilNoLeases(id, deadline)) {
+            throw payload::util::LeaseConflict("spill: active leases remain after wait timeout; release leases or retry without wait_for_leases");
           }
         }
 

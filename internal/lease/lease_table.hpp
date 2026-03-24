@@ -1,5 +1,6 @@
 #pragma once
 
+#include <condition_variable>
 #include <mutex>
 #include <unordered_map>
 #include <vector>
@@ -20,10 +21,17 @@ class LeaseTable {
 
   void RemoveAll(const payload::manager::v1::PayloadID& id);
 
+  // Block until no active leases remain for the given payload, or the deadline
+  // is reached. Returns true if the wait succeeded (no active leases), false on
+  // timeout.
+  bool WaitUntilNoLeases(const payload::manager::v1::PayloadID& id,
+                         std::chrono::steady_clock::time_point  deadline);
+
  private:
   using Clock = std::chrono::system_clock;
 
-  std::mutex mutex_;
+  std::mutex              mutex_;
+  std::condition_variable release_cv_;
 
   std::unordered_map<std::string, Lease>            leases_;
   std::unordered_multimap<std::string, std::string> by_payload_;
@@ -31,6 +39,7 @@ class LeaseTable {
   static std::string Key(const payload::manager::v1::PayloadID& id);
   static std::string Key(const payload::manager::v1::LeaseID& id);
   static bool        IsExpired(const Lease& lease, Clock::time_point now);
+  bool               HasActiveLocked(const std::string& payload_key, Clock::time_point now);
 };
 
 } // namespace payload::lease

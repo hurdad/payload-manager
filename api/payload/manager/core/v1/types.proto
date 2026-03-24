@@ -6,11 +6,11 @@ package payload.manager.core.v1;
   Higher tiers may not always be available.
 */
 enum Tier {
-  TIER_UNSPECIFIED = 0;
-  TIER_GPU = 1;
-  TIER_RAM = 2;
-  TIER_DISK = 3;
-  TIER_OBJECT = 4;
+  TIER_UNSPECIFIED = 0; // Not set; treated as an error in most contexts.
+  TIER_GPU = 1;         // GPU device memory (fastest, smallest, most volatile).
+  TIER_RAM = 2;         // Host DRAM / shared-memory segment.
+  TIER_DISK = 3;        // Local NVMe/SSD/HDD (durable, larger, slower than RAM).
+  TIER_OBJECT = 4;      // Remote object storage (S3/GCS/Azure; durable, largest).
 }
 
 /*
@@ -18,21 +18,21 @@ enum Tier {
   Clients MUST NOT assume a reversible transition.
 */
 enum PayloadState {
-  PAYLOAD_STATE_UNSPECIFIED = 0;
-  PAYLOAD_STATE_ALLOCATED = 1; // writer owns
-  PAYLOAD_STATE_ACTIVE = 2;    // visible to readers
-  PAYLOAD_STATE_SPILLING = 3;
-  PAYLOAD_STATE_DURABLE = 4;
-  PAYLOAD_STATE_EVICTING = 5;
-  PAYLOAD_STATE_DELETING = 6;
-  PAYLOAD_STATE_EXPIRED = 7;
-  PAYLOAD_STATE_DELETED = 8;
+  PAYLOAD_STATE_UNSPECIFIED = 0; // Not set; treated as an error.
+  PAYLOAD_STATE_ALLOCATED = 1;   // Reserved; writer has not yet committed data.
+  PAYLOAD_STATE_ACTIVE = 2;      // Committed and readable by consumers.
+  PAYLOAD_STATE_SPILLING = 3;    // Being moved to a lower tier; temporarily locked.
+  PAYLOAD_STATE_DURABLE = 4;     // Confirmed written to a durable tier (DISK/OBJECT).
+  PAYLOAD_STATE_EVICTING = 5;    // Being removed from its current tier under pressure.
+  PAYLOAD_STATE_DELETING = 6;    // Deletion in progress.
+  PAYLOAD_STATE_EXPIRED = 7;     // TTL elapsed; pending final deletion.
+  PAYLOAD_STATE_DELETED = 8;     // Fully deleted; ID is no longer valid.
 }
 
 enum EvictionPriority {
-  EVICTION_PRIORITY_UNSPECIFIED = 0;
-  EVICTION_PRIORITY_LOW = 1;
-  EVICTION_PRIORITY_NORMAL = 2;
-  EVICTION_PRIORITY_HIGH = 3;
-  EVICTION_PRIORITY_NEVER = 4;
+  EVICTION_PRIORITY_UNSPECIFIED = 0; // Treated as NORMAL.
+  EVICTION_PRIORITY_LOW = 1;         // Evict before NORMAL candidates.
+  EVICTION_PRIORITY_NORMAL = 2;      // Default eviction weight.
+  EVICTION_PRIORITY_HIGH = 3;        // Evict only after LOW and NORMAL are exhausted.
+  EVICTION_PRIORITY_NEVER = 4;       // Never automatically evicted (implies persist=true).
 }

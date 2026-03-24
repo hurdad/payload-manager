@@ -1,8 +1,24 @@
 #include "pg_repository.hpp"
 
+#include <stdexcept>
+#include <string>
+
 #include "payload/manager/v1.hpp"
 
 namespace payload::db::postgres {
+
+namespace {
+
+template <typename Enum>
+Enum CheckedEnumCast(int raw, int min_valid, int max_valid, const char* field_name) {
+  if (raw < min_valid || raw > max_valid) {
+    throw std::runtime_error(std::string("pg_repository: out-of-range value for ") + field_name +
+                             ": " + std::to_string(raw));
+  }
+  return static_cast<Enum>(raw);
+}
+
+} // namespace
 
 PgRepository::PgRepository(std::shared_ptr<PgPool> pool) : pool_(std::move(pool)) {
 }
@@ -36,8 +52,8 @@ std::optional<model::PayloadRecord> PgRepository::GetPayload(Transaction& t, con
 
     model::PayloadRecord r;
     r.id                = res[0][0].c_str();
-    r.tier              = (payload::manager::v1::Tier)res[0][1].as<int>();
-    r.state             = (payload::manager::v1::PayloadState)res[0][2].as<int>();
+    r.tier  = CheckedEnumCast<payload::manager::v1::Tier>(res[0][1].as<int>(), 0, 4, "tier");
+    r.state = CheckedEnumCast<payload::manager::v1::PayloadState>(res[0][2].as<int>(), 0, 8, "state");
     r.size_bytes        = res[0][3].as<uint64_t>();
     r.version           = res[0][4].as<uint64_t>();
     r.expires_at_ms     = res[0][5].is_null() ? 0 : res[0][5].as<uint64_t>();
@@ -68,8 +84,8 @@ std::vector<model::PayloadRecord> PgRepository::ListPayloads(Transaction& t, pay
     for (const auto& row : res) {
       model::PayloadRecord r;
       r.id                = row[0].c_str();
-      r.tier              = (payload::manager::v1::Tier)row[1].as<int>();
-      r.state             = (payload::manager::v1::PayloadState)row[2].as<int>();
+      r.tier  = CheckedEnumCast<payload::manager::v1::Tier>(row[1].as<int>(), 0, 4, "tier");
+      r.state = CheckedEnumCast<payload::manager::v1::PayloadState>(row[2].as<int>(), 0, 8, "state");
       r.size_bytes        = row[3].as<uint64_t>();
       r.version           = row[4].as<uint64_t>();
       r.expires_at_ms     = row[5].is_null() ? 0 : row[5].as<uint64_t>();
@@ -106,8 +122,8 @@ std::vector<model::PayloadRecord> PgRepository::ListExpiredPayloads(Transaction&
     for (const auto& row : res) {
       model::PayloadRecord r;
       r.id                = row[0].c_str();
-      r.tier              = (payload::manager::v1::Tier)row[1].as<int>();
-      r.state             = (payload::manager::v1::PayloadState)row[2].as<int>();
+      r.tier  = CheckedEnumCast<payload::manager::v1::Tier>(row[1].as<int>(), 0, 4, "tier");
+      r.state = CheckedEnumCast<payload::manager::v1::PayloadState>(row[2].as<int>(), 0, 8, "state");
       r.size_bytes        = row[3].as<uint64_t>();
       r.version           = row[4].as<uint64_t>();
       r.expires_at_ms     = row[5].is_null() ? 0 : row[5].as<uint64_t>();

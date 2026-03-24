@@ -1,6 +1,7 @@
 #include "factory.hpp"
 
 #include <chrono>
+#include <limits>
 #include <memory>
 #include <stdexcept>
 #include <string>
@@ -196,15 +197,27 @@ std::shared_ptr<db::Repository> BuildRepository(const payload::runtime::config::
 
   if (database.has_postgres()) {
 #if PAYLOAD_DB_POSTGRES
-    // The snapshot cache uses single-instance semantics: mutations applied
-    // directly to the PostgreSQL database by another process (or a future
-    // second instance) are NOT reflected until HydrateCaches() is called.
-    // Run only one payload-manager instance per database to avoid silent
-    // cache divergence.
-    PAYLOAD_LOG_WARN(
-        "PostgreSQL backend: snapshot cache enforces single-instance semantics; direct DB mutations from other processes will not be visible until "
-        "HydrateCaches() is called");
     BootstrapPostgresSchema(database.postgres().connection_uri());
+
+    // Single-instance guard: acquire a PostgreSQL session-level advisory lock.
+    // pg_try_advisory_lock returns true only if this session obtained the lock.
+    // The lock is held until the connection is closed (process exit), so a
+    // second instance connecting to the same database will fail here rather
+    // than silently diverging the snapshot cache.
+    static constexpr int64_t              kSingleInstanceLockId = 0x5041594C4F414400LL; // "PAYLOAD\0"
+    static std::unique_ptr<pqxx::connection> s_pg_guard; // held for process lifetime
+    s_pg_guard = std::make_unique<pqxx::connection>(database.postgres().connection_uri());
+    {
+      pqxx::nontransaction ntx(*s_pg_guard);
+      auto                 res = ntx.exec_params("SELECT pg_try_advisory_lock($1);", kSingleInstanceLockId);
+      if (res.empty() || !res[0][0].as<bool>()) {
+        s_pg_guard.reset();
+        throw std::runtime_error(
+            "payload-manager: another instance is already connected to this PostgreSQL database. "
+            "Only one payload-manager instance may run per database.");
+      }
+    }
+
     auto pool = std::make_shared<db::postgres::PgPool>(database.postgres().connection_uri(), database.postgres().max_connections());
     return std::make_shared<db::postgres::PgRepository>(std::move(pool));
 #else
@@ -265,8 +278,16 @@ Application Build(const payload::runtime::config::RuntimeConfig& config) {
   // ------------------------------------------------------------------
   auto pressure_state       = std::make_shared<tiering::PressureState>();
   pressure_state->ram_limit = config.storage().ram().capacity_bytes();
+  // A limit of 0 means "unconfigured / no cap". Set to UINT64_MAX so
+  // pressure checks never trigger automatic eviction for that tier.
+  if (pressure_state->ram_limit == 0) {
+    pressure_state->ram_limit = std::numeric_limits<uint64_t>::max();
+  }
   for (const auto& dev : config.storage().gpu().devices()) {
     pressure_state->gpu_limit += dev.capacity_bytes();
+  }
+  if (pressure_state->gpu_limit == 0) {
+    pressure_state->gpu_limit = std::numeric_limits<uint64_t>::max();
   }
 
   auto tiering_policy = std::make_shared<tiering::TieringPolicy>(

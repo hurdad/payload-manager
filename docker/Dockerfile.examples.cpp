@@ -76,4 +76,6 @@ COPY --from=builder /workspace/build/examples/cpp/payload_manager_example_* ./
 COPY --from=builder /workspace/src/examples/run_examples.sh ./
 RUN chmod +x ./run_examples.sh
 
+HEALTHCHECK NONE
+
 ENTRYPOINT ["./run_examples.sh"]

@@ -4,11 +4,27 @@
 
 #include <chrono>
 #include <cstring>
+#include <limits>
+#include <stdexcept>
+#include <string>
 
 #include "internal/util/uuid.hpp"
 #include "payload/manager/v1.hpp"
 
 namespace payload::db::sqlite {
+
+namespace {
+
+template <typename Enum>
+Enum CheckedEnumCast(int raw, int min_valid, int max_valid, const char* field_name) {
+  if (raw < min_valid || raw > max_valid) {
+    throw std::runtime_error(std::string("sqlite_repository: out-of-range value for ") + field_name +
+                             ": " + std::to_string(raw));
+  }
+  return static_cast<Enum>(raw);
+}
+
+} // namespace
 
 using payload::db::ErrorCode;
 using payload::db::Result;
@@ -39,9 +55,10 @@ static std::string ColUuid(sqlite3_stmt* st, int col) {
   if (sqlite3_column_type(st, col) == SQLITE_BLOB) {
     const void* data = sqlite3_column_blob(st, col);
     int         len  = sqlite3_column_bytes(st, col);
-    if (data && len == 16) {
+    static_assert(sizeof(payload::util::UUID{}) == 16, "UUID must be exactly 16 bytes");
+    if (data && len == static_cast<int>(sizeof(payload::util::UUID{}))) {
       payload::util::UUID uuid{};
-      std::memcpy(uuid.data(), data, 16);
+      std::memcpy(uuid.data(), data, sizeof(uuid));
       return payload::util::ToString(uuid);
     }
   }
@@ -49,11 +66,12 @@ static std::string ColUuid(sqlite3_stmt* st, int col) {
   return t ? reinterpret_cast<const char*>(t) : "";
 }
 
-// SQLite stores all integers as int64. Values above INT64_MAX are stored as
-// negative int64_t but round-trip correctly via ColU64's matching cast.
-// All current callers (timestamps in ms, sizes ≤ 128 GiB, stream offsets)
-// are well below INT64_MAX, so overflow is not a practical concern today.
+// SQLite stores all integers as int64. Values above INT64_MAX cannot be
+// represented; throw rather than silently wrapping to a negative value.
 static void BindU64(sqlite3_stmt* st, int idx, uint64_t v) {
+  if (v > static_cast<uint64_t>(std::numeric_limits<int64_t>::max())) {
+    throw std::overflow_error("BindU64: value exceeds INT64_MAX and cannot be stored in SQLite");
+  }
   sqlite3_bind_int64(st, idx, static_cast<sqlite3_int64>(v));
 }
 
@@ -156,8 +174,8 @@ std::optional<model::PayloadRecord> SqliteRepository::GetPayload(Transaction& t,
 
   model::PayloadRecord r;
   r.id                = ColUuid(st, 0);
-  r.tier              = static_cast<payload::manager::v1::Tier>(ColI32(st, 1));
-  r.state             = static_cast<payload::manager::v1::PayloadState>(ColI32(st, 2));
+  r.tier  = CheckedEnumCast<payload::manager::v1::Tier>(ColI32(st, 1), 0, 4, "tier");
+  r.state = CheckedEnumCast<payload::manager::v1::PayloadState>(ColI32(st, 2), 0, 8, "state");
   r.size_bytes        = ColU64(st, 3);
   r.version           = ColU64(st, 4);
   r.expires_at_ms     = sqlite3_column_type(st, 5) != SQLITE_NULL ? ColU64(st, 5) : 0;
@@ -188,8 +206,8 @@ std::vector<model::PayloadRecord> SqliteRepository::ListPayloads(Transaction& t,
   while (sqlite3_step(st) == SQLITE_ROW) {
     model::PayloadRecord r;
     r.id                = ColUuid(st, 0);
-    r.tier              = static_cast<payload::manager::v1::Tier>(ColI32(st, 1));
-    r.state             = static_cast<payload::manager::v1::PayloadState>(ColI32(st, 2));
+    r.tier  = CheckedEnumCast<payload::manager::v1::Tier>(ColI32(st, 1), 0, 4, "tier");
+    r.state = CheckedEnumCast<payload::manager::v1::PayloadState>(ColI32(st, 2), 0, 8, "state");
     r.size_bytes        = ColU64(st, 3);
     r.version           = ColU64(st, 4);
     r.expires_at_ms     = sqlite3_column_type(st, 5) != SQLITE_NULL ? ColU64(st, 5) : 0;
@@ -248,8 +266,8 @@ std::vector<model::PayloadRecord> SqliteRepository::ListExpiredPayloads(Transact
   while (sqlite3_step(st) == SQLITE_ROW) {
     model::PayloadRecord r;
     r.id                = ColUuid(st, 0);
-    r.tier              = static_cast<payload::manager::v1::Tier>(ColI32(st, 1));
-    r.state             = static_cast<payload::manager::v1::PayloadState>(ColI32(st, 2));
+    r.tier  = CheckedEnumCast<payload::manager::v1::Tier>(ColI32(st, 1), 0, 4, "tier");
+    r.state = CheckedEnumCast<payload::manager::v1::PayloadState>(ColI32(st, 2), 0, 8, "state");
     r.size_bytes        = ColU64(st, 3);
     r.version           = ColU64(st, 4);
     r.expires_at_ms     = ColU64(st, 5);

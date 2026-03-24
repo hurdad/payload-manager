@@ -26,6 +26,11 @@ class LeaseManager {
 
   void InvalidateAll(const payload::manager::v1::PayloadID& id);
 
+  // Block until no active leases remain for the given payload, or deadline is reached.
+  // Returns true on success (no active leases), false on timeout.
+  bool WaitUntilNoLeases(const payload::manager::v1::PayloadID& id,
+                         std::chrono::steady_clock::time_point  deadline);
+
  private:
   LeaseTable table_;
   uint64_t   default_lease_ms_;

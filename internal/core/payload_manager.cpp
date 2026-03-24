@@ -51,10 +51,12 @@ void PayloadManager::UpdateTierBytes(Tier tier, int64_t delta) {
     std::lock_guard<std::mutex> lock(tier_bytes_guard_);
     auto&                       val = tier_bytes_[static_cast<int>(tier)];
     if (delta < 0 && static_cast<uint64_t>(-delta) > val) {
-      PAYLOAD_LOG_WARN("tier byte accounting underflow clamped to zero",
-                       {payload::observability::StringField("tier", TierName(tier)),
-                        payload::observability::IntField("delta", delta),
-                        payload::observability::IntField("current", static_cast<int64_t>(val))});
+      PAYLOAD_LOG_ERROR("tier byte accounting underflow: programming error — UpdateTierBytes called with "
+                        "delta that exceeds current total; clamping to 0. This indicates a missed Allocate "
+                        "accounting call.",
+                        {payload::observability::StringField("tier", TierName(tier)),
+                         payload::observability::IntField("delta", delta),
+                         payload::observability::IntField("current", static_cast<int64_t>(val))});
       val = 0;
     } else {
       val = static_cast<uint64_t>(static_cast<int64_t>(val) + delta);
@@ -70,10 +72,12 @@ void PayloadManager::UpdateTierCount(Tier tier, int64_t delta) {
     std::lock_guard<std::mutex> lock(tier_count_guard_);
     auto&                       val = tier_count_[static_cast<int>(tier)];
     if (delta < 0 && static_cast<uint64_t>(-delta) > val) {
-      PAYLOAD_LOG_WARN("tier count accounting underflow clamped to zero",
-                       {payload::observability::StringField("tier", TierName(tier)),
-                        payload::observability::IntField("delta", delta),
-                        payload::observability::IntField("current", static_cast<int64_t>(val))});
+      PAYLOAD_LOG_ERROR("tier count accounting underflow: programming error — UpdateTierCount called with "
+                        "delta that exceeds current total; clamping to 0. This indicates a missed Allocate "
+                        "accounting call.",
+                        {payload::observability::StringField("tier", TierName(tier)),
+                         payload::observability::IntField("delta", delta),
+                         payload::observability::IntField("current", static_cast<int64_t>(val))});
       val = 0;
     } else {
       val = static_cast<uint64_t>(static_cast<int64_t>(val) + delta);
@@ -631,6 +635,18 @@ AcquireReadLeaseResponse PayloadManager::AcquireReadLease(const PayloadID& id, T
     throw payload::util::InvalidState("acquire lease: payload is not readable; commit or promote payload before leasing");
   }
   auto lease = lease_mgr_->Acquire(id, desc, min_duration_ms);
+
+  // Post-acquire re-check: verify the payload was not deleted between
+  // ResolveSnapshot and Acquire. Both operations hold delete_mutex_ so a
+  // concurrent Delete cannot slip in, but this guard makes the invariant
+  // explicit and protects against future code paths that may skip the lock.
+  {
+    std::shared_lock cache_lock(snapshot_cache_mutex_);
+    if (snapshot_cache_.find(Key(id)) == snapshot_cache_.end()) {
+      lease_mgr_->Release(lease.lease_id);
+      throw payload::util::NotFound("acquire lease: payload was deleted concurrently");
+    }
+  }
 
   AcquireReadLeaseResponse resp;
   *resp.mutable_payload_descriptor() = desc;

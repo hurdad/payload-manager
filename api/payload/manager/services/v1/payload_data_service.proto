@@ -5,10 +5,20 @@ import "google/protobuf/empty.proto";
 import "payload/manager/runtime/v1/lease.proto";
 
 /*
-  High-frequency runtime operations.
+  High-frequency runtime data-plane operations.
 
-  ResolveSnapshot → advisory
-  AcquireReadLease → safe descriptor
+  ResolveSnapshot: Returns the current placement descriptor for a payload
+  (tier, location, state). This is an ADVISORY snapshot — the payload may
+  move to a different tier or be deleted between this call and any subsequent
+  read. Do NOT use this descriptor to access payload data directly. Use
+  AcquireReadLease to obtain a stable, lease-protected descriptor.
+
+  AcquireReadLease: Atomically resolves the payload snapshot and acquires a
+  time-bounded read lease. The lease prevents the payload from being evicted
+  or deleted until it expires or is explicitly released. Clients SHOULD call
+  ReleaseLease when done to unblock pending spill or delete operations.
+
+  ReleaseLease: Explicitly releases a lease before its expiry.
 */
 service PayloadDataService {
 

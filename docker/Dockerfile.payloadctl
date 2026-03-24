@@ -47,4 +47,6 @@ RUN apt-get update \
 
 COPY --from=builder /workspace/build/bin/payloadctl ./payloadctl
 
+HEALTHCHECK NONE
+
 ENTRYPOINT ["/app/payloadctl"]

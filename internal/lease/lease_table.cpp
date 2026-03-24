@@ -51,21 +51,24 @@ Lease LeaseTable::Insert(const Lease& lease) {
 }
 
 void LeaseTable::Remove(const payload::manager::v1::LeaseID& lease_id) {
-  std::lock_guard lock(mutex_);
+  {
+    std::lock_guard lock(mutex_);
 
-  const auto lease_key = Key(lease_id);
-  auto       it        = leases_.find(lease_key);
-  if (it == leases_.end()) return;
+    const auto lease_key = Key(lease_id);
+    auto       it        = leases_.find(lease_key);
+    if (it == leases_.end()) return;
 
-  auto range = by_payload_.equal_range(Key(it->second.payload_id));
-  for (auto i = range.first; i != range.second; ++i) {
-    if (i->second == lease_key) {
-      by_payload_.erase(i);
-      break;
+    auto range = by_payload_.equal_range(Key(it->second.payload_id));
+    for (auto i = range.first; i != range.second; ++i) {
+      if (i->second == lease_key) {
+        by_payload_.erase(i);
+        break;
+      }
     }
-  }
 
-  leases_.erase(it);
+    leases_.erase(it);
+  }
+  release_cv_.notify_all();
 }
 
 bool LeaseTable::HasActive(const payload::manager::v1::PayloadID& id) {
@@ -113,14 +116,40 @@ uint32_t LeaseTable::CountActive(const payload::manager::v1::PayloadID& id) {
 }
 
 void LeaseTable::RemoveAll(const payload::manager::v1::PayloadID& id) {
-  std::lock_guard lock(mutex_);
+  {
+    std::lock_guard lock(mutex_);
 
-  const auto payload_key = Key(id);
-  auto       range       = by_payload_.equal_range(payload_key);
-  for (auto it = range.first; it != range.second;) {
-    leases_.erase(it->second);
-    it = by_payload_.erase(it);
+    const auto payload_key = Key(id);
+    auto       range       = by_payload_.equal_range(payload_key);
+    for (auto it = range.first; it != range.second;) {
+      leases_.erase(it->second);
+      it = by_payload_.erase(it);
+    }
   }
+  release_cv_.notify_all();
+}
+
+bool LeaseTable::HasActiveLocked(const std::string& payload_key, Clock::time_point now) {
+  auto range = by_payload_.equal_range(payload_key);
+  for (auto it = range.first; it != range.second;) {
+    auto lease_it = leases_.find(it->second);
+    if (lease_it == leases_.end() || IsExpired(lease_it->second, now) || Key(lease_it->second.payload_id) != payload_key) {
+      if (lease_it != leases_.end()) leases_.erase(lease_it);
+      it = by_payload_.erase(it);
+      continue;
+    }
+    return true;
+  }
+  return false;
+}
+
+bool LeaseTable::WaitUntilNoLeases(const payload::manager::v1::PayloadID& id,
+                                   std::chrono::steady_clock::time_point  deadline) {
+  const auto payload_key = Key(id);
+  std::unique_lock lock(mutex_);
+  return release_cv_.wait_until(lock, deadline, [&] {
+    return !HasActiveLocked(payload_key, Clock::now());
+  });
 }
 
 } // namespace payload::lease

@@ -60,11 +60,11 @@ if(PAYLOAD_MANAGER_ENABLE_OTEL)
 
     set(_otel_cache_vars BUILD_TESTING WITH_OTLP_GRPC WITH_OTLP_HTTP WITH_EXAMPLES WITH_FUNC_TESTS WITH_BENCHMARK BUILD_SHARED_LIBS)
     foreach(_otel_var IN LISTS _otel_cache_vars)
-      if(DEFINED CACHE{${_otel_var}})
-        set(_saved_${_otel_var} "$CACHE{${_otel_var}}")
-        set(_had_${_otel_var} TRUE)
-      else()
-        set(_had_${_otel_var} FALSE)
+      # Use get_property(... SET) instead of DEFINED CACHE{} to correctly detect
+      # whether the variable exists as a cache entry regardless of its type.
+      get_property(_had_${_otel_var} CACHE ${_otel_var} PROPERTY VALUE SET)
+      if(_had_${_otel_var})
+        get_property(_saved_${_otel_var} CACHE ${_otel_var} PROPERTY VALUE)
       endif()
     endforeach()
 
@@ -101,7 +101,13 @@ option(PAYLOAD_MANAGER_ENABLE_ARROW_CUDA
        "Enable Arrow CUDA integration (requires GPU build)"
        OFF)
 
-find_package(Arrow QUIET)
+# Require at least the version matching the vendored submodule (apache-arrow-23.0.1).
+# Do not update this minimum without regression testing against the new version.
+find_package(Arrow 23.0 QUIET)
+if(Arrow_FOUND AND Arrow_VERSION VERSION_LESS "23.0")
+  message(WARNING "Arrow ${Arrow_VERSION} is older than the tested minimum 23.0; falling back to vendored submodule")
+  set(Arrow_FOUND FALSE)
+endif()
 if(Arrow_FOUND)
   message(STATUS "Arrow: using pre-installed package (${Arrow_VERSION})")
 
@@ -141,14 +147,17 @@ else()
 
   # Only build the object-storage stack when the server is included;
   # the client only needs core Arrow (Buffer/Result) with no cloud SDKs.
-  option(PAYLOAD_MANAGER_ARROW_GCS   "Enable Arrow GCS support (requires abseil-compatible with gRPC)" ON)
-  option(PAYLOAD_MANAGER_ARROW_AZURE "Enable Arrow Azure storage support" ON)
+  # S3 is enabled by default; GCS, Azure, and HDFS require their respective
+  # bundled SDKs and must be opted in explicitly.
+  option(PAYLOAD_MANAGER_ARROW_GCS   "Enable Arrow GCS support (requires bundled google-cloud-cpp)" OFF)
+  option(PAYLOAD_MANAGER_ARROW_AZURE "Enable Arrow Azure storage support (requires bundled Azure SDK)" OFF)
+  option(PAYLOAD_MANAGER_ARROW_HDFS  "Enable Arrow HDFS support" OFF)
 
   if(PAYLOAD_MANAGER_BUILD_SERVICE)
-    set(_arrow_s3   ON)
-    set(_arrow_gcs  ${PAYLOAD_MANAGER_ARROW_GCS})
+    set(_arrow_s3    ON)
+    set(_arrow_gcs   ${PAYLOAD_MANAGER_ARROW_GCS})
     set(_arrow_azure ${PAYLOAD_MANAGER_ARROW_AZURE})
-    set(_arrow_hdfs ON)
+    set(_arrow_hdfs  ${PAYLOAD_MANAGER_ARROW_HDFS})
   else()
     set(_arrow_s3   OFF)
     set(_arrow_gcs  OFF)
@@ -218,6 +227,9 @@ else()
   add_subdirectory(${_arrow_dir} arrow_build)
   unset(_arrow_dir)
   unset(_arrow_s3)
+  unset(_arrow_gcs)
+  unset(_arrow_azure)
+  unset(_arrow_hdfs)
 
   # Arrow built via add_subdirectory does not populate INTERFACE_INCLUDE_DIRECTORIES
   # on arrow_static.  Set them explicitly so downstream targets get the headers.
