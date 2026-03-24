@@ -3,8 +3,10 @@
 # Builds payload-manager for NVIDIA Jetson Orin (aarch64 / L4T R36 / JetPack 6)
 # with both CUDA and OpenTelemetry enabled.
 #
-# Prerequisites (host):
-#   git submodule update --init --recursive   # pulls Arrow + opentelemetry-cpp
+# Uses pre-built base images from ghcr.io/hurdad/docker-jetpack6-{dev,runtime}
+# which provide Arrow 23.0.1 (CUDA+S3), gRPC v1.66.2, Protobuf v27.3,
+# OpenTelemetry v1.26.0, spdlog, jemalloc, Abseil, FlatBuffers, nats.c —
+# all pre-compiled for JetPack 6 / L4T R36 / CUDA 12.2 / aarch64.
 #
 # Build:
 #   docker build \
@@ -16,163 +18,67 @@
 # On a Jetson device the --platform flag is unnecessary.  When cross-building
 # from an x86 host install binfmt support first:
 #   docker run --privileged --rm tonistiigi/binfmt --install arm64
-#
-# Base image: L4T R36.2 = Ubuntu 22.04 + JetPack 6 + CUDA 12.2
-# OTel exporter: OTLP/gRPC (requires the opentelemetry-cpp submodule).
 
 # ============================================================
 # Stage 1 – builder
 # ============================================================
-FROM nvcr.io/nvidia/l4t-jetpack:r36.2.0 AS builder
+FROM ghcr.io/hurdad/docker-jetpack6-dev:latest AS builder
 
 ENV DEBIAN_FRONTEND=noninteractive
 WORKDIR /workspace
 
-# Install a recent CMake (3.25+) via the Kitware APT repository.
-# The Ubuntu 22.04 default (3.22.1) is too old for the Arrow submodule.
+# The dev base image already provides: cmake (Kitware), ninja, build-essential,
+# git, pkg-config, protobuf v27.3, gRPC v1.66.2, Arrow 23.0.1 (CUDA+S3),
+# OpenTelemetry v1.26.0, spdlog, Abseil, jemalloc, FlatBuffers, nats.c,
+# and all codec libs (zlib, zstd, snappy, lz4, brotli, ssl, curl).
+# Only install what is not already present.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
-        ca-certificates \
-        gpg \
-        wget \
-    && wget -qO - https://apt.kitware.com/keys/kitware-archive-latest.asc \
-       | gpg --dearmor -o /usr/share/keyrings/kitware-archive-keyring.gpg \
-    && echo 'deb [signed-by=/usr/share/keyrings/kitware-archive-keyring.gpg] https://apt.kitware.com/ubuntu/ jammy main' \
-       > /etc/apt/sources.list.d/kitware.list \
-    && apt-get update \
-    && apt-get install -y --no-install-recommends cmake \
-    && rm -rf /var/lib/apt/lists/*
-
-# Install build dependencies.
-# Ubuntu 22.04 (Jammy) package names are used throughout.
-# nlohmann-json3-dev is required by the opentelemetry-cpp submodule.
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends \
-        build-essential \
-        ninja-build \
-        pkg-config \
-        git \
-        ca-certificates \
-        # protobuf / gRPC — intentionally omitted: protobuf-compiler,
-        # libprotobuf-dev, libgrpc++-dev, libgrpc-dev, protobuf-compiler-grpc.
-        # OTel FetchContents gRPC 1.49.2 which builds protoc, libprotobuf 3.21.6,
-        # and grpc_cpp_plugin from source.  Installing the system packages (3.12.4)
-        # alongside the FetchContent ones causes cmake to find the wrong version and
-        # generates .pb.cc files with the old SCCInfoBase API that no longer exists
-        # in the 3.21.x headers, breaking the build.
-        # compression libs (Arrow codec support)
-        zlib1g-dev \
-        liblz4-dev \
-        libzstd-dev \
-        libsnappy-dev \
-        libbrotli-dev \
-        libbz2-dev \
-        # other Arrow deps
-        libre2-dev \
-        libutf8proc-dev \
-        libxml2-dev \
-        libcurl4-openssl-dev \
-        libssl-dev \
-        # payload-manager deps
         libyaml-cpp-dev \
         libpqxx-dev \
         libsqlite3-dev \
-        libspdlog-dev \
-        # Python stubs (used to generate protobuf Python bindings)
-        python3 \
-        python3-pip \
-        python3-grpcio \
-        python3-grpc-tools \
-        # OpenTelemetry-cpp dependency
-        nlohmann-json3-dev \
-        # unit test framework
         libgtest-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy the entire source tree (including initialised submodules).
+# Copy the entire source tree.
 COPY . ./src
 
-# Configure, build, test (unit only — integration tests need live services),
-# then produce the final payload-manager binary.
-#
-# Key flags:
-#   PAYLOAD_MANAGER_ENABLE_ARROW_CUDA=ON   – Arrow CUDA IPC tier (requires CUDA dev kit)
-#   PAYLOAD_MANAGER_ENABLE_OTEL=ON         – OpenTelemetry OTLP/gRPC tracing
-#   gRPC_SSL_PROVIDER=package              – Ubuntu 22.04 ships gRPC 1.30.2 with no cmake
-#                                            config files, so OTel FetchContents gRPC 1.49.2
-#                                            from GitHub.  Without this flag that fetched gRPC
-#                                            bundles BoringSSL and creates cmake targets named
-#                                            "crypto" and "ssl".  Arrow's bundled AWS SDK also
-#                                            creates those names (via aws-lc), causing a fatal
-#                                            target-name collision.  Setting this flag makes the
-#                                            FetchContent-built gRPC use system OpenSSL
-#                                            (OpenSSL::SSL / OpenSSL::Crypto targets) instead,
-#                                            eliminating the conflict.
-#   ARROW_OPENSSL_USE_SHARED=ON            – share system OpenSSL so Arrow's AWS SDK
-#                                            and gRPC don't link two libcrypto copies
-#   AWS_USE_CRYPTO_SHARED_LIBS=ON          – same shared-crypto fix for aws-c-cal
-#   S2N_USE_CRYPTO_SHARED_LIBS=ON         – same fix for s2n-tls
+# All heavy dependencies (Arrow, gRPC, OTel, Protobuf, spdlog) are pre-installed
+# at /usr/local so no FetchContent downloads occur.
 RUN cmake -S ./src -B /workspace/build -G Ninja \
         -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
         -DCMAKE_BUILD_TYPE=Release \
         -DPAYLOAD_MANAGER_ENABLE_OTEL=ON \
         -DPAYLOAD_MANAGER_ENABLE_ARROW_CUDA=ON \
-        -DgRPC_SSL_PROVIDER=package \
-        -DARROW_OPENSSL_USE_SHARED=ON \
-        -DAWS_USE_CRYPTO_SHARED_LIBS=ON \
-        -DS2N_USE_CRYPTO_SHARED_LIBS=ON \
         -DBUILD_TESTING=ON \
         -DPAYLOAD_MANAGER_BUILD_SERVICE=ON \
         -DPAYLOAD_MANAGER_BUILD_CLIENT=OFF \
         -DPAYLOAD_MANAGER_BUILD_EXAMPLES=OFF \
         -DPAYLOAD_MANAGER_BUILD_PAYLOADCTL=OFF \
     && cmake --build /workspace/build \
-    && ctest --test-dir /workspace/build \
-             --output-on-failure \
-             -L unit \
-             -E payload_manager_integration_api \
     && cmake --build /workspace/build --target payload-manager
+# Note: unit tests are not run during docker build because they require
+# libcuda.so.1 from the NVIDIA container runtime.  To run tests on-device:
+#   docker run --rm --runtime=nvidia payload-manager:jetson \
+#     ctest --test-dir /workspace/build -L unit -E payload_manager_integration_api
 
 # ============================================================
 # Stage 2 – runtime
 # ============================================================
-FROM nvcr.io/nvidia/l4t-base:r36.2.0 AS runtime
+FROM ghcr.io/hurdad/docker-jetpack6-runtime:latest AS runtime
 
 ENV DEBIAN_FRONTEND=noninteractive
 WORKDIR /app
 
-# Install only runtime (non-dev) libraries.
-# Ubuntu 22.04 (Jammy) soname versions on l4t-base:r36.2.0:
-#   libprotobuf23, libgrpc++1, libgrpc10,
-#   libyaml-cpp0.7, libpqxx-6.4, libspdlog1,
-#   libre2-9, libutf8proc2
+# The runtime base image already provides: libstdc++6, libssl3, zlib1g,
+# libzstd1, libsnappy1v5, liblz4-1, libbrotli1, libboost-filesystem1.74.0,
+# libutf8proc2, libcurl4, ca-certificates, and all /usr/local/lib .so files
+# (grpc, protobuf, arrow, otel, spdlog, jemalloc, etc.).
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
-        ca-certificates \
-        sqlite3 \
-        # protobuf / gRPC
-        libprotobuf23 \
-        libgrpc++1 \
-        libgrpc10 \
-        # misc service deps
         libyaml-cpp0.7 \
         libpqxx-6.4 \
         libsqlite3-0 \
-        libspdlog1 \
-        libcurl4 \
-        # TLS / crypto
-        libssl3 \
-        # compression
-        zlib1g \
-        liblz4-1 \
-        libzstd1 \
-        libsnappy1v5 \
-        libbrotli1 \
-        libbz2-1.0 \
-        # misc
-        libre2-9 \
-        libutf8proc2 \
-        libxml2 \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=builder /workspace/build/bin/payload-manager ./payload-manager

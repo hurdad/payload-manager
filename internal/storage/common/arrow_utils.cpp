@@ -1,8 +1,15 @@
 #include "arrow_utils.hpp"
 
+#ifdef ARROW_AZURE
 #include <arrow/filesystem/azurefs.h>
+#endif
+#ifdef ARROW_GCS
 #include <arrow/filesystem/gcsfs.h>
-#include <arrow/filesystem/hdfs.h>
+#endif
+#include <arrow/util/config.h>
+#if ARROW_HDFS
+#  include <arrow/filesystem/hdfs.h>
+#endif
 #include <arrow/filesystem/localfs.h>
 #include <arrow/filesystem/s3fs.h>
 #include <arrow/type.h>
@@ -128,6 +135,7 @@ arrow::Result<std::pair<std::shared_ptr<arrow::fs::FileSystem>, std::string>> Re
       return std::make_pair(std::move(fs), resolved_path);
     }
     case pb::arrow::storage::FileSystemOptions::kGcs: {
+#ifdef ARROW_GCS
       const auto& proto_options     = filesystem_options.gcs();
       const auto& proto_credentials = proto_options.credentials();
       auto        to_time_point     = [](const google::protobuf::Timestamp& timestamp) {
@@ -161,8 +169,12 @@ arrow::Result<std::pair<std::shared_ptr<arrow::fs::FileSystem>, std::string>> Re
       ARROW_RETURN_NOT_OK(resolve_uri_path());
       ARROW_ASSIGN_OR_RAISE(auto fs, arrow::fs::GcsFileSystem::Make(options));
       return std::make_pair(std::move(fs), resolved_path);
+#else
+      return arrow::Status::NotImplemented("GCS support was not compiled in");
+#endif
     }
     case pb::arrow::storage::FileSystemOptions::kAzure: {
+#ifdef ARROW_AZURE
       const auto&             proto_options = filesystem_options.azure();
       arrow::fs::AzureOptions options;
       options.account_name           = proto_options.account_name();
@@ -212,8 +224,12 @@ arrow::Result<std::pair<std::shared_ptr<arrow::fs::FileSystem>, std::string>> Re
       ARROW_RETURN_NOT_OK(resolve_uri_path());
       ARROW_ASSIGN_OR_RAISE(auto fs, arrow::fs::AzureFileSystem::Make(options));
       return std::make_pair(std::move(fs), resolved_path);
+#else
+      return arrow::Status::NotImplemented("Azure storage support was not compiled in");
+#endif
     }
     case pb::arrow::storage::FileSystemOptions::kHdfs: {
+#if ARROW_HDFS
       const auto&            proto_options = filesystem_options.hdfs();
       arrow::fs::HdfsOptions options;
       options.connection_config.host        = proto_options.connection_config().host();
@@ -228,6 +244,9 @@ arrow::Result<std::pair<std::shared_ptr<arrow::fs::FileSystem>, std::string>> Re
       ARROW_RETURN_NOT_OK(resolve_uri_path());
       ARROW_ASSIGN_OR_RAISE(auto fs, arrow::fs::HadoopFileSystem::Make(options));
       return std::make_pair(std::move(fs), resolved_path);
+#else
+      return arrow::Status::NotImplemented("HDFS support was not compiled in");
+#endif
     }
     case pb::arrow::storage::FileSystemOptions::OPTIONS_NOT_SET:
       break;

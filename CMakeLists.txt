@@ -25,168 +25,215 @@ option(PAYLOAD_MANAGER_ENABLE_PYTHON_PROTO
 if(PAYLOAD_MANAGER_ENABLE_OTEL)
   add_compile_definitions(ENABLE_OTEL)
 
-  set(_otel_dir ${CMAKE_SOURCE_DIR}/third_party/opentelemetry-cpp)
-  if(NOT EXISTS ${_otel_dir}/CMakeLists.txt)
-    message(
-      FATAL_ERROR
-        "PAYLOAD_MANAGER_ENABLE_OTEL=ON but ${_otel_dir} is missing. Initialize submodules with: git submodule update --init --recursive")
+  # Prefer a pre-installed opentelemetry-cpp package; fall back to the submodule.
+  find_package(opentelemetry-cpp QUIET)
+  if(opentelemetry-cpp_FOUND)
+    message(STATUS "OpenTelemetry: using pre-installed package")
+    # The installed package uses opentelemetry-cpp:: namespace with shorter
+    # target names.  Create bare aliases to match what the rest of the project
+    # expects (e.g. opentelemetry_trace, opentelemetry_exporter_otlp_grpc).
+    macro(_otel_alias _alias _short)
+      if(TARGET opentelemetry-cpp::${_short} AND NOT TARGET ${_alias})
+        add_library(${_alias} ALIAS opentelemetry-cpp::${_short})
+      endif()
+    endmacro()
+    _otel_alias(opentelemetry_trace                      trace)
+    _otel_alias(opentelemetry_metrics                    metrics)
+    _otel_alias(opentelemetry_logs                       logs)
+    _otel_alias(opentelemetry_resources                  resources)
+    _otel_alias(opentelemetry_exporter_otlp_grpc         otlp_grpc_exporter)
+    _otel_alias(opentelemetry_exporter_otlp_grpc_metrics otlp_grpc_metrics_exporter)
+    _otel_alias(opentelemetry_exporter_otlp_grpc_log     otlp_grpc_log_record_exporter)
+    _otel_alias(opentelemetry_ext                        ext)
+    _otel_alias(opentelemetry_exporter_otlp_http         otlp_http_exporter)
+    _otel_alias(opentelemetry_exporter_otlp_http_metric  otlp_http_metric_exporter)
+    _otel_alias(opentelemetry_exporter_otlp_http_log     otlp_http_log_record_exporter)
+  else()
+    set(_otel_dir ${CMAKE_SOURCE_DIR}/third_party/opentelemetry-cpp)
+    if(NOT EXISTS ${_otel_dir}/CMakeLists.txt)
+      message(FATAL_ERROR
+        "PAYLOAD_MANAGER_ENABLE_OTEL=ON but opentelemetry-cpp was not found as a\n"
+        "system package and ${_otel_dir} is missing.\n"
+        "Either install opentelemetry-cpp or initialize submodules:\n"
+        "  git submodule update --init --recursive")
+    endif()
+
+    set(_otel_cache_vars BUILD_TESTING WITH_OTLP_GRPC WITH_OTLP_HTTP WITH_EXAMPLES WITH_FUNC_TESTS WITH_BENCHMARK BUILD_SHARED_LIBS)
+    foreach(_otel_var IN LISTS _otel_cache_vars)
+      if(DEFINED CACHE{${_otel_var}})
+        set(_saved_${_otel_var} "$CACHE{${_otel_var}}")
+        set(_had_${_otel_var} TRUE)
+      else()
+        set(_had_${_otel_var} FALSE)
+      endif()
+    endforeach()
+
+    set(BUILD_TESTING OFF CACHE BOOL "Disable OpenTelemetry tests" FORCE)
+    set(WITH_OTLP_GRPC ON CACHE BOOL "Enable OTLP gRPC exporter" FORCE)
+    set(WITH_OTLP_HTTP ON CACHE BOOL "Enable OTLP HTTP exporter" FORCE)
+    set(WITH_EXAMPLES OFF CACHE BOOL "Disable OpenTelemetry examples" FORCE)
+    set(WITH_FUNC_TESTS OFF CACHE BOOL "Disable OpenTelemetry functional tests" FORCE)
+    set(WITH_BENCHMARK OFF CACHE BOOL "Disable OpenTelemetry benchmarks" FORCE)
+    set(BUILD_SHARED_LIBS OFF CACHE BOOL "Build OpenTelemetry as static libraries" FORCE)
+
+    add_subdirectory(third_party/opentelemetry-cpp)
+
+    foreach(_otel_var IN LISTS _otel_cache_vars)
+      if(_had_${_otel_var})
+        set(${_otel_var} "${_saved_${_otel_var}}" CACHE BOOL "Restored after OpenTelemetry subproject" FORCE)
+      else()
+        unset(${_otel_var} CACHE)
+      endif()
+      unset(_saved_${_otel_var})
+      unset(_had_${_otel_var})
+    endforeach()
+
+    unset(_otel_cache_vars)
+    unset(_otel_dir)
   endif()
-
-  set(_otel_cache_vars BUILD_TESTING WITH_OTLP_GRPC WITH_OTLP_HTTP WITH_EXAMPLES WITH_FUNC_TESTS WITH_BENCHMARK BUILD_SHARED_LIBS)
-  foreach(_otel_var IN LISTS _otel_cache_vars)
-    if(DEFINED CACHE{${_otel_var}})
-      set(_saved_${_otel_var} "$CACHE{${_otel_var}}")
-      set(_had_${_otel_var} TRUE)
-    else()
-      set(_had_${_otel_var} FALSE)
-    endif()
-  endforeach()
-
-  set(BUILD_TESTING OFF CACHE BOOL "Disable OpenTelemetry tests" FORCE)
-  set(WITH_OTLP_GRPC ON CACHE BOOL "Enable OTLP gRPC exporter" FORCE)
-  set(WITH_OTLP_HTTP ON CACHE BOOL "Enable OTLP HTTP exporter" FORCE)
-  set(WITH_EXAMPLES OFF CACHE BOOL "Disable OpenTelemetry examples" FORCE)
-  set(WITH_FUNC_TESTS OFF CACHE BOOL "Disable OpenTelemetry functional tests" FORCE)
-  set(WITH_BENCHMARK OFF CACHE BOOL "Disable OpenTelemetry benchmarks" FORCE)
-  set(BUILD_SHARED_LIBS OFF CACHE BOOL "Build OpenTelemetry as static libraries" FORCE)
-
-  add_subdirectory(third_party/opentelemetry-cpp)
-
-  foreach(_otel_var IN LISTS _otel_cache_vars)
-    if(_had_${_otel_var})
-      set(${_otel_var} "${_saved_${_otel_var}}" CACHE BOOL "Restored after OpenTelemetry subproject" FORCE)
-    else()
-      unset(${_otel_var} CACHE)
-    endif()
-
-    unset(_saved_${_otel_var})
-    unset(_had_${_otel_var})
-  endforeach()
-
-  unset(_otel_cache_vars)
-  unset(_otel_dir)
 endif()
 
 # ================================================================
-# Vendored Arrow (built from third_party/arrow submodule)
+# Arrow: prefer pre-installed package; fall back to vendored submodule
 # ================================================================
 
 option(PAYLOAD_MANAGER_ENABLE_ARROW_CUDA
        "Enable Arrow CUDA integration (requires GPU build)"
        OFF)
 
-set(_arrow_dir ${CMAKE_SOURCE_DIR}/third_party/arrow/cpp)
-if(NOT EXISTS ${_arrow_dir}/CMakeLists.txt)
-  message(FATAL_ERROR
-    "third_party/arrow is missing. Run: git submodule update --init --recursive")
-endif()
+find_package(Arrow QUIET)
+if(Arrow_FOUND)
+  message(STATUS "Arrow: using pre-installed package (${Arrow_VERSION})")
 
-# Only build the object-storage stack when the server is included;
-# the client only needs core Arrow (Buffer/Result) with no cloud SDKs.
-if(PAYLOAD_MANAGER_BUILD_SERVICE)
-  set(_arrow_s3   ON)
-  set(_arrow_gcs  ON)
-  set(_arrow_azure ON)
-  set(_arrow_hdfs ON)
+  # Pre-built package ships shared libs; create compat aliases to the static
+  # names expected by downstream targets.
+  #
+  # Arrow::arrow_static from ArrowConfig.cmake is itself an ALIAS to
+  # Arrow::arrow_shared.  CMake >= 3.28 forbids creating an ALIAS of an ALIAS,
+  # so we point our aliases directly at Arrow::arrow_shared.  We also pre-create
+  # the bare arrow_static name so that ArrowCUDAConfig.cmake's internal
+  # find_dependency(Arrow) backward-compat code skips its own alias creation.
+  if(TARGET Arrow::arrow_shared AND NOT TARGET Arrow::arrow_static)
+    add_library(Arrow::arrow_static ALIAS Arrow::arrow_shared)
+  endif()
+  if(TARGET Arrow::arrow_shared AND NOT TARGET arrow_static)
+    add_library(arrow_static ALIAS Arrow::arrow_shared)
+  endif()
+
+  if(PAYLOAD_MANAGER_ENABLE_ARROW_CUDA)
+    find_package(ArrowCUDA REQUIRED)
+    # Map the installed shared CUDA target to the names the fallback loop checks.
+    if(TARGET ArrowCUDA::arrow_cuda_shared AND NOT TARGET ArrowCUDA::arrow_cuda_static)
+      add_library(ArrowCUDA::arrow_cuda_static ALIAS ArrowCUDA::arrow_cuda_shared)
+    endif()
+    if(TARGET ArrowCUDA::arrow_cuda_shared AND NOT TARGET ArrowCUDA::arrow_cuda)
+      add_library(ArrowCUDA::arrow_cuda ALIAS ArrowCUDA::arrow_cuda_shared)
+    endif()
+  endif()
 else()
-  set(_arrow_s3   OFF)
-  set(_arrow_gcs  OFF)
-  set(_arrow_azure OFF)
-  set(_arrow_hdfs OFF)
-endif()
+  # ---- Vendored submodule build ----
+  set(_arrow_dir ${CMAKE_SOURCE_DIR}/third_party/arrow/cpp)
+  if(NOT EXISTS ${_arrow_dir}/CMakeLists.txt)
+    message(FATAL_ERROR
+      "Arrow was not found as a system package and the submodule is missing.\n"
+      "Run: git submodule update --init --recursive")
+  endif()
 
-set(ARROW_SIMD_LEVEL     "NONE" CACHE STRING "" FORCE)
-set(ARROW_BUILD_STATIC   ON  CACHE BOOL "" FORCE)
-set(ARROW_BUILD_SHARED   OFF CACHE BOOL "" FORCE)
-set(ARROW_BUILD_TESTS    OFF CACHE BOOL "" FORCE)
-set(ARROW_BUILD_BENCHMARKS OFF CACHE BOOL "" FORCE)
-set(ARROW_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
-set(ARROW_BUILD_UTILITIES OFF CACHE BOOL "" FORCE)
-set(ARROW_BUILD_INTEGRATION OFF CACHE BOOL "" FORCE)
+  # Only build the object-storage stack when the server is included;
+  # the client only needs core Arrow (Buffer/Result) with no cloud SDKs.
+  option(PAYLOAD_MANAGER_ARROW_GCS   "Enable Arrow GCS support (requires abseil-compatible with gRPC)" ON)
+  option(PAYLOAD_MANAGER_ARROW_AZURE "Enable Arrow Azure storage support" ON)
 
-set(ARROW_FILESYSTEM ON  CACHE BOOL "" FORCE)
-set(ARROW_IPC        ON  CACHE BOOL "" FORCE)
-set(ARROW_S3         ${_arrow_s3} CACHE BOOL "" FORCE)
+  if(PAYLOAD_MANAGER_BUILD_SERVICE)
+    set(_arrow_s3   ON)
+    set(_arrow_gcs  ${PAYLOAD_MANAGER_ARROW_GCS})
+    set(_arrow_azure ${PAYLOAD_MANAGER_ARROW_AZURE})
+    set(_arrow_hdfs ON)
+  else()
+    set(_arrow_s3   OFF)
+    set(_arrow_gcs  OFF)
+    set(_arrow_azure OFF)
+    set(_arrow_hdfs OFF)
+  endif()
 
-set(ARROW_GCS                ${_arrow_gcs}   CACHE BOOL "" FORCE)
-set(ARROW_AZURE              ${_arrow_azure} CACHE BOOL "" FORCE)
-set(ARROW_HDFS               ${_arrow_hdfs}  CACHE BOOL "" FORCE)
-set(ARROW_ENABLE_THREADING   ON  CACHE BOOL "" FORCE)
-set(ARROW_COMPUTE    OFF CACHE BOOL "" FORCE)
-set(ARROW_CSV        OFF CACHE BOOL "" FORCE)
-set(ARROW_JSON       OFF CACHE BOOL "" FORCE)
-set(ARROW_PARQUET    OFF CACHE BOOL "" FORCE)
-set(ARROW_DATASET    OFF CACHE BOOL "" FORCE)
-set(ARROW_FLIGHT     OFF CACHE BOOL "" FORCE)
-set(ARROW_GANDIVA    OFF CACHE BOOL "" FORCE)
-set(ARROW_ACERO      OFF CACHE BOOL "" FORCE)
-set(ARROW_JEMALLOC   OFF CACHE BOOL "" FORCE)
-set(ARROW_WITH_OPENTELEMETRY OFF CACHE BOOL "" FORCE)
+  set(ARROW_SIMD_LEVEL     "NONE" CACHE STRING "" FORCE)
+  set(ARROW_BUILD_STATIC   ON  CACHE BOOL "" FORCE)
+  set(ARROW_BUILD_SHARED   OFF CACHE BOOL "" FORCE)
+  set(ARROW_BUILD_TESTS    OFF CACHE BOOL "" FORCE)
+  set(ARROW_BUILD_BENCHMARKS OFF CACHE BOOL "" FORCE)
+  set(ARROW_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+  set(ARROW_BUILD_UTILITIES OFF CACHE BOOL "" FORCE)
+  set(ARROW_BUILD_INTEGRATION OFF CACHE BOOL "" FORCE)
 
-# Compression codecs
-set(ARROW_WITH_LZ4    ON  CACHE BOOL "" FORCE)
-set(ARROW_WITH_ZSTD   ON  CACHE BOOL "" FORCE)
-set(ARROW_WITH_SNAPPY ON  CACHE BOOL "" FORCE)
-set(ARROW_WITH_BROTLI ON  CACHE BOOL "" FORCE)
-set(ARROW_WITH_BZ2    ON  CACHE BOOL "" FORCE)
-set(ARROW_WITH_ZLIB   ON  CACHE BOOL "" FORCE)
+  set(ARROW_FILESYSTEM ON  CACHE BOOL "" FORCE)
+  set(ARROW_IPC        ON  CACHE BOOL "" FORCE)
+  set(ARROW_S3         ${_arrow_s3} CACHE BOOL "" FORCE)
+  set(ARROW_GCS                ${_arrow_gcs}   CACHE BOOL "" FORCE)
+  set(ARROW_AZURE              ${_arrow_azure} CACHE BOOL "" FORCE)
+  set(ARROW_HDFS               ${_arrow_hdfs}  CACHE BOOL "" FORCE)
+  set(ARROW_ENABLE_THREADING   ON  CACHE BOOL "" FORCE)
+  set(ARROW_COMPUTE    OFF CACHE BOOL "" FORCE)
+  set(ARROW_CSV        OFF CACHE BOOL "" FORCE)
+  set(ARROW_JSON       OFF CACHE BOOL "" FORCE)
+  set(ARROW_PARQUET    OFF CACHE BOOL "" FORCE)
+  set(ARROW_DATASET    OFF CACHE BOOL "" FORCE)
+  set(ARROW_FLIGHT     OFF CACHE BOOL "" FORCE)
+  set(ARROW_GANDIVA    OFF CACHE BOOL "" FORCE)
+  set(ARROW_ACERO      OFF CACHE BOOL "" FORCE)
+  set(ARROW_JEMALLOC   OFF CACHE BOOL "" FORCE)
+  set(ARROW_WITH_OPENTELEMETRY OFF CACHE BOOL "" FORCE)
 
-# Dependency resolution: prefer system libs; fall back to bundled for cloud SDKs
-set(ARROW_DEPENDENCY_SOURCE  AUTO    CACHE STRING "" FORCE)
-set(AWSSDK_SOURCE            BUNDLED CACHE STRING "" FORCE)
-if(_arrow_gcs)
-  set(GCS_SOURCE              BUNDLED CACHE STRING "" FORCE)
-  set(GOOGLE_CLOUD_CPP_SOURCE BUNDLED CACHE STRING "" FORCE)
-endif()
-if(_arrow_azure)
-  set(AZURE_SDK_SOURCE        BUNDLED CACHE STRING "" FORCE)
-endif()
+  # Compression codecs
+  set(ARROW_WITH_LZ4    ON  CACHE BOOL "" FORCE)
+  set(ARROW_WITH_ZSTD   ON  CACHE BOOL "" FORCE)
+  set(ARROW_WITH_SNAPPY ON  CACHE BOOL "" FORCE)
+  set(ARROW_WITH_BROTLI ON  CACHE BOOL "" FORCE)
+  set(ARROW_WITH_BZ2    ON  CACHE BOOL "" FORCE)
+  set(ARROW_WITH_ZLIB   ON  CACHE BOOL "" FORCE)
 
-# Fix: use the shared system libcrypto.so so Arrow's bundled AWS SDK and the
-# system gRPC/libcurl all agree on one OpenSSL instance.  Without this, Arrow
-# statically embeds libcrypto.a (OPENSSL_USE_STATIC_LIBS=ON via FindOpenSSLAlt)
-# while system gRPC dynamically loads libcrypto.so.3, giving two OpenSSL
-# runtimes in the same process and a SIGSEGV in AWSAuthV4Signer::SignRequest.
-set(ARROW_OPENSSL_USE_SHARED ON CACHE BOOL "" FORCE)
+  # Dependency resolution: prefer system libs; fall back to bundled for cloud SDKs
+  set(ARROW_DEPENDENCY_SOURCE  AUTO    CACHE STRING "" FORCE)
+  set(AWSSDK_SOURCE            BUNDLED CACHE STRING "" FORCE)
+  if(_arrow_gcs)
+    set(GCS_SOURCE              BUNDLED CACHE STRING "" FORCE)
+    set(GOOGLE_CLOUD_CPP_SOURCE BUNDLED CACHE STRING "" FORCE)
+  endif()
+  if(_arrow_azure)
+    set(AZURE_SDK_SOURCE        BUNDLED CACHE STRING "" FORCE)
+  endif()
 
-# aws-c-cal's Findcrypto.cmake (line 73) only picks libcrypto.so when this is
-# ON; without it the module falls back to libcrypto.a regardless of what
-# OPENSSL_CRYPTO_LIBRARY is set to.
-set(AWS_USE_CRYPTO_SHARED_LIBS ON CACHE BOOL "" FORCE)
+  # Use shared system libcrypto so Arrow's bundled AWS SDK and gRPC/libcurl
+  # all agree on one OpenSSL instance (avoids SIGSEGV in AWSAuthV4Signer).
+  set(ARROW_OPENSSL_USE_SHARED ON CACHE BOOL "" FORCE)
+  set(AWS_USE_CRYPTO_SHARED_LIBS ON CACHE BOOL "" FORCE)
+  set(ARROW_AWS_S2N_INTERN_LIBCRYPTO OFF CACHE BOOL "" FORCE)
+  set(S2N_USE_CRYPTO_SHARED_LIBS ON CACHE BOOL "" FORCE)
 
-# Do NOT bundle aws-lc inside s2n-tls; use system OpenSSL instead.
-set(ARROW_AWS_S2N_INTERN_LIBCRYPTO OFF CACHE BOOL "" FORCE)
+  if(PAYLOAD_MANAGER_ENABLE_ARROW_CUDA)
+    set(ARROW_CUDA ON  CACHE BOOL "" FORCE)
+  else()
+    set(ARROW_CUDA OFF CACHE BOOL "" FORCE)
+  endif()
 
-# s2n-tls has its own independent crypto shared-libs flag; without this it
-# statically embeds libcrypto.a even when AWS_USE_CRYPTO_SHARED_LIBS=ON,
-# giving two OpenSSL runtimes in the same process and a SIGSEGV.
-set(S2N_USE_CRYPTO_SHARED_LIBS ON CACHE BOOL "" FORCE)
+  add_subdirectory(${_arrow_dir} arrow_build)
+  unset(_arrow_dir)
+  unset(_arrow_s3)
 
-if(PAYLOAD_MANAGER_ENABLE_ARROW_CUDA)
-  set(ARROW_CUDA ON  CACHE BOOL "" FORCE)
-else()
-  set(ARROW_CUDA OFF CACHE BOOL "" FORCE)
-endif()
+  # Arrow built via add_subdirectory does not populate INTERFACE_INCLUDE_DIRECTORIES
+  # on arrow_static.  Set them explicitly so downstream targets get the headers.
+  if(TARGET arrow_static)
+    set_target_properties(arrow_static PROPERTIES
+      INTERFACE_INCLUDE_DIRECTORIES
+        "$<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/third_party/arrow/cpp/src>;$<BUILD_INTERFACE:${CMAKE_BINARY_DIR}/arrow_build/src>")
+  endif()
 
-add_subdirectory(${_arrow_dir} arrow_build)
-unset(_arrow_dir)
-unset(_arrow_s3)
-
-# Arrow built via add_subdirectory does not populate INTERFACE_INCLUDE_DIRECTORIES
-# on arrow_static.  Set them explicitly so downstream targets get the headers
-# without needing a system-installed libarrow-dev.
-if(TARGET arrow_static)
-  set_target_properties(arrow_static PROPERTIES
-    INTERFACE_INCLUDE_DIRECTORIES
-      "$<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/third_party/arrow/cpp/src>;$<BUILD_INTERFACE:${CMAKE_BINARY_DIR}/arrow_build/src>")
-endif()
-
-# Create Arrow namespace aliases for in-source (add_subdirectory) builds
-if(TARGET arrow_static AND NOT TARGET Arrow::arrow_static)
-  add_library(Arrow::arrow_static ALIAS arrow_static)
-endif()
-if(PAYLOAD_MANAGER_ENABLE_ARROW_CUDA AND TARGET arrow_cuda_static AND NOT TARGET ArrowCUDA::arrow_cuda_static)
-  add_library(ArrowCUDA::arrow_cuda_static ALIAS arrow_cuda_static)
+  # Create Arrow namespace aliases for in-source (add_subdirectory) builds
+  if(TARGET arrow_static AND NOT TARGET Arrow::arrow_static)
+    add_library(Arrow::arrow_static ALIAS arrow_static)
+  endif()
+  if(PAYLOAD_MANAGER_ENABLE_ARROW_CUDA AND TARGET arrow_cuda_static AND NOT TARGET ArrowCUDA::arrow_cuda_static)
+    add_library(ArrowCUDA::arrow_cuda_static ALIAS arrow_cuda_static)
+  endif()
 endif()
 
 find_program(CLANG_FORMAT_EXE NAMES clang-format)

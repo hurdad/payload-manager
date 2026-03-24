@@ -88,14 +88,6 @@ target_include_directories(payload_manager_internal
         ${INTERNAL_GEN_DIR}
 )
 
-if(PAYLOAD_MANAGER_ENABLE_OTEL)
-    target_include_directories(payload_manager_internal
-            PRIVATE
-            ${CMAKE_SOURCE_DIR}/third_party/opentelemetry-cpp/api/include
-            ${CMAKE_SOURCE_DIR}/third_party/opentelemetry-cpp/sdk/include
-            ${CMAKE_SOURCE_DIR}/third_party/opentelemetry-cpp/exporters/otlp/include
-    )
-endif()
 
 # ================================================================
 # Dependencies

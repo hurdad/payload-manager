@@ -58,7 +58,6 @@ if(PAYLOAD_MANAGER_ENABLE_OTEL)
   target_include_directories(payload_manager_unit_otel_interceptor
           PRIVATE
           ${PROJECT_SOURCE_DIR}
-          ${CMAKE_SOURCE_DIR}/third_party/opentelemetry-cpp/api/include
   )
   target_link_libraries(payload_manager_unit_otel_interceptor
           PRIVATE

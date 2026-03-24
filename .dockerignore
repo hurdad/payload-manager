@@ -1,6 +1,11 @@
-new .git
+.git
 .gitmodules
 .github
+
+# Submodules not needed when building against pre-installed system packages
+# (e.g. ghcr.io/hurdad/docker-jetpack6-dev which ships Arrow + OTel pre-built)
+third_party/arrow
+third_party/opentelemetry-cpp
 
 # Build directories and artifacts
 build/

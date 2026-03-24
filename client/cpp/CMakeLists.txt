@@ -46,10 +46,6 @@ target_compile_definitions(payload_manager_client
 )
 
 if(PAYLOAD_MANAGER_CLIENT_ENABLE_OTEL)
-    target_include_directories(payload_manager_client
-            PRIVATE
-            ${CMAKE_SOURCE_DIR}/third_party/opentelemetry-cpp/api/include
-    )
     target_compile_definitions(payload_manager_client
             PRIVATE
             PAYLOAD_CLIENT_ENABLE_OTEL=1

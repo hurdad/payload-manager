@@ -113,8 +113,7 @@ void ObjectArrowStore::Remove(const PayloadID& id) {
 */
 void ObjectArrowStore::WriteSidecar(const PayloadID& id, const payload::manager::catalog::v1::PayloadArchiveMetadata& meta) {
   google::protobuf::util::JsonPrintOptions opts;
-  opts.add_whitespace                = true;
-  opts.always_print_primitive_fields = false;
+  opts.add_whitespace = true;
 
   std::string json;
   auto        status = google::protobuf::util::MessageToJsonString(meta, &json, opts);

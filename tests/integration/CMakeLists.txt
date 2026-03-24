@@ -38,17 +38,6 @@ if(TARGET payload_manager::client)
     ${PROJECT_SOURCE_DIR}
   )
 
-  # OTel SDK include dirs applied ONLY to otel_tracer.cpp to avoid
-  # protobuf macro conflicts with the system headers pulled in by the client lib.
-  set(_otel_includes
-    ${CMAKE_SOURCE_DIR}/third_party/opentelemetry-cpp/api/include
-    ${CMAKE_SOURCE_DIR}/third_party/opentelemetry-cpp/sdk/include
-    ${CMAKE_SOURCE_DIR}/third_party/opentelemetry-cpp/exporters/otlp/include
-  )
-  set_source_files_properties(otel_tracer.cpp PROPERTIES
-    INCLUDE_DIRECTORIES "${_otel_includes}"
-  )
-
   set(_api_test_otel_libs "")
   foreach(_t IN ITEMS
       opentelemetry_trace
