@@ -2,10 +2,9 @@
 .gitmodules
 .github
 
-# Submodules not needed when building against pre-installed system packages
-# (e.g. ghcr.io/hurdad/docker-jetpack6-dev which ships Arrow + OTel pre-built)
-third_party/arrow
-third_party/opentelemetry-cpp
+# Jetson builds use pre-installed system packages from the base image;
+# non-Jetson builds compile Arrow/OTel from the vendored submodules.
+# Only exclude submodules for Jetson (it uses its own Dockerfile anyway).
 
 # Build directories and artifacts
 build/
