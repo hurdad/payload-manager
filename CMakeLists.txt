@@ -25,9 +25,10 @@ option(PAYLOAD_MANAGER_ENABLE_PYTHON_PROTO
 if(PAYLOAD_MANAGER_ENABLE_OTEL)
   add_compile_definitions(ENABLE_OTEL)
 
-  # Prefer a pre-installed opentelemetry-cpp package; fall back to the submodule.
-  find_package(opentelemetry-cpp QUIET)
-  if(opentelemetry-cpp_FOUND)
+  # Always use the vendored submodule for OpenTelemetry — system packages
+  # (e.g. Ubuntu's libopentelemetry-cpp-dev) are frequently missing components
+  # such as the OTLP HTTP exporter and may be at a different version.
+  if(FALSE)
     message(STATUS "OpenTelemetry: using pre-installed package")
     # The installed package uses opentelemetry-cpp:: namespace with shorter
     # target names.  Create bare aliases to match what the rest of the project
@@ -108,6 +109,16 @@ if(Arrow_FOUND AND Arrow_VERSION VERSION_LESS "23.0")
   message(WARNING "Arrow ${Arrow_VERSION} is older than the tested minimum 23.0; falling back to vendored submodule")
   set(Arrow_FOUND FALSE)
 endif()
+# When CUDA is requested, the system Arrow must also provide ArrowCUDA.
+# If it doesn't, fall back to the vendored submodule which will be built
+# with ARROW_CUDA=ON.
+if(Arrow_FOUND AND PAYLOAD_MANAGER_ENABLE_ARROW_CUDA)
+  find_package(ArrowCUDA QUIET)
+  if(NOT ArrowCUDA_FOUND)
+    message(STATUS "Arrow: pre-installed package has no CUDA support; falling back to submodule")
+    set(Arrow_FOUND FALSE)
+  endif()
+endif()
 if(Arrow_FOUND)
   message(STATUS "Arrow: using pre-installed package (${Arrow_VERSION})")
 
@@ -127,7 +138,7 @@ if(Arrow_FOUND)
   endif()
 
   if(PAYLOAD_MANAGER_ENABLE_ARROW_CUDA)
-    find_package(ArrowCUDA REQUIRED)
+    # ArrowCUDA was already found in the pre-flight check above; just alias targets.
     # Map the installed shared CUDA target to the names the fallback loop checks.
     if(TARGET ArrowCUDA::arrow_cuda_shared AND NOT TARGET ArrowCUDA::arrow_cuda_static)
       add_library(ArrowCUDA::arrow_cuda_static ALIAS ArrowCUDA::arrow_cuda_shared)
