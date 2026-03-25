@@ -129,3 +129,37 @@ TEST(StreamServiceRetention, RetentionMaxEntriesTruncates) {
   auto result = service.Read(read);
   EXPECT_EQ(result.entries_size(), 3) << "only 3 most recent entries must remain";
 }
+
+// ---------------------------------------------------------------------------
+// Test: retention_max_age_sec at the exact overflow boundary.
+// UINT64_MAX/1000 is the largest value that, when multiplied by 1000, still
+// fits in a uint64_t.  The overflow guard must handle this boundary value
+// safely (no crash, entry survives).
+// ---------------------------------------------------------------------------
+TEST(StreamServiceRetention, RetentionMaxAgeSecExactBoundaryIsSafe) {
+  auto repo    = std::make_shared<MemoryRepository>();
+  auto service = MakeService(repo);
+
+  // Exactly UINT64_MAX / 1000 — multiplying by 1000 yields UINT64_MAX/1000*1000
+  // which may or may not overflow depending on UINT64_MAX%1000; either way the
+  // guard must not crash and must not delete the freshly-appended entry.
+  constexpr uint64_t kBoundaryAge = std::numeric_limits<uint64_t>::max() / 1000;
+
+  CreateStreamRequest create;
+  *create.mutable_stream() = MakeStream("boundary-test");
+  create.set_retention_max_age_sec(kBoundaryAge);
+  service.CreateStream(create);
+
+  AppendRequest append;
+  *append.mutable_stream() = MakeStream("boundary-test");
+  *append.add_items()      = MakeItem();
+  auto resp                = service.Append(append);
+  EXPECT_EQ(resp.last_offset(), 0u);
+
+  ReadRequest read;
+  *read.mutable_stream() = MakeStream("boundary-test");
+  read.set_start_offset(0);
+  auto result = service.Read(read);
+  EXPECT_EQ(result.entries_size(), 1)
+      << "entry must survive with retention_max_age_sec at the exact overflow boundary";
+}

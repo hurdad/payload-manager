@@ -54,10 +54,16 @@ TEST(SqliteConcurrentIsolation, CommittedWriteVisibleToNextTransaction) {
     tx.Commit();
   }
 
-  // New transaction must see the committed value.
-  SqliteTransaction tx2(db);
-  EXPECT_EQ(ReadCounter(*db), 42);
-  tx2.Commit();
+  // A new transaction must see the previously committed value.
+  // ReadCounter uses the same db connection; with BEGIN IMMEDIATE active on
+  // that connection the SELECT executes within tx2's transaction scope.
+  {
+    SqliteTransaction tx2(db);
+    EXPECT_FALSE(tx2.IsCommitted()) << "tx2 must be open before the read";
+    EXPECT_EQ(ReadCounter(*db), 42) << "committed write must be visible inside a new transaction";
+    tx2.Commit();
+    EXPECT_TRUE(tx2.IsCommitted());
+  }
 }
 
 TEST(SqliteConcurrentIsolation, RolledBackWriteNotVisible) {

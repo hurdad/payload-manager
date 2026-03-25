@@ -1,9 +1,11 @@
 #include <gtest/gtest.h>
 
 #include <algorithm>
+#include <chrono>
 #include <cstring>
 #include <memory>
 #include <stdexcept>
+#include <thread>
 #include <unordered_map>
 #include <vector>
 
@@ -194,5 +196,34 @@ TEST(PayloadManagerDelete, DeleteClearsPinState) {
   manager.Pin(descriptor.payload_id(), /*duration_ms=*/0);
   manager.Delete(descriptor.payload_id(), /*force=*/true);
 
-  manager.Unpin(descriptor.payload_id());
+  // Unpin on a deleted payload must not throw (no-op is correct).
+  EXPECT_NO_THROW(manager.Unpin(descriptor.payload_id()));
+  // The payload must be gone regardless of the Unpin call.
+  EXPECT_THROW((void)manager.ResolveSnapshot(descriptor.payload_id()), std::runtime_error)
+      << "deleted payload must remain unreachable after Unpin";
+}
+
+// A pin with a finite duration_ms must expire on its own so that spill
+// succeeds after the pin window elapses without an explicit Unpin().
+TEST(PayloadManagerDelete, TimedPinExpiresAndAllowsSpill) {
+  auto lease_mgr = std::make_shared<LeaseManager>();
+  auto manager   = MakeManager(lease_mgr);
+
+  const auto descriptor = manager.Commit(manager.Allocate(128, TIER_RAM).payload_id());
+
+  // Pin for 30 ms — a short but non-zero duration.
+  manager.Pin(descriptor.payload_id(), /*duration_ms=*/30);
+
+  // While the pin is active the spill must be rejected.
+  EXPECT_THROW(manager.ExecuteSpill(descriptor.payload_id(), TIER_DISK, /*fsync=*/false), std::runtime_error)
+      << "spill must be blocked while pin is active";
+  EXPECT_EQ(manager.ResolveSnapshot(descriptor.payload_id()).tier(), TIER_RAM);
+
+  // Wait for the pin to expire naturally — no explicit Unpin().
+  std::this_thread::sleep_for(std::chrono::milliseconds(60));
+
+  // After expiry the spill must succeed without any manual Unpin.
+  EXPECT_NO_THROW(manager.ExecuteSpill(descriptor.payload_id(), TIER_DISK, /*fsync=*/false))
+      << "spill must succeed after timed pin has expired";
+  EXPECT_EQ(manager.ResolveSnapshot(descriptor.payload_id()).tier(), TIER_DISK);
 }

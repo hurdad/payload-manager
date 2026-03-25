@@ -115,9 +115,14 @@ TEST(PayloadManagerConcurrency, IndependentLifecyclesDoNotRace) {
         (void)env.manager->ResolveSnapshot(desc.payload_id());
         env.manager->ExecuteSpill(desc.payload_id(), TIER_DISK, false);
         env.manager->Delete(desc.payload_id(), true);
+      } catch (const payload::util::NotFound&) {
+        // Payload deleted by a racing thread before our operation — acceptable.
+      } catch (const payload::util::LeaseConflict&) {
+        // Lease rejected during a concurrent operation — acceptable.
+      } catch (const payload::util::InvalidState&) {
+        ++unexpected_errors;  // state-machine corruption = definite bug
       } catch (const std::runtime_error&) {
-        // OCC transaction conflicts are expected under concurrency with
-        // MemoryRepository — not a correctness problem.
+        // Plain runtime_error (e.g., storage backend failure) — acceptable.
       } catch (...) {
         ++unexpected_errors;  // any other exception type is a bug
       }

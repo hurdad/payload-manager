@@ -142,3 +142,43 @@ TEST(CatalogService, GetLineageTraversesRepositoryGraph) {
   const auto down_edges = service.GetLineage(downstream);
   EXPECT_EQ(down_edges.edges_size(), 3);
 }
+
+// GetLineage on a payload with no recorded edges must return an empty response,
+// not throw.
+TEST(CatalogService, GetLineageOnUnknownPayloadReturnsEmpty) {
+  auto                             ctx = BuildServiceContext(false);
+  payload::service::CatalogService service(ctx);
+
+  GetLineageRequest req;
+  req.mutable_id()->set_value("nonexistent-payload");
+  req.set_upstream(true);
+  req.set_max_depth(0);
+
+  // If GetLineage throws, the test fails with an unhandled exception — which is
+  // the "must not throw" assertion.  The separate edges_size check confirms the
+  // empty-response contract.
+  const auto resp = service.GetLineage(req);
+  EXPECT_EQ(resp.edges_size(), 0) << "no edges must be returned for a payload with no lineage";
+}
+
+// Diamond DAG: A→B, A→C, B→D, C→D.
+// Traversing upstream from D must return each edge exactly once (4 edges total:
+// D←B, D←C, B←A, C←A) — the shared ancestor A must not be double-counted.
+TEST(CatalogService, GetLineageDiamondDagNoDuplicateEdges) {
+  auto                             ctx = BuildServiceContext(false);
+  payload::service::CatalogService service(ctx);
+
+  service.AddLineage(MakeLineageRequest("B", "A", "a_to_b"));
+  service.AddLineage(MakeLineageRequest("C", "A", "a_to_c"));
+  service.AddLineage(MakeLineageRequest("D", "B", "b_to_d"));
+  service.AddLineage(MakeLineageRequest("D", "C", "c_to_d"));
+
+  GetLineageRequest req;
+  req.mutable_id()->set_value("D");
+  req.set_upstream(true);
+  req.set_max_depth(0);
+
+  const auto resp = service.GetLineage(req);
+  // 4 distinct edges in the diamond: D←B, D←C, B←A, C←A.
+  EXPECT_EQ(resp.edges_size(), 4) << "diamond DAG must return 4 distinct edges with no duplicates";
+}

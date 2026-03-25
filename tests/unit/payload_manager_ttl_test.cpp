@@ -111,7 +111,7 @@ TEST(PayloadManagerTTL, ExpireStaleIgnoresPayloadWithNoTtl) {
 
   const auto desc = f.manager.Commit(f.manager.Allocate(128, TIER_RAM).payload_id());
 
-  std::this_thread::sleep_for(std::chrono::milliseconds(5));
+  // No sleep needed: a payload with no TTL can never expire regardless of time.
   f.manager.ExpireStale();
 
   EXPECT_TRUE(f.ram->Has(desc.payload_id()));
@@ -193,6 +193,33 @@ TEST(PayloadManagerTTL, MemoryRepositoryListExpiredPayloads) {
 
   EXPECT_EQ(expired.size(), 1u);
   EXPECT_EQ(expired[0].id, "aaaa");
+}
+
+// expires_at_ms == now_ms must be treated as expired (boundary: <=).
+TEST(PayloadManagerTTL, MemoryRepositoryExactBoundaryIsExpired) {
+  auto repo = std::make_shared<payload::db::memory::MemoryRepository>();
+
+  payload::db::model::PayloadRecord r;
+  r.id            = "boundary";
+  r.tier          = TIER_RAM;
+  r.state         = payload::manager::v1::PAYLOAD_STATE_ACTIVE;
+  r.size_bytes    = 64;
+  r.version       = 1;
+  r.expires_at_ms = 5000;
+
+  {
+    auto tx = repo->Begin();
+    repo->InsertPayload(*tx, r);
+    tx->Commit();
+  }
+
+  // now_ms == expires_at_ms — must be considered expired (condition is <=).
+  auto       tx      = repo->Begin();
+  const auto expired = repo->ListExpiredPayloads(*tx, /*now_ms=*/5000);
+  tx->Commit();
+
+  EXPECT_EQ(expired.size(), 1u) << "record with expires_at_ms == now_ms must be listed as expired";
+  EXPECT_EQ(expired[0].id, "boundary");
 }
 
 // TTL is stored and round-trips through the memory repository.

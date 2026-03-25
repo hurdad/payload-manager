@@ -66,3 +66,11 @@ TEST(PlacementEngine, ObjectNextLowerIsObject) {
   // Object is the lowest tier; it maps to itself (no lower tier exists).
   EXPECT_EQ(PlacementEngine::NextLowerTier(TIER_OBJECT), TIER_OBJECT);
 }
+
+// TIER_UNSPECIFIED is the protobuf default (value 0).  It falls through to
+// the default branch in NextLowerTier and must return TIER_OBJECT rather than
+// crashing or returning an invalid value.
+TEST(PlacementEngine, UnspecifiedNextLowerIsSafelyObject) {
+  EXPECT_EQ(PlacementEngine::NextLowerTier(TIER_UNSPECIFIED), TIER_OBJECT)
+      << "TIER_UNSPECIFIED must be handled by the default branch and return TIER_OBJECT";
+}
