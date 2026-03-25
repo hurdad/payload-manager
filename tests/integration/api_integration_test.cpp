@@ -187,7 +187,7 @@ void TestDiskRoundTrip(const PayloadClient& client, const std::string& tp) {
 
   ASSERT_OK(client.CommitPayload(wp.descriptor.payload_id()));
 
-  auto rd = client.AcquireReadableBuffer(wp.descriptor.payload_id());
+  auto rd = client.AcquireReadableBuffer(wp.descriptor.payload_id(), TIER_DISK);
   ASSERT_OK(rd.status());
   auto rp = rd.ValueOrDie();
   ASSERT_EQ(static_cast<uint64_t>(rp.buffer->size()), kSize);
