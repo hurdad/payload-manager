@@ -136,6 +136,23 @@ target_link_libraries(payload_manager_internal
         rt
 )
 
+# The Ubuntu libarrow package compiles GCS and Azure support into libarrow.a
+# and libarrow_bundled_dependencies.a but the Arrow CMake config does not
+# declare the transitive dependencies (libxml2, absl, google-cloud-cpp, etc.).
+# Use --copy-dt-needed-entries so the linker follows shared-lib DT_NEEDED
+# chains automatically rather than requiring every absl sub-library to be
+# listed explicitly.  Also add libxml2 explicitly because it is only reachable
+# through the bundled static Azure SDK which has no DT_NEEDED of its own.
+if(Arrow_FOUND)
+  target_link_options(payload_manager_internal
+    PUBLIC -Wl,--copy-dt-needed-entries
+  )
+  find_package(LibXml2 QUIET)
+  if(LibXml2_FOUND)
+    target_link_libraries(payload_manager_internal PRIVATE LibXml2::LibXml2)
+  endif()
+endif()
+
 if(PAYLOAD_MANAGER_ENABLE_OTEL)
     foreach(_otel_target IN ITEMS
             opentelemetry_metrics
@@ -253,6 +270,20 @@ target_compile_definitions(payload_manager_internal
         PRIVATE
         ARROW_NO_DEPRECATED_API
 )
+
+# Propagate Arrow optional filesystem feature flags as compile definitions so
+# that arrow_utils.cpp guards compile in only what was actually built.
+# Default is OFF for all three; the submodule path enables them via the
+# PAYLOAD_MANAGER_ARROW_GCS / _AZURE / _HDFS options in the root CMakeLists.
+if(PAYLOAD_MANAGER_ARROW_GCS)
+    target_compile_definitions(payload_manager_internal PRIVATE PAYLOAD_MANAGER_ARROW_GCS=1)
+endif()
+if(PAYLOAD_MANAGER_ARROW_AZURE)
+    target_compile_definitions(payload_manager_internal PRIVATE PAYLOAD_MANAGER_ARROW_AZURE=1)
+endif()
+if(PAYLOAD_MANAGER_ARROW_HDFS)
+    target_compile_definitions(payload_manager_internal PRIVATE PAYLOAD_MANAGER_ARROW_HDFS=1)
+endif()
 
 if (CMAKE_BUILD_TYPE STREQUAL "Debug")
     target_compile_options(payload_manager_internal PRIVATE -O0 -g3)

@@ -1,13 +1,12 @@
 #include "arrow_utils.hpp"
 
-#ifdef ARROW_AZURE
+#ifdef PAYLOAD_MANAGER_ARROW_AZURE
 #include <arrow/filesystem/azurefs.h>
 #endif
-#ifdef ARROW_GCS
+#ifdef PAYLOAD_MANAGER_ARROW_GCS
 #include <arrow/filesystem/gcsfs.h>
 #endif
-#include <arrow/util/config.h>
-#if ARROW_HDFS
+#ifdef PAYLOAD_MANAGER_ARROW_HDFS
 #  include <arrow/filesystem/hdfs.h>
 #endif
 #include <arrow/filesystem/localfs.h>
@@ -135,7 +134,7 @@ arrow::Result<std::pair<std::shared_ptr<arrow::fs::FileSystem>, std::string>> Re
       return std::make_pair(std::move(fs), resolved_path);
     }
     case pb::arrow::storage::FileSystemOptions::kGcs: {
-#ifdef ARROW_GCS
+#ifdef PAYLOAD_MANAGER_ARROW_GCS
       const auto& proto_options     = filesystem_options.gcs();
       const auto& proto_credentials = proto_options.credentials();
       auto        to_time_point     = [](const google::protobuf::Timestamp& timestamp) {
@@ -174,7 +173,7 @@ arrow::Result<std::pair<std::shared_ptr<arrow::fs::FileSystem>, std::string>> Re
 #endif
     }
     case pb::arrow::storage::FileSystemOptions::kAzure: {
-#ifdef ARROW_AZURE
+#ifdef PAYLOAD_MANAGER_ARROW_AZURE
       const auto&             proto_options = filesystem_options.azure();
       arrow::fs::AzureOptions options;
       options.account_name           = proto_options.account_name();
@@ -229,7 +228,7 @@ arrow::Result<std::pair<std::shared_ptr<arrow::fs::FileSystem>, std::string>> Re
 #endif
     }
     case pb::arrow::storage::FileSystemOptions::kHdfs: {
-#if ARROW_HDFS
+#ifdef PAYLOAD_MANAGER_ARROW_HDFS
       const auto&            proto_options = filesystem_options.hdfs();
       arrow::fs::HdfsOptions options;
       options.connection_config.host        = proto_options.connection_config().host();
