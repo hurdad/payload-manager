@@ -25,11 +25,17 @@ option(PAYLOAD_MANAGER_ENABLE_PYTHON_PROTO
 if(PAYLOAD_MANAGER_ENABLE_OTEL)
   add_compile_definitions(ENABLE_OTEL)
 
-  # Always use the vendored submodule for OpenTelemetry — system packages
-  # (e.g. Ubuntu's libopentelemetry-cpp-dev) are frequently missing components
-  # such as the OTLP HTTP exporter and may be at a different version.
-  if(FALSE)
-    message(STATUS "OpenTelemetry: using pre-installed package")
+  # By default always use the vendored submodule for OpenTelemetry — system
+  # packages (e.g. Ubuntu's libopentelemetry-cpp-dev) are frequently missing
+  # components such as the OTLP HTTP exporter and may be at a different version.
+  # Set PAYLOAD_MANAGER_OTEL_PREFER_SYSTEM=ON to use a pre-installed package
+  # (e.g. on Jetson where the base image ships a known-good OTel build).
+  option(PAYLOAD_MANAGER_OTEL_PREFER_SYSTEM
+         "Use pre-installed opentelemetry-cpp instead of the vendored submodule"
+         OFF)
+  if(PAYLOAD_MANAGER_OTEL_PREFER_SYSTEM)
+    find_package(opentelemetry-cpp REQUIRED)
+    message(STATUS "OpenTelemetry: using pre-installed package (${opentelemetry-cpp_VERSION})")
     # The installed package uses opentelemetry-cpp:: namespace with shorter
     # target names.  Create bare aliases to match what the rest of the project
     # expects (e.g. opentelemetry_trace, opentelemetry_exporter_otlp_grpc).
