@@ -34,9 +34,11 @@ static MemoryTransaction& TX(db::Transaction& tx) {
 }
 
 Result MemoryRepository::InsertPayload(Transaction& t, const model::PayloadRecord& r) {
-  auto& s = TX(t).Mutable();
+  auto& tx = TX(t);
+  auto& s  = tx.Mutable();
   if (s.payloads.contains(r.id)) return Result::Err(ErrorCode::AlreadyExists);
   s.payloads[r.id] = r;
+  tx.modified_payload_ids_.insert(r.id);
   return Result::Ok();
 }
 
@@ -61,16 +63,23 @@ std::vector<model::PayloadRecord> MemoryRepository::ListPayloads(Transaction& t,
 }
 
 Result MemoryRepository::UpdatePayload(Transaction& t, const model::PayloadRecord& r) {
-  auto& s = TX(t).Mutable();
+  auto& tx = TX(t);
+  auto& s  = tx.Mutable();
   if (!s.payloads.contains(r.id)) return Result::Err(ErrorCode::NotFound);
   s.payloads[r.id] = r;
+  tx.modified_payload_ids_.insert(r.id);
   return Result::Ok();
 }
 
 Result MemoryRepository::DeletePayload(Transaction& t, const std::string& id) {
-  auto& s = TX(t).Mutable();
+  auto& tx = TX(t);
+  auto& s  = tx.Mutable();
   s.payloads.erase(id);
   s.metadata.erase(id);
+  tx.deleted_payload_ids_.insert(id);
+  tx.modified_payload_ids_.erase(id);
+  tx.deleted_metadata_ids_.insert(id);
+  tx.modified_metadata_ids_.erase(id);
   return Result::Ok();
 }
 
@@ -85,7 +94,10 @@ std::vector<model::PayloadRecord> MemoryRepository::ListExpiredPayloads(Transact
 }
 
 Result MemoryRepository::UpsertMetadata(Transaction& t, const model::MetadataRecord& r) {
-  TX(t).Mutable().metadata[r.id] = r;
+  auto& tx              = TX(t);
+  tx.Mutable().metadata[r.id] = r;
+  tx.modified_metadata_ids_.insert(r.id);
+  tx.deleted_metadata_ids_.erase(r.id);
   return Result::Ok();
 }
 

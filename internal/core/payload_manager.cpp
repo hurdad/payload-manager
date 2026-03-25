@@ -390,6 +390,11 @@ PayloadDescriptor PayloadManager::Allocate(uint64_t size_bytes, Tier preferred, 
   const bool never_evict = persist || eviction_policy.priority() == EVICTION_PRIORITY_NEVER;
 
   auto record              = ToPayloadRecord(desc);
+  // Always store the requested allocation size, not the backend-reported size.
+  // PopulateLocation derives size from backend->Size() which may return 0 for
+  // stub or write-only backends; the authoritative accounting size is the
+  // caller-supplied size_bytes used in UpdateTierBytes below.
+  record.size_bytes        = size_bytes;
   record.persist           = persist;
   record.eviction_priority = static_cast<int>(eviction_policy.priority());
 
@@ -524,12 +529,24 @@ void PayloadManager::Delete(const PayloadID& id, bool force) {
   // Hold delete_mutex_ to prevent new leases from being acquired between the check and the DB mutation.
   std::lock_guard<std::mutex> delete_lock(delete_mutex_);
 
+  if (force) {
+    // Invalidate active leases: marks them as invalid so HasActiveLeases
+    // returns false immediately, but keeps entries in the table until holders
+    // call ReleaseLease().
+    lease_mgr_->InvalidateAll(id);
+    // Wait for in-flight holders to finish and call ReleaseLease() BEFORE
+    // acquiring payload_lock below.  ResolveSnapshot() also acquires
+    // payload_lock (shared), so waiting inside payload_lock would deadlock
+    // with a lease holder that calls ResolveSnapshot() before ReleaseLease().
+    // AcquireReadLease() holds delete_mutex_, so no new leases can be granted
+    // while we wait here, making the window safe.
+    constexpr auto kForceDeleteLeaseWaitMs = 5'000u;
+    lease_mgr_->WaitUntilNoLeases(id, std::chrono::steady_clock::now() + std::chrono::milliseconds(kForceDeleteLeaseWaitMs));
+  }
+
   {
     std::unique_lock<std::shared_mutex> payload_lock(*PayloadMutex(id));
 
-    if (force) {
-      lease_mgr_->InvalidateAll(id);
-    }
     if (!force && lease_mgr_->HasActiveLeases(id)) {
       throw payload::util::LeaseConflict("delete payload: active lease present; release leases or set force=true");
     }

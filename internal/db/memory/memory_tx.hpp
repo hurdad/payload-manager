@@ -1,5 +1,7 @@
 #pragma once
 
+#include <unordered_set>
+
 #include "internal/db/api/transaction.hpp"
 #include "memory_repository.hpp"
 
@@ -7,6 +9,10 @@ namespace payload::db::memory {
 
 /*
   Transaction = snapshot + write set
+
+  Commit uses per-key merging for payloads and metadata so that concurrent
+  transactions operating on different keys never conflict.  This matches the
+  row-level isolation behaviour of the real SQLite/Postgres repositories.
 */
 
 class MemoryTransaction final : public db::Transaction {
@@ -27,10 +33,16 @@ class MemoryTransaction final : public db::Transaction {
     return working_;
   }
 
+  // Write-set tracking: populated by the repository mutation methods so that
+  // Commit can merge only the touched keys rather than replacing the whole state.
+  std::unordered_set<std::string> modified_payload_ids_;
+  std::unordered_set<std::string> deleted_payload_ids_;
+  std::unordered_set<std::string> modified_metadata_ids_;
+  std::unordered_set<std::string> deleted_metadata_ids_;
+
  private:
   MemoryRepository&       repo_;
   MemoryRepository::State working_;
-  uint64_t                snapshot_version_{0};
   bool                    committed_   = false;
   bool                    rolled_back_ = false;
 };
