@@ -95,16 +95,23 @@ target_include_directories(payload_manager_internal
 
 # Promote FetchContent protobuf targets (globally visible non-namespaced) to
 # protobuf:: aliases in this scope before find_package() can find the system
-# 3.12.4 packages.  See api/CMakeLists.txt for full explanation.
-if(TARGET libprotobuf AND NOT TARGET protobuf::libprotobuf)
-  add_library(protobuf::libprotobuf ALIAS libprotobuf)
-endif()
-if(TARGET libprotobuf-lite AND NOT TARGET protobuf::libprotobuf-lite)
-  add_library(protobuf::libprotobuf-lite ALIAS libprotobuf-lite)
-endif()
-if(TARGET protoc AND NOT TARGET protobuf::protoc)
-  add_executable(protobuf::protoc ALIAS protoc)
-endif()
+# packages.  See api/CMakeLists.txt for full explanation.
+# Guard: only alias genuine build targets, not IMPORTED targets from a system
+# install — aliasing an IMPORTED libprotobuf creates a partial protobuf::
+# namespace that is missing v27+ targets (libupb etc.), causing
+# protobuf-targets.cmake to error with "some but not all targets defined".
+macro(_pb_alias_if_build _alias _target _add_fn)
+  if(TARGET ${_target} AND NOT TARGET ${_alias})
+    get_target_property(_pb_imported ${_target} IMPORTED)
+    if(NOT _pb_imported)
+      cmake_language(CALL ${_add_fn} ${_alias} ALIAS ${_target})
+    endif()
+    unset(_pb_imported)
+  endif()
+endmacro()
+_pb_alias_if_build(protobuf::libprotobuf      libprotobuf      add_library)
+_pb_alias_if_build(protobuf::libprotobuf-lite libprotobuf-lite add_library)
+_pb_alias_if_build(protobuf::protoc           protoc           add_executable)
 if(NOT TARGET protobuf::libprotobuf)
   find_package(Protobuf REQUIRED)
 endif()

@@ -16,15 +16,23 @@ project(payload_manager_api LANGUAGES CXX)
 # generation and compilation — preventing the SCCInfoBase mismatch that arises
 # when the system protoc 3.12.4 generates .pb.cc files that are then compiled
 # against FetchContent 3.21.x headers (pulled in transitively via gRPC::grpc++).
-if(TARGET libprotobuf AND NOT TARGET protobuf::libprotobuf)
-  add_library(protobuf::libprotobuf ALIAS libprotobuf)
-endif()
-if(TARGET libprotobuf-lite AND NOT TARGET protobuf::libprotobuf-lite)
-  add_library(protobuf::libprotobuf-lite ALIAS libprotobuf-lite)
-endif()
-if(TARGET protoc AND NOT TARGET protobuf::protoc)
-  add_executable(protobuf::protoc ALIAS protoc)
-endif()
+# Only promote non-namespaced FetchContent build targets to protobuf:: aliases.
+# Skip if the target is IMPORTED (system install or gRPC backward-compat alias):
+# in that case find_package(Protobuf) will load the full target set (including
+# protobuf::libupb etc. from v27+) and creating a partial alias first would
+# cause "some but not all targets already defined" errors from protobuf-targets.cmake.
+macro(_pb_alias_if_build _alias _target _add_fn)
+  if(TARGET ${_target} AND NOT TARGET ${_alias})
+    get_target_property(_pb_imported ${_target} IMPORTED)
+    if(NOT _pb_imported)
+      cmake_language(CALL ${_add_fn} ${_alias} ALIAS ${_target})
+    endif()
+    unset(_pb_imported)
+  endif()
+endmacro()
+_pb_alias_if_build(protobuf::libprotobuf      libprotobuf      add_library)
+_pb_alias_if_build(protobuf::libprotobuf-lite libprotobuf-lite add_library)
+_pb_alias_if_build(protobuf::protoc           protoc           add_executable)
 
 if(NOT TARGET protobuf::libprotobuf)
   find_package(Protobuf CONFIG QUIET)
