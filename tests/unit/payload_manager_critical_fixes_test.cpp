@@ -12,6 +12,7 @@
 #include "internal/lease/lease_manager.hpp"
 #include "internal/storage/storage_backend.hpp"
 #include "internal/util/errors.hpp"
+#include "internal/util/uuid.hpp"
 
 namespace {
 
@@ -89,7 +90,7 @@ class LoggingRepository final : public payload::db::Repository {
   payload::db::Result InsertPayload(payload::db::Transaction& t, const payload::db::model::PayloadRecord& r) override {
     return inner_->InsertPayload(Unwrap(t), r);
   }
-  std::optional<payload::db::model::PayloadRecord> GetPayload(payload::db::Transaction& t, const std::string& id) override {
+  std::optional<payload::db::model::PayloadRecord> GetPayload(payload::db::Transaction& t, const payload::util::UUID& id) override {
     return inner_->GetPayload(Unwrap(t), id);
   }
   std::vector<payload::db::model::PayloadRecord> ListPayloads(
@@ -99,7 +100,7 @@ class LoggingRepository final : public payload::db::Repository {
   payload::db::Result UpdatePayload(payload::db::Transaction& t, const payload::db::model::PayloadRecord& r) override {
     return inner_->UpdatePayload(Unwrap(t), r);
   }
-  payload::db::Result DeletePayload(payload::db::Transaction& t, const std::string& id) override {
+  payload::db::Result DeletePayload(payload::db::Transaction& t, const payload::util::UUID& id) override {
     return inner_->DeletePayload(Unwrap(t), id);
   }
   std::vector<payload::db::model::PayloadRecord> ListExpiredPayloads(payload::db::Transaction& t, uint64_t now_ms) override {

@@ -126,8 +126,7 @@ void ThrowIfDbError(const payload::db::Result& result, const std::string& contex
 
 db::model::PayloadRecord ToPayloadRecord(const PayloadDescriptor& descriptor) {
   db::model::PayloadRecord record;
-  record.id      = descriptor.payload_id().value().size() == 16 ? payload::util::ToString(payload::util::FromProto(descriptor.payload_id()))
-                                                                : descriptor.payload_id().value();
+  record.id      = payload::util::FromProto(descriptor.payload_id());
   record.tier    = descriptor.tier();
   record.state   = descriptor.state();
   record.version = descriptor.version();
@@ -145,11 +144,7 @@ db::model::PayloadRecord ToPayloadRecord(const PayloadDescriptor& descriptor) {
 
 PayloadDescriptor ToPayloadDescriptor(const db::model::PayloadRecord& record, const std::string& shm_prefix) {
   PayloadDescriptor descriptor;
-  try {
-    *descriptor.mutable_payload_id() = payload::util::ToProto(payload::util::FromString(record.id));
-  } catch (...) {
-    descriptor.mutable_payload_id()->set_value(record.id);
-  }
+  *descriptor.mutable_payload_id() = payload::util::ToProto(record.id);
   descriptor.set_tier(record.tier);
   descriptor.set_state(record.state);
   descriptor.set_version(record.version);
@@ -165,7 +160,7 @@ PayloadDescriptor ToPayloadDescriptor(const db::model::PayloadRecord& record, co
       case TIER_DISK:
       case TIER_OBJECT: {
         DiskLocation disk;
-        disk.set_path(record.id + ".bin");
+        disk.set_path(payload::util::ToString(record.id) + ".bin");
         disk.set_offset_bytes(0);
         disk.set_length_bytes(record.size_bytes);
         *descriptor.mutable_disk() = disk;
@@ -177,9 +172,7 @@ PayloadDescriptor ToPayloadDescriptor(const db::model::PayloadRecord& record, co
         ram.set_length_bytes(record.size_bytes);
         ram.set_slab_id(0);
         ram.set_block_index(0);
-        PayloadID tmp_id;
-        tmp_id.set_value(record.id);
-        ram.set_shm_name(payload::storage::RamArrowStore::ShmName(tmp_id, shm_prefix));
+        ram.set_shm_name(payload::storage::RamArrowStore::ShmName(payload::util::ToProto(record.id), shm_prefix));
         *descriptor.mutable_ram() = ram;
         break;
       }
@@ -202,11 +195,11 @@ PayloadManager::PayloadManager(payload::storage::StorageFactory::TierMap storage
   }
 }
 
-std::string PayloadManager::Key(const PayloadID& id) {
-  if (id.value().size() == 16) {
-    return payload::util::ToString(payload::util::FromProto(id));
+payload::util::UUID PayloadManager::Key(const PayloadID& id) {
+  if (id.value().size() != 16) {
+    throw payload::util::NotFound("payload not found; invalid or missing payload id");
   }
-  return id.value();
+  return payload::util::FromProto(id);
 }
 
 std::shared_ptr<std::shared_mutex> PayloadManager::PayloadMutex(const PayloadID& id) {
@@ -218,7 +211,7 @@ std::shared_ptr<std::shared_mutex> PayloadManager::PayloadMutex(const PayloadID&
   return payload_mutex;
 }
 
-bool PayloadManager::IsPinnedLocked(const std::string& key, uint64_t now_ms) {
+bool PayloadManager::IsPinnedLocked(const payload::util::UUID& key, uint64_t now_ms) {
   const auto it = pins_.find(key);
   if (it == pins_.end()) {
     return false;
@@ -283,7 +276,7 @@ void PayloadManager::PopulateLocation(PayloadDescriptor* descriptor) {
       DiskLocation disk;
       disk.set_length_bytes(size);
       disk.set_offset_bytes(0);
-      disk.set_path(Key(id) + ".bin");
+      disk.set_path(payload::util::ToString(Key(id)) + ".bin");
       *descriptor->mutable_disk() = disk;
       return;
     }
@@ -294,7 +287,7 @@ void PayloadManager::PopulateLocation(PayloadDescriptor* descriptor) {
       DiskLocation disk;
       disk.set_length_bytes(size);
       disk.set_offset_bytes(0);
-      disk.set_path(Key(id) + ".bin");
+      disk.set_path(payload::util::ToString(Key(id)) + ".bin");
       *descriptor->mutable_disk() = disk;
       return;
     }
@@ -368,7 +361,7 @@ PayloadDescriptor PayloadManager::Allocate(uint64_t size_bytes, Tier preferred, 
       case TIER_DISK:
       case TIER_OBJECT: {
         auto* disk = desc.mutable_disk();
-        disk->set_path(Key(desc.payload_id()) + ".bin");
+        disk->set_path(payload::util::ToString(Key(desc.payload_id())) + ".bin");
         disk->set_offset_bytes(0);
         disk->set_length_bytes(size_bytes);
         break;
@@ -453,12 +446,7 @@ void PayloadManager::ExpireStale() {
   tx->Commit();
 
   for (const auto& record : expired) {
-    PayloadID id;
-    try {
-      id = payload::util::ToProto(payload::util::FromString(record.id));
-    } catch (...) {
-      id.set_value(record.id);
-    }
+    const PayloadID id = payload::util::ToProto(record.id);
     try {
       Delete(id, /*force=*/true);
     } catch (const std::exception& e) {
@@ -477,7 +465,7 @@ PayloadDescriptor PayloadManager::Commit(const PayloadID& id) {
   record->state = PAYLOAD_STATE_ACTIVE;
   record->version++;
   ThrowIfDbError(repository_->UpdatePayload(*tx, *record), "commit payload");
-  const auto parents = repository_->GetParents(*tx, Key(id));
+  const auto parents = repository_->GetParents(*tx, payload::util::ToString(Key(id)));
   tx->Commit();
   const auto descriptor = ToPayloadDescriptor(*record, shm_prefix_);
   auto       hydrated   = descriptor;
@@ -506,21 +494,17 @@ PayloadDescriptor PayloadManager::Commit(const PayloadID& id) {
         storage_it->second->WriteSidecar(id, sidecar);
       } catch (const std::exception& e) {
         PAYLOAD_LOG_WARN("commit: sidecar write failed (non-fatal)",
-                         {payload::observability::StringField("payload_id", Key(id)),
+                         {payload::observability::StringField("payload_id", payload::util::ToString(Key(id))),
                           payload::observability::StringField("error", e.what())});
       }
     }
   }
   // Register with the metadata cache so this payload is a candidate for
   // LRU-based tier eviction even if UpsertMetadata was never called.
-  // Normalize the key to hex-string form so it is consistent with the
-  // keys written by HydrateCaches() (which reads string IDs from the DB).
   if (metadata_cache_) {
-    payload::manager::v1::PayloadID normalized_id;
-    normalized_id.set_value(Key(id));
     payload::manager::v1::PayloadMetadata minimal;
-    *minimal.mutable_id() = normalized_id;
-    metadata_cache_->Put(normalized_id, minimal);
+    *minimal.mutable_id() = id;
+    metadata_cache_->Put(id, minimal);
   }
   return hydrated;
 }
@@ -552,14 +536,14 @@ void PayloadManager::Delete(const PayloadID& id, bool force) {
     }
 
     auto tx     = repository_->Begin();
-    auto record = repository_->GetPayload(*tx, Key(id));
+    auto record = repository_->GetPayload(*tx, payload::util::FromProto(id));
     if (!record.has_value()) {
       throw payload::util::NotFound("delete payload: payload not found; verify payload id");
     }
 
     const Tier     payload_tier = record->tier;
     const uint64_t payload_size = record->size_bytes;
-    ThrowIfDbError(repository_->DeletePayload(*tx, Key(id)), "delete payload");
+    ThrowIfDbError(repository_->DeletePayload(*tx, payload::util::FromProto(id)), "delete payload");
     tx->Commit();
 
     // Storage removal is best-effort: the DB commit is the authoritative deletion.
@@ -571,7 +555,7 @@ void PayloadManager::Delete(const PayloadID& id, bool force) {
         storage_it->second->Remove(id);
       } catch (const std::exception& e) {
         PAYLOAD_LOG_WARN("delete payload: storage removal failed after DB commit (orphaned storage bytes)",
-                         {payload::observability::StringField("payload_id", Key(id)), payload::observability::StringField("error", e.what())});
+                         {payload::observability::StringField("payload_id", payload::util::ToString(Key(id))), payload::observability::StringField("error", e.what())});
       }
     }
 
@@ -598,11 +582,7 @@ void PayloadManager::Delete(const PayloadID& id, bool force) {
     UpdateTierBytes(payload_tier, -static_cast<int64_t>(payload_size));
     UpdateTierCount(payload_tier, -1);
     if (metadata_cache_) {
-      // Normalize to hex-string key, matching the form used in Commit() and
-      // HydrateCaches(), so the remove always hits the correct cache entry.
-      payload::manager::v1::PayloadID normalized_id;
-      normalized_id.set_value(Key(id));
-      metadata_cache_->Remove(normalized_id);
+      metadata_cache_->Remove(id);
     }
   } // payload_lock released
 
@@ -626,7 +606,7 @@ PayloadDescriptor PayloadManager::ResolveSnapshot(const PayloadID& id) {
 
   // Cache miss path: repository remains the durable backing store.
   auto tx     = repository_->Begin();
-  auto record = repository_->GetPayload(*tx, Key(id));
+  auto record = repository_->GetPayload(*tx, payload::util::FromProto(id));
   if (!record.has_value()) throw payload::util::NotFound("resolve snapshot: payload not found; verify payload id");
   tx->Commit();
 
@@ -709,7 +689,7 @@ PayloadDescriptor PayloadManager::PromoteUnlocked(const PayloadID& id, Tier targ
   std::unique_lock<std::shared_mutex> payload_lock(*PayloadMutex(id));
 
   auto tx     = repository_->Begin();
-  auto record = repository_->GetPayload(*tx, Key(id));
+  auto record = repository_->GetPayload(*tx, payload::util::FromProto(id));
   if (!record.has_value()) throw payload::util::NotFound("promote payload: payload not found; verify payload id");
   if (record->state == PAYLOAD_STATE_DELETED) {
     throw payload::util::InvalidState("promote payload: payload is deleted and cannot be promoted");
@@ -752,7 +732,7 @@ PayloadDescriptor PayloadManager::PromoteUnlocked(const PayloadID& id, Tier targ
         src_it->second->Remove(id);
       } catch (const std::exception& e) {
         PAYLOAD_LOG_WARN("promote: source removal failed after DB commit (orphaned source bytes)",
-                         {payload::observability::StringField("payload_id", Key(id)),
+                         {payload::observability::StringField("payload_id", payload::util::ToString(Key(id))),
                           payload::observability::StringField("error", e.what())});
       }
     }
@@ -777,9 +757,9 @@ void PayloadManager::HydrateCaches() {
 
   using payload::manager::core::v1::EVICTION_PRIORITY_NEVER;
 
-  std::unordered_set<std::string>                    new_no_evict;
-  std::unordered_map<std::string, Tier>              new_spill_targets;
-  std::unordered_map<std::string, PayloadDescriptor> new_snapshot_cache;
+  std::unordered_set<payload::util::UUID>                    new_no_evict;
+  std::unordered_map<payload::util::UUID, Tier>              new_spill_targets;
+  std::unordered_map<payload::util::UUID, PayloadDescriptor> new_snapshot_cache;
 
   for (const auto& record : records) {
     auto descriptor = ToPayloadDescriptor(record, shm_prefix_);
@@ -819,7 +799,7 @@ void PayloadManager::HydrateCaches() {
       const auto bump_result = repository_->UpdatePayload(*bump_tx, bumped);
       if (!bump_result && bump_result.code != payload::db::ErrorCode::NotFound) {
         PAYLOAD_LOG_WARN("hydrate: version bump update failed",
-                         {payload::observability::StringField("payload_id", record.id),
+                         {payload::observability::StringField("payload_id", payload::util::ToString(record.id)),
                           payload::observability::StringField("error", bump_result.message)});
       }
       auto it = new_snapshot_cache.find(record.id);
@@ -848,8 +828,7 @@ void PayloadManager::HydrateCaches() {
   if (metadata_cache_) {
     for (const auto& record : records) {
       if (record.state == PAYLOAD_STATE_ACTIVE) {
-        payload::manager::v1::PayloadID id;
-        id.set_value(record.id);
+        payload::manager::v1::PayloadID id = payload::util::ToProto(record.id);
         payload::manager::v1::PayloadMetadata minimal;
         *minimal.mutable_id() = id;
         metadata_cache_->Put(id, minimal);
@@ -887,7 +866,7 @@ void PayloadManager::ExecuteSpill(const PayloadID& id, Tier target, bool fsync) 
   std::unique_lock<std::shared_mutex> payload_lock(*PayloadMutex(id));
 
   auto tx     = repository_->Begin();
-  auto record = repository_->GetPayload(*tx, Key(id));
+  auto record = repository_->GetPayload(*tx, payload::util::FromProto(id));
   if (!record.has_value()) throw payload::util::NotFound("spill payload: payload not found; verify payload id");
   if (record->state == PAYLOAD_STATE_DELETED) {
     throw payload::util::InvalidState("spill payload: payload is deleted and cannot be spilled");
@@ -938,7 +917,7 @@ void PayloadManager::ExecuteSpill(const PayloadID& id, Tier target, bool fsync) 
         src_it->second->Remove(id);
       } catch (const std::exception& e) {
         PAYLOAD_LOG_WARN("spill: source removal failed after DB commit (orphaned source bytes)",
-                         {payload::observability::StringField("payload_id", Key(id)),
+                         {payload::observability::StringField("payload_id", payload::util::ToString(Key(id))),
                           payload::observability::StringField("error", e.what())});
       }
     }
@@ -955,7 +934,7 @@ void PayloadManager::ExecuteSpill(const PayloadID& id, Tier target, bool fsync) 
         dst_it->second->WriteSidecar(id, BuildSidecar(descriptor));
       } catch (const std::exception& e) {
         PAYLOAD_LOG_WARN("spill: sidecar write failed (non-fatal)",
-                         {payload::observability::StringField("payload_id", Key(id)),
+                         {payload::observability::StringField("payload_id", payload::util::ToString(Key(id))),
                           payload::observability::StringField("error", e.what())});
       }
     }

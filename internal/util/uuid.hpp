@@ -1,7 +1,7 @@
 #pragma once
 
 #include <array>
-#include <random>
+#include <functional>
 #include <string>
 
 #include "payload/manager/core/v1/id.pb.h"
@@ -34,3 +34,14 @@ UUID                            FromProto(const payload::manager::v1::LeaseID& i
 std::string PayloadIdToHex(const payload::manager::v1::PayloadID& id);
 
 } // namespace payload::util
+
+namespace std {
+template <>
+struct hash<payload::util::UUID> {
+  size_t operator()(const payload::util::UUID& id) const noexcept {
+    size_t h = 0;
+    for (uint8_t b : id) h ^= b + 0x9e3779b9 + (h << 6) + (h >> 2);
+    return h;
+  }
+};
+} // namespace std

@@ -10,6 +10,7 @@
 #include "internal/db/model/payload_record.hpp"
 #include "internal/lease/lease_manager.hpp"
 #include "internal/storage/storage_backend.hpp"
+#include "internal/util/uuid.hpp"
 
 namespace {
 
@@ -32,7 +33,7 @@ class SizeOnlyStorageBackend final : public StorageBackend {
   }
 
   uint64_t Size(const PayloadID& id) override {
-    return sizes_.at(id.value());
+    return sizes_.at(payload::util::PayloadIdToHex(id));
   }
 
   void Write(const PayloadID&, const std::shared_ptr<arrow::Buffer>&, bool) override {
@@ -60,8 +61,10 @@ TEST(PayloadManagerHydrate, HydrateCachesUsesSizeMetadataWithoutRead) {
   auto repository = std::make_shared<MemoryRepository>();
   auto backend    = std::make_shared<SizeOnlyStorageBackend>();
 
+  const auto seed_uuid = payload::util::GenerateUUID();
+
   PayloadRecord seed;
-  seed.id         = "payload-disk-1";
+  seed.id         = seed_uuid;
   seed.tier       = TIER_DISK;
   seed.state      = PAYLOAD_STATE_ACTIVE;
   seed.size_bytes = 0;
@@ -74,7 +77,7 @@ TEST(PayloadManagerHydrate, HydrateCachesUsesSizeMetadataWithoutRead) {
     tx->Commit();
   }
 
-  backend->SetSize(seed.id, 4096);
+  backend->SetSize(payload::util::ToString(seed_uuid), 4096);
 
   payload::storage::StorageFactory::TierMap storage;
   storage[TIER_DISK] = backend;
@@ -83,8 +86,7 @@ TEST(PayloadManagerHydrate, HydrateCachesUsesSizeMetadataWithoutRead) {
 
   manager.HydrateCaches();
 
-  PayloadID id;
-  id.set_value(seed.id);
+  PayloadID id = payload::util::ToProto(seed_uuid);
 
   const auto descriptor = manager.ResolveSnapshot(id);
   EXPECT_TRUE(descriptor.has_disk());

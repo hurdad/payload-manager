@@ -44,7 +44,7 @@ class HookedRepository : public Repository {
     return inner_.InsertPayload(tx, record);
   }
 
-  std::optional<payload::db::model::PayloadRecord> GetPayload(Transaction& tx, const std::string& id) override {
+  std::optional<payload::db::model::PayloadRecord> GetPayload(Transaction& tx, const payload::util::UUID& id) override {
     return inner_.GetPayload(tx, id);
   }
 
@@ -57,7 +57,7 @@ class HookedRepository : public Repository {
     return inner_.UpdatePayload(tx, record);
   }
 
-  Result DeletePayload(Transaction& tx, const std::string& id) override {
+  Result DeletePayload(Transaction& tx, const payload::util::UUID& id) override {
     return inner_.DeletePayload(tx, id);
   }
 

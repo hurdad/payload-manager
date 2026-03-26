@@ -17,6 +17,7 @@
 #include "internal/storage/storage_backend.hpp"
 #include "internal/tiering/pressure_state.hpp"
 #include "internal/tiering/tiering_policy.hpp"
+#include "internal/util/uuid.hpp"
 #include "payload/manager/core/v1/policy.pb.h"
 
 namespace {
@@ -211,8 +212,10 @@ TEST(PayloadManagerEvictionPolicy, DeleteClearsEvictionExempt) {
 TEST(PayloadManagerEvictionPolicy, EvictionFieldsRoundTripThroughRepository) {
   auto repo = std::make_shared<payload::db::memory::MemoryRepository>();
 
+  const auto record_id = payload::util::GenerateUUID();
+
   payload::db::model::PayloadRecord r;
-  r.id                = "evict-roundtrip";
+  r.id                = record_id;
   r.tier              = TIER_RAM;
   r.state             = payload::manager::v1::PAYLOAD_STATE_ALLOCATED;
   r.size_bytes        = 64;
@@ -228,7 +231,7 @@ TEST(PayloadManagerEvictionPolicy, EvictionFieldsRoundTripThroughRepository) {
   }
 
   auto tx     = repo->Begin();
-  auto loaded = repo->GetPayload(*tx, "evict-roundtrip");
+  auto loaded = repo->GetPayload(*tx, record_id);
   tx->Commit();
 
   ASSERT_TRUE(loaded.has_value());

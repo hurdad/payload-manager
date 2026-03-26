@@ -6,6 +6,7 @@
 #include "internal/db/memory/memory_repository.hpp"
 #include "internal/db/model/payload_record.hpp"
 #include "internal/lease/lease_manager.hpp"
+#include "internal/util/uuid.hpp"
 
 namespace {
 
@@ -20,11 +21,14 @@ using payload::manager::v1::TIER_RAM;
 
 TEST(PayloadManagerSnapshotRead, ResolveSnapshotUsesCachedDescriptorUntilRefresh) {
   auto repository = std::make_shared<MemoryRepository>();
+
+  const auto seed_uuid = payload::util::GenerateUUID();
+
   {
     auto tx = repository->Begin();
 
     PayloadRecord seed;
-    seed.id         = "payload-preloaded";
+    seed.id         = seed_uuid;
     seed.tier       = TIER_RAM;
     seed.state      = PAYLOAD_STATE_ACTIVE;
     seed.size_bytes = 1024;
@@ -37,8 +41,7 @@ TEST(PayloadManagerSnapshotRead, ResolveSnapshotUsesCachedDescriptorUntilRefresh
 
   auto manager = PayloadManager(/*storage=*/{}, std::make_shared<payload::lease::LeaseManager>(), repository);
 
-  payload::manager::v1::PayloadID id;
-  id.set_value("payload-preloaded");
+  const payload::manager::v1::PayloadID id = payload::util::ToProto(seed_uuid);
 
   const auto first = manager.ResolveSnapshot(id);
   EXPECT_EQ(first.tier(), TIER_RAM);
@@ -46,7 +49,7 @@ TEST(PayloadManagerSnapshotRead, ResolveSnapshotUsesCachedDescriptorUntilRefresh
 
   {
     auto tx      = repository->Begin();
-    auto current = repository->GetPayload(*tx, "payload-preloaded");
+    auto current = repository->GetPayload(*tx, seed_uuid);
     ASSERT_TRUE(current.has_value());
     current->tier      = TIER_DISK;
     current->version   = 2;

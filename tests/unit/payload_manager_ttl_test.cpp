@@ -10,6 +10,7 @@
 #include "internal/db/memory/memory_repository.hpp"
 #include "internal/lease/lease_manager.hpp"
 #include "internal/storage/storage_backend.hpp"
+#include "internal/util/uuid.hpp"
 
 namespace {
 
@@ -155,8 +156,12 @@ TEST(PayloadManagerTTL, ExpireStaleIsSelective) {
 TEST(PayloadManagerTTL, MemoryRepositoryListExpiredPayloads) {
   auto repo = std::make_shared<payload::db::memory::MemoryRepository>();
 
+  const auto uuid1 = payload::util::GenerateUUID();
+  const auto uuid2 = payload::util::GenerateUUID();
+  const auto uuid3 = payload::util::GenerateUUID();
+
   payload::db::model::PayloadRecord r1;
-  r1.id            = "aaaa";
+  r1.id            = uuid1;
   r1.tier          = TIER_RAM;
   r1.state         = payload::manager::v1::PAYLOAD_STATE_ACTIVE;
   r1.size_bytes    = 64;
@@ -164,7 +169,7 @@ TEST(PayloadManagerTTL, MemoryRepositoryListExpiredPayloads) {
   r1.expires_at_ms = 1; // already expired
 
   payload::db::model::PayloadRecord r2;
-  r2.id            = "bbbb";
+  r2.id            = uuid2;
   r2.tier          = TIER_RAM;
   r2.state         = payload::manager::v1::PAYLOAD_STATE_ACTIVE;
   r2.size_bytes    = 64;
@@ -172,7 +177,7 @@ TEST(PayloadManagerTTL, MemoryRepositoryListExpiredPayloads) {
   r2.expires_at_ms = 0; // no TTL
 
   payload::db::model::PayloadRecord r3;
-  r3.id            = "cccc";
+  r3.id            = uuid3;
   r3.tier          = TIER_RAM;
   r3.state         = payload::manager::v1::PAYLOAD_STATE_ACTIVE;
   r3.size_bytes    = 64;
@@ -192,15 +197,17 @@ TEST(PayloadManagerTTL, MemoryRepositoryListExpiredPayloads) {
   tx->Commit();
 
   EXPECT_EQ(expired.size(), 1u);
-  EXPECT_EQ(expired[0].id, "aaaa");
+  EXPECT_EQ(expired[0].id, uuid1);
 }
 
 // expires_at_ms == now_ms must be treated as expired (boundary: <=).
 TEST(PayloadManagerTTL, MemoryRepositoryExactBoundaryIsExpired) {
   auto repo = std::make_shared<payload::db::memory::MemoryRepository>();
 
+  const auto boundary_uuid = payload::util::GenerateUUID();
+
   payload::db::model::PayloadRecord r;
-  r.id            = "boundary";
+  r.id            = boundary_uuid;
   r.tier          = TIER_RAM;
   r.state         = payload::manager::v1::PAYLOAD_STATE_ACTIVE;
   r.size_bytes    = 64;
@@ -219,15 +226,17 @@ TEST(PayloadManagerTTL, MemoryRepositoryExactBoundaryIsExpired) {
   tx->Commit();
 
   EXPECT_EQ(expired.size(), 1u) << "record with expires_at_ms == now_ms must be listed as expired";
-  EXPECT_EQ(expired[0].id, "boundary");
+  EXPECT_EQ(expired[0].id, boundary_uuid);
 }
 
 // TTL is stored and round-trips through the memory repository.
 TEST(PayloadManagerTTL, TtlRoundTripsThroughRepository) {
   auto repo = std::make_shared<payload::db::memory::MemoryRepository>();
 
+  const auto ttl_uuid = payload::util::GenerateUUID();
+
   payload::db::model::PayloadRecord r;
-  r.id            = "test-ttl";
+  r.id            = ttl_uuid;
   r.tier          = TIER_RAM;
   r.state         = payload::manager::v1::PAYLOAD_STATE_ALLOCATED;
   r.size_bytes    = 128;
@@ -241,7 +250,7 @@ TEST(PayloadManagerTTL, TtlRoundTripsThroughRepository) {
   }
 
   auto tx     = repo->Begin();
-  auto loaded = repo->GetPayload(*tx, "test-ttl");
+  auto loaded = repo->GetPayload(*tx, ttl_uuid);
   tx->Commit();
 
   ASSERT_TRUE(loaded.has_value());

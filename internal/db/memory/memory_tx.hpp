@@ -3,6 +3,7 @@
 #include <unordered_set>
 
 #include "internal/db/api/transaction.hpp"
+#include "internal/util/uuid.hpp"
 #include "memory_repository.hpp"
 
 namespace payload::db::memory {
@@ -35,8 +36,8 @@ class MemoryTransaction final : public db::Transaction {
 
   // Write-set tracking: populated by the repository mutation methods so that
   // Commit can merge only the touched keys rather than replacing the whole state.
-  std::unordered_set<std::string> modified_payload_ids_;
-  std::unordered_set<std::string> deleted_payload_ids_;
+  std::unordered_set<payload::util::UUID> modified_payload_ids_;
+  std::unordered_set<payload::util::UUID> deleted_payload_ids_;
   std::unordered_set<std::string> modified_metadata_ids_;
   std::unordered_set<std::string> deleted_metadata_ids_;
 

@@ -6,6 +6,7 @@
 
 #include "internal/db/api/result.hpp"
 #include "internal/db/api/transaction.hpp"
+#include "internal/util/uuid.hpp"
 #include "internal/db/model/lineage_record.hpp"
 #include "internal/db/model/metadata_event_record.hpp"
 #include "internal/db/model/metadata_record.hpp"
@@ -48,14 +49,14 @@ class Repository {
 
   virtual Result InsertPayload(Transaction&, const model::PayloadRecord&) = 0;
 
-  virtual std::optional<model::PayloadRecord> GetPayload(Transaction&, const std::string& id) = 0;
+  virtual std::optional<model::PayloadRecord> GetPayload(Transaction&, const payload::util::UUID& id) = 0;
 
   virtual std::vector<model::PayloadRecord> ListPayloads(Transaction&,
                                                          payload::manager::v1::Tier tier_filter = payload::manager::v1::TIER_UNSPECIFIED) = 0;
 
   virtual Result UpdatePayload(Transaction&, const model::PayloadRecord&) = 0;
 
-  virtual Result DeletePayload(Transaction&, const std::string& id) = 0;
+  virtual Result DeletePayload(Transaction&, const payload::util::UUID& id) = 0;
 
   virtual std::vector<model::PayloadRecord> ListExpiredPayloads(Transaction&, uint64_t now_ms) = 0;
 

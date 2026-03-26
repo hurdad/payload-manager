@@ -26,6 +26,7 @@
 #include "internal/db/memory/memory_repository.hpp"
 #include "internal/lease/lease_manager.hpp"
 #include "internal/storage/storage_backend.hpp"
+#include "internal/util/uuid.hpp"
 #include "payload/manager/v1.hpp"
 
 namespace {
@@ -129,8 +130,8 @@ TEST(SpillSourceRemoveFailure, PromoteDoesNotPropagateRemoveException) {
   auto disk2 = std::make_shared<ThrowingRemoveBackend>(TIER_DISK);
 
   // Pre-seed the disk backend manually with a buffer.
-  payload::manager::v1::PayloadID id;
-  id.set_value("test-promote-remove-failure");
+  const auto promote_uuid = payload::util::GenerateUUID();
+  payload::manager::v1::PayloadID id = payload::util::ToProto(promote_uuid);
 
   auto buf_result = arrow::AllocateBuffer(64);
   ASSERT_TRUE(buf_result.ok());
@@ -141,7 +142,7 @@ TEST(SpillSourceRemoveFailure, PromoteDoesNotPropagateRemoveException) {
   auto repo2 = std::make_shared<payload::db::memory::MemoryRepository>();
   {
     payload::db::model::PayloadRecord r;
-    r.id         = "test-promote-remove-failure";
+    r.id         = promote_uuid;
     r.tier       = TIER_DISK;
     r.state      = payload::manager::v1::PAYLOAD_STATE_ACTIVE;
     r.size_bytes = 64;

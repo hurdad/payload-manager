@@ -1,6 +1,7 @@
 #pragma once
 
 #include "internal/db/api/repository.hpp"
+#include "internal/util/uuid.hpp"
 #include "pg_pool.hpp"
 #include "pg_tx.hpp"
 
@@ -13,11 +14,11 @@ class PgRepository final : public db::Repository {
   std::unique_ptr<Transaction> Begin() override;
 
   Result                              InsertPayload(Transaction&, const model::PayloadRecord&) override;
-  std::optional<model::PayloadRecord> GetPayload(Transaction&, const std::string&) override;
+  std::optional<model::PayloadRecord> GetPayload(Transaction&, const payload::util::UUID&) override;
   std::vector<model::PayloadRecord>   ListPayloads(Transaction&,
                                                    payload::manager::v1::Tier tier_filter = payload::manager::v1::TIER_UNSPECIFIED) override;
   Result                              UpdatePayload(Transaction&, const model::PayloadRecord&) override;
-  Result                              DeletePayload(Transaction&, const std::string&) override;
+  Result                              DeletePayload(Transaction&, const payload::util::UUID&) override;
   std::vector<model::PayloadRecord>   ListExpiredPayloads(Transaction&, uint64_t now_ms) override;
 
   Result                               UpsertMetadata(Transaction&, const model::MetadataRecord&) override;

@@ -5,6 +5,7 @@
 #include <vector>
 
 #include "internal/db/api/repository.hpp"
+#include "internal/util/uuid.hpp"
 
 namespace payload::db::memory {
 
@@ -17,11 +18,11 @@ class MemoryRepository final : public db::Repository {
   std::unique_ptr<Transaction> Begin() override;
 
   Result                              InsertPayload(Transaction&, const model::PayloadRecord&) override;
-  std::optional<model::PayloadRecord> GetPayload(Transaction&, const std::string&) override;
+  std::optional<model::PayloadRecord> GetPayload(Transaction&, const payload::util::UUID&) override;
   std::vector<model::PayloadRecord>   ListPayloads(Transaction&,
                                                    payload::manager::v1::Tier tier_filter = payload::manager::v1::TIER_UNSPECIFIED) override;
   Result                              UpdatePayload(Transaction&, const model::PayloadRecord&) override;
-  Result                              DeletePayload(Transaction&, const std::string&) override;
+  Result                              DeletePayload(Transaction&, const payload::util::UUID&) override;
   std::vector<model::PayloadRecord>   ListExpiredPayloads(Transaction&, uint64_t now_ms) override;
 
   Result                               UpsertMetadata(Transaction&, const model::MetadataRecord&) override;
@@ -51,7 +52,7 @@ class MemoryRepository final : public db::Repository {
   friend class MemoryTransaction;
 
   struct State {
-    std::unordered_map<std::string, model::PayloadRecord>  payloads;
+    std::unordered_map<payload::util::UUID, model::PayloadRecord>  payloads;
     std::unordered_map<std::string, model::MetadataRecord> metadata;
     std::vector<model::MetadataEventRecord>                metadata_events;
     std::vector<model::LineageRecord>                      lineage;

@@ -33,9 +33,15 @@ static void BindText(sqlite3_stmt* st, int idx, const std::string& s) {
   sqlite3_bind_text(st, idx, s.c_str(), -1, SQLITE_TRANSIENT);
 }
 
-// Bind a UUID column.
+// Bind a UUID column (binary UUID).
+static void BindUuid(sqlite3_stmt* st, int idx, const payload::util::UUID& uuid) {
+  sqlite3_bind_blob(st, idx, uuid.data(), 16, SQLITE_TRANSIENT);
+}
+
+// Bind a UUID column (string form — used for MetadataRecord::id and lineage IDs
+// which remain std::string).
 // If the string is a valid 36-char hex UUID it is stored as a 16-byte BLOB;
-// otherwise it is stored as TEXT (preserves synthetic test IDs).
+// otherwise it is stored as TEXT.
 static void BindUuid(sqlite3_stmt* st, int idx, const std::string& uuid_str) {
   if (uuid_str.size() == 36) {
     try {
@@ -48,19 +54,25 @@ static void BindUuid(sqlite3_stmt* st, int idx, const std::string& uuid_str) {
   sqlite3_bind_text(st, idx, uuid_str.c_str(), -1, SQLITE_TRANSIENT);
 }
 
-// Read a UUID column.
-// 16-byte BLOBs are decoded back to a hex UUID string; anything else is
-// returned as TEXT (handles synthetic test IDs stored as TEXT).
-static std::string ColUuid(sqlite3_stmt* st, int col) {
+// Read a UUID column — returns a binary UUID.
+// 16-byte BLOBs are decoded into UUID; anything else yields a zero UUID.
+static payload::util::UUID ColUuid(sqlite3_stmt* st, int col) {
+  payload::util::UUID uuid{};
   if (sqlite3_column_type(st, col) == SQLITE_BLOB) {
     const void* data = sqlite3_column_blob(st, col);
     int         len  = sqlite3_column_bytes(st, col);
-    static_assert(sizeof(payload::util::UUID{}) == 16, "UUID must be exactly 16 bytes");
-    if (data && len == static_cast<int>(sizeof(payload::util::UUID{}))) {
-      payload::util::UUID uuid{};
-      std::memcpy(uuid.data(), data, sizeof(uuid));
-      return payload::util::ToString(uuid);
+    if (data && len == 16) {
+      std::memcpy(uuid.data(), data, 16);
     }
+  }
+  return uuid;
+}
+
+// Read a UUID column stored as a 16-byte BLOB and return it as a hex string.
+// Falls back to ColText for non-BLOB columns (e.g. TEXT UUIDs or NULLs).
+static std::string ColUuidStr(sqlite3_stmt* st, int col) {
+  if (sqlite3_column_type(st, col) == SQLITE_BLOB) {
+    return payload::util::ToString(ColUuid(st, col));
   }
   const unsigned char* t = sqlite3_column_text(st, col);
   return t ? reinterpret_cast<const char*>(t) : "";
@@ -155,7 +167,7 @@ Result SqliteRepository::InsertPayload(Transaction& t, const model::PayloadRecor
   return Translate(db, rc);
 }
 
-std::optional<model::PayloadRecord> SqliteRepository::GetPayload(Transaction& t, const std::string& id) {
+std::optional<model::PayloadRecord> SqliteRepository::GetPayload(Transaction& t, const payload::util::UUID& id) {
   auto* db = TX(t).Handle();
 
   const char* sql =
@@ -282,7 +294,7 @@ std::vector<model::PayloadRecord> SqliteRepository::ListExpiredPayloads(Transact
   return records;
 }
 
-Result SqliteRepository::DeletePayload(Transaction& t, const std::string& id) {
+Result SqliteRepository::DeletePayload(Transaction& t, const payload::util::UUID& id) {
   auto* db = TX(t).Handle();
 
   const char*   sql = "DELETE FROM payload WHERE id=?;";
@@ -339,7 +351,7 @@ std::optional<model::MetadataRecord> SqliteRepository::GetMetadata(Transaction& 
   }
 
   model::MetadataRecord r;
-  r.id            = ColUuid(st, 0);
+  r.id            = ColText(st, 0);
   r.json          = ColText(st, 1);
   r.schema        = ColText(st, 2);
   r.updated_at_ms = ColU64(st, 3);
@@ -411,8 +423,8 @@ std::vector<model::LineageRecord> SqliteRepository::GetParents(Transaction& t, c
   std::vector<model::LineageRecord> out;
   while (sqlite3_step(st) == SQLITE_ROW) {
     model::LineageRecord r;
-    r.parent_id     = ColUuid(st, 0);
-    r.child_id      = ColUuid(st, 1);
+    r.parent_id     = ColUuidStr(st, 0);
+    r.child_id      = ColUuidStr(st, 1);
     r.operation     = ColText(st, 2);
     r.role          = ColText(st, 3);
     r.parameters    = ColText(st, 4);
@@ -439,8 +451,8 @@ std::vector<model::LineageRecord> SqliteRepository::GetChildren(Transaction& t, 
   std::vector<model::LineageRecord> out;
   while (sqlite3_step(st) == SQLITE_ROW) {
     model::LineageRecord r;
-    r.parent_id     = ColUuid(st, 0);
-    r.child_id      = ColUuid(st, 1);
+    r.parent_id     = ColUuidStr(st, 0);
+    r.child_id      = ColUuidStr(st, 1);
     r.operation     = ColText(st, 2);
     r.role          = ColText(st, 3);
     r.parameters    = ColText(st, 4);
@@ -661,7 +673,7 @@ std::vector<model::StreamEntryRecord> SqliteRepository::ReadStreamEntries(Transa
     model::StreamEntryRecord e;
     e.stream_id      = ColU64(st, 0);
     e.offset         = ColU64(st, 1);
-    e.payload_uuid   = ColUuid(st, 2);
+    e.payload_uuid   = payload::util::ToString(ColUuid(st, 2));
     e.event_time_ms  = ColU64(st, 3);
     e.append_time_ms = ColU64(st, 4);
     e.duration_ns    = ColU64(st, 5);
@@ -713,7 +725,7 @@ std::vector<model::StreamEntryRecord> SqliteRepository::ReadStreamEntriesRange(T
     model::StreamEntryRecord e;
     e.stream_id      = ColU64(st, 0);
     e.offset         = ColU64(st, 1);
-    e.payload_uuid   = ColUuid(st, 2);
+    e.payload_uuid   = payload::util::ToString(ColUuid(st, 2));
     e.event_time_ms  = ColU64(st, 3);
     e.append_time_ms = ColU64(st, 4);
     e.duration_ns    = ColU64(st, 5);

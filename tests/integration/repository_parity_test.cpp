@@ -15,6 +15,7 @@
 #include "internal/db/model/lineage_record.hpp"
 #include "internal/db/model/metadata_record.hpp"
 #include "internal/db/model/payload_record.hpp"
+#include "internal/util/uuid.hpp"
 
 #if PAYLOAD_DB_SQLITE
 #include "internal/db/sqlite/sqlite_db.hpp"
@@ -53,7 +54,7 @@ struct BackendFactory {
   bool                                              supports_parallel_transactions = true;
 };
 
-void VerifyAllocateCommitResolveDelete(Repository& repo, const std::string& id) {
+void VerifyAllocateCommitResolveDelete(Repository& repo, const payload::util::UUID& id) {
   auto tx = repo.Begin();
 
   PayloadRecord payload;
@@ -87,7 +88,7 @@ void VerifyAllocateCommitResolveDelete(Repository& repo, const std::string& id) 
   tx->Commit();
 }
 
-void VerifyMetadataReadWrite(Repository& repo, const std::string& id) {
+void VerifyMetadataReadWrite(Repository& repo, const payload::util::UUID& id) {
   auto tx = repo.Begin();
 
   PayloadRecord payload;
@@ -99,13 +100,13 @@ void VerifyMetadataReadWrite(Repository& repo, const std::string& id) {
   assert(repo.InsertPayload(*tx, payload));
 
   MetadataRecord metadata;
-  metadata.id            = id;
+  metadata.id            = payload::util::ToString(id);
   metadata.json          = R"({"stage":"raw"})";
   metadata.schema        = "schema.v1";
   metadata.updated_at_ms = NowMs();
   assert(repo.UpsertMetadata(*tx, metadata));
 
-  auto read = repo.GetMetadata(*tx, id);
+  auto read = repo.GetMetadata(*tx, payload::util::ToString(id));
   assert(read.has_value());
   assert(read->json == metadata.json);
   assert(read->schema == metadata.schema);
@@ -114,14 +115,14 @@ void VerifyMetadataReadWrite(Repository& repo, const std::string& id) {
   metadata.updated_at_ms = NowMs() + 1000;
   assert(repo.UpsertMetadata(*tx, metadata));
 
-  auto updated = repo.GetMetadata(*tx, id);
+  auto updated = repo.GetMetadata(*tx, payload::util::ToString(id));
   assert(updated.has_value());
   assert(updated->json == metadata.json);
 
   tx->Commit();
 }
 
-void VerifyLineageReadWrite(Repository& repo, const std::string& parent_id, const std::string& child_id) {
+void VerifyLineageReadWrite(Repository& repo, const payload::util::UUID& parent_id, const payload::util::UUID& child_id) {
   auto tx = repo.Begin();
 
   PayloadRecord parent{.id = parent_id, .tier = TIER_RAM, .state = PAYLOAD_STATE_ACTIVE, .size_bytes = 1, .version = 1};
@@ -130,9 +131,12 @@ void VerifyLineageReadWrite(Repository& repo, const std::string& parent_id, cons
   assert(repo.InsertPayload(*tx, parent));
   assert(repo.InsertPayload(*tx, child));
 
+  const auto parent_str = payload::util::ToString(parent_id);
+  const auto child_str  = payload::util::ToString(child_id);
+
   LineageRecord edge;
-  edge.parent_id     = parent_id;
-  edge.child_id      = child_id;
+  edge.parent_id     = parent_str;
+  edge.child_id      = child_str;
   edge.operation     = "fft";
   edge.role          = "input";
   edge.parameters    = "{}";
@@ -140,18 +144,18 @@ void VerifyLineageReadWrite(Repository& repo, const std::string& parent_id, cons
 
   assert(repo.InsertLineage(*tx, edge));
 
-  const auto parents = repo.GetParents(*tx, child_id);
+  const auto parents = repo.GetParents(*tx, child_str);
   assert(parents.size() == 1);
-  assert(parents[0].parent_id == parent_id);
+  assert(parents[0].parent_id == parent_str);
 
-  const auto children = repo.GetChildren(*tx, parent_id);
+  const auto children = repo.GetChildren(*tx, parent_str);
   assert(children.size() == 1);
-  assert(children[0].child_id == child_id);
+  assert(children[0].child_id == child_str);
 
   tx->Commit();
 }
 
-void VerifyRollbackBehavior(Repository& repo, const std::string& id) {
+void VerifyRollbackBehavior(Repository& repo, const payload::util::UUID& id) {
   {
     auto          tx = repo.Begin();
     PayloadRecord payload{.id = id, .tier = TIER_RAM, .state = PAYLOAD_STATE_ALLOCATED, .size_bytes = 64, .version = 1};
@@ -282,7 +286,7 @@ void VerifyStreamReadWrite(Repository& repo, const std::string& stream_namespace
   }
 }
 
-void VerifyConcurrentUpdates(Repository& repo, const std::string& id, bool supports_parallel_transactions) {
+void VerifyConcurrentUpdates(Repository& repo, const payload::util::UUID& id, bool supports_parallel_transactions) {
   {
     auto          tx = repo.Begin();
     PayloadRecord seed{.id = id, .tier = TIER_RAM, .state = PAYLOAD_STATE_ALLOCATED, .size_bytes = 64, .version = 1};
@@ -340,10 +344,14 @@ void VerifyConcurrentUpdates(Repository& repo, const std::string& id, bool suppo
   verify_tx->Commit();
 }
 
-void VerifyRestartDurability(BackendFactory& backend, const std::string& id) {
+void VerifyRestartDurability(BackendFactory& backend, const payload::util::UUID& id) {
   if (!backend.supports_restart()) {
     return;
   }
+
+  const auto id_str    = payload::util::ToString(id);
+  const auto child_id  = payload::util::GenerateUUID();
+  const auto child_str = payload::util::ToString(child_id);
 
   auto repo = backend.make_repository();
   {
@@ -352,13 +360,13 @@ void VerifyRestartDurability(BackendFactory& backend, const std::string& id) {
     PayloadRecord payload{.id = id, .tier = TIER_RAM, .state = PAYLOAD_STATE_ACTIVE, .size_bytes = 1024, .version = 11};
     assert(repo->InsertPayload(*tx, payload));
 
-    MetadataRecord metadata{.id = id, .json = R"({"k":"v"})", .schema = "schema.v1", .updated_at_ms = NowMs()};
+    MetadataRecord metadata{.id = id_str, .json = R"({"k":"v"})", .schema = "schema.v1", .updated_at_ms = NowMs()};
     assert(repo->UpsertMetadata(*tx, metadata));
 
     LineageRecord lineage{
-        .parent_id = id, .child_id = id + "-child", .operation = "copy", .role = "parent", .parameters = "{}", .created_at_ms = NowMs()};
+        .parent_id = id_str, .child_id = child_str, .operation = "copy", .role = "parent", .parameters = "{}", .created_at_ms = NowMs()};
 
-    PayloadRecord child{.id = id + "-child", .tier = TIER_RAM, .state = PAYLOAD_STATE_ACTIVE, .size_bytes = 512, .version = 1};
+    PayloadRecord child{.id = child_id, .tier = TIER_RAM, .state = PAYLOAD_STATE_ACTIVE, .size_bytes = 512, .version = 1};
     assert(repo->InsertPayload(*tx, child));
     assert(repo->InsertLineage(*tx, lineage));
 
@@ -372,13 +380,13 @@ void VerifyRestartDurability(BackendFactory& backend, const std::string& id) {
   assert(p.has_value());
   assert(p->version == 11);
 
-  auto m = repo->GetMetadata(*tx, id);
+  auto m = repo->GetMetadata(*tx, id_str);
   assert(m.has_value());
   assert(m->json == R"({"k":"v"})");
 
-  auto children = repo->GetChildren(*tx, id);
+  auto children = repo->GetChildren(*tx, id_str);
   assert(children.size() == 1);
-  assert(children[0].child_id == id + "-child");
+  assert(children[0].child_id == child_str);
   tx->Commit();
 
   backend.cleanup();
@@ -495,14 +503,14 @@ void RunBackendSuite(BackendFactory& backend) {
   std::cout << "running backend suite: " << backend.name << "\n";
   auto repo = backend.make_repository();
 
-  VerifyAllocateCommitResolveDelete(*repo, backend.name + "-payload-life");
-  VerifyMetadataReadWrite(*repo, backend.name + "-metadata");
-  VerifyLineageReadWrite(*repo, backend.name + "-lineage-parent", backend.name + "-lineage-child");
-  VerifyRollbackBehavior(*repo, backend.name + "-rollback");
-  VerifyConcurrentUpdates(*repo, backend.name + "-concurrency", backend.supports_parallel_transactions);
+  VerifyAllocateCommitResolveDelete(*repo, payload::util::GenerateUUID());
+  VerifyMetadataReadWrite(*repo, payload::util::GenerateUUID());
+  VerifyLineageReadWrite(*repo, payload::util::GenerateUUID(), payload::util::GenerateUUID());
+  VerifyRollbackBehavior(*repo, payload::util::GenerateUUID());
+  VerifyConcurrentUpdates(*repo, payload::util::GenerateUUID(), backend.supports_parallel_transactions);
   VerifyStreamReadWrite(*repo, "integration", backend.name + "-stream");
 
-  VerifyRestartDurability(backend, backend.name + "-durable");
+  VerifyRestartDurability(backend, payload::util::GenerateUUID());
 
   backend.cleanup();
 }

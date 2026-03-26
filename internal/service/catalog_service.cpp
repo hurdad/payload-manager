@@ -294,16 +294,7 @@ ListPayloadsResponse CatalogService::ListPayloads(const ListPayloadsRequest& req
     tx->Commit();
 
     for (const auto& r : records) {
-      // Skip records whose stored ID cannot be parsed — this protects against
-      // database corruption introducing malformed IDs crashing the whole list.
-      PayloadID proto_id;
-      try {
-        proto_id.set_value(payload::util::FromString(r.id).data(), 16);
-      } catch (const std::exception&) {
-        PAYLOAD_LOG_WARN("list payloads: skipping record with malformed id", {payload::observability::StringField("id", r.id)});
-        continue;
-      }
-
+      const auto proto_id  = payload::util::ToProto(r.id);
       auto* entry          = resp.add_payloads();
       *entry->mutable_id() = proto_id;
 

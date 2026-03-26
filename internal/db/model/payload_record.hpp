@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <string>
 
+#include "internal/util/uuid.hpp"
 #include "payload/manager/core/v1/types.pb.h"
 #include "payload/manager/v1.hpp"
 
@@ -14,11 +15,10 @@ namespace payload::db::model {
   IMPORTANT:
   - This is the authoritative state machine record.
   - Version is used for optimistic concurrency / lease fencing.
-  - ID should eventually become 16-byte binary UUID.
 */
 
 struct PayloadRecord {
-  std::string id; // UUID (temporary string form; future: std::array<uint8_t,16>)
+  payload::util::UUID id{};
 
   payload::manager::v1::Tier tier = payload::manager::v1::TIER_UNSPECIFIED;
 

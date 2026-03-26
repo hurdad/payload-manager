@@ -3,6 +3,7 @@
 #include <stdexcept>
 #include <string>
 
+#include "internal/util/uuid.hpp"
 #include "payload/manager/v1.hpp"
 
 namespace payload::db::postgres {
@@ -37,21 +38,21 @@ Result PgRepository::Translate(const std::exception& e) {
 
 Result PgRepository::InsertPayload(Transaction& t, const model::PayloadRecord& r) {
   try {
-    TX(t).Work().exec_prepared("insert_payload", r.id, (int)r.tier, (int)r.state, r.size_bytes, r.version, r.expires_at_ms, (int)r.no_evict,
-                               r.eviction_priority, r.spill_target, r.created_at_ms);
+    TX(t).Work().exec_prepared("insert_payload", payload::util::ToString(r.id), (int)r.tier, (int)r.state, r.size_bytes, r.version, r.expires_at_ms,
+                               (int)r.no_evict, r.eviction_priority, r.spill_target, r.created_at_ms);
     return Result::Ok();
   } catch (const std::exception& e) {
     return Translate(e);
   }
 }
 
-std::optional<model::PayloadRecord> PgRepository::GetPayload(Transaction& t, const std::string& id) {
+std::optional<model::PayloadRecord> PgRepository::GetPayload(Transaction& t, const payload::util::UUID& id) {
   try {
-    auto res = TX(t).Work().exec_prepared("get_payload", id);
+    auto res = TX(t).Work().exec_prepared("get_payload", payload::util::ToString(id));
     if (res.empty()) return std::nullopt;
 
     model::PayloadRecord r;
-    r.id                = res[0][0].c_str();
+    r.id                = payload::util::FromString(res[0][0].c_str());
     r.tier  = CheckedEnumCast<payload::manager::v1::Tier>(res[0][1].as<int>(), 0, 4, "tier");
     r.state = CheckedEnumCast<payload::manager::v1::PayloadState>(res[0][2].as<int>(), 0, 8, "state");
     r.size_bytes        = res[0][3].as<uint64_t>();
@@ -83,7 +84,7 @@ std::vector<model::PayloadRecord> PgRepository::ListPayloads(Transaction& t, pay
     records.reserve(res.size());
     for (const auto& row : res) {
       model::PayloadRecord r;
-      r.id                = row[0].c_str();
+      r.id                = payload::util::FromString(row[0].c_str());
       r.tier  = CheckedEnumCast<payload::manager::v1::Tier>(row[1].as<int>(), 0, 4, "tier");
       r.state = CheckedEnumCast<payload::manager::v1::PayloadState>(row[2].as<int>(), 0, 8, "state");
       r.size_bytes        = row[3].as<uint64_t>();
@@ -102,8 +103,8 @@ std::vector<model::PayloadRecord> PgRepository::ListPayloads(Transaction& t, pay
 }
 Result PgRepository::UpdatePayload(Transaction& t, const model::PayloadRecord& r) {
   try {
-    TX(t).Work().exec_prepared("update_payload", r.id, (int)r.tier, (int)r.state, r.size_bytes, r.version, r.expires_at_ms, (int)r.no_evict,
-                               r.eviction_priority, r.spill_target);
+    TX(t).Work().exec_prepared("update_payload", payload::util::ToString(r.id), (int)r.tier, (int)r.state, r.size_bytes, r.version, r.expires_at_ms,
+                               (int)r.no_evict, r.eviction_priority, r.spill_target);
     return Result::Ok();
   } catch (const std::exception& e) {
     return Translate(e);
@@ -121,7 +122,7 @@ std::vector<model::PayloadRecord> PgRepository::ListExpiredPayloads(Transaction&
     records.reserve(res.size());
     for (const auto& row : res) {
       model::PayloadRecord r;
-      r.id                = row[0].c_str();
+      r.id                = payload::util::FromString(row[0].c_str());
       r.tier  = CheckedEnumCast<payload::manager::v1::Tier>(row[1].as<int>(), 0, 4, "tier");
       r.state = CheckedEnumCast<payload::manager::v1::PayloadState>(row[2].as<int>(), 0, 8, "state");
       r.size_bytes        = row[3].as<uint64_t>();
@@ -139,9 +140,9 @@ std::vector<model::PayloadRecord> PgRepository::ListExpiredPayloads(Transaction&
   }
 }
 
-Result PgRepository::DeletePayload(Transaction& t, const std::string& id) {
+Result PgRepository::DeletePayload(Transaction& t, const payload::util::UUID& id) {
   try {
-    TX(t).Work().exec_prepared("delete_payload", id);
+    TX(t).Work().exec_prepared("delete_payload", payload::util::ToString(id));
     return Result::Ok();
   } catch (const std::exception& e) {
     return Translate(e);

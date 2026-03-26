@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <chrono>
 
+#include "internal/util/uuid.hpp"
 #include "memory_tx.hpp"
 
 namespace payload::db::memory {
@@ -42,7 +43,7 @@ Result MemoryRepository::InsertPayload(Transaction& t, const model::PayloadRecor
   return Result::Ok();
 }
 
-std::optional<model::PayloadRecord> MemoryRepository::GetPayload(Transaction& t, const std::string& id) {
+std::optional<model::PayloadRecord> MemoryRepository::GetPayload(Transaction& t, const payload::util::UUID& id) {
   auto& s  = TX(t).Mutable();
   auto  it = s.payloads.find(id);
   if (it == s.payloads.end()) return std::nullopt;
@@ -71,15 +72,15 @@ Result MemoryRepository::UpdatePayload(Transaction& t, const model::PayloadRecor
   return Result::Ok();
 }
 
-Result MemoryRepository::DeletePayload(Transaction& t, const std::string& id) {
+Result MemoryRepository::DeletePayload(Transaction& t, const payload::util::UUID& id) {
   auto& tx = TX(t);
   auto& s  = tx.Mutable();
   s.payloads.erase(id);
-  s.metadata.erase(id);
+  s.metadata.erase(payload::util::ToString(id));
   tx.deleted_payload_ids_.insert(id);
   tx.modified_payload_ids_.erase(id);
-  tx.deleted_metadata_ids_.insert(id);
-  tx.modified_metadata_ids_.erase(id);
+  tx.deleted_metadata_ids_.insert(payload::util::ToString(id));
+  tx.modified_metadata_ids_.erase(payload::util::ToString(id));
   return Result::Ok();
 }
 

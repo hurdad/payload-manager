@@ -1,6 +1,8 @@
+
 #include "uuid.hpp"
 
 #include <iomanip>
+#include <random>
 #include <sstream>
 #include <stdexcept>
 
@@ -10,13 +12,16 @@ namespace payload::util {
 
 UUID GenerateUUID() {
   static thread_local std::mt19937_64 rng{std::random_device{}()};
+  std::uniform_int_distribution<uint64_t> dist;
 
-  UUID id{};
-  for (auto& b : id) b = static_cast<uint8_t>(rng());
+  UUID     id{};
+  uint64_t hi = dist(rng);
+  uint64_t lo = dist(rng);
+  std::memcpy(id.data(), &hi, 8);
+  std::memcpy(id.data() + 8, &lo, 8);
 
-  // RFC4122 variant + version 4
-  id[6] = (id[6] & 0x0F) | 0x40;
-  id[8] = (id[8] & 0x3F) | 0x80;
+  id[6] = (id[6] & 0x0fu) | 0x40u; // version 4
+  id[8] = (id[8] & 0x3fu) | 0x80u; // RFC4122 variant
 
   return id;
 }
