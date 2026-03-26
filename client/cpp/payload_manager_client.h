@@ -49,7 +49,7 @@ class PayloadClient {
   /// Allocate a payload and open a writable Arrow buffer for it.
   arrow::Result<WritablePayload> AllocateWritableBuffer(uint64_t                   size_bytes,
                                                         payload::manager::v1::Tier preferred_tier = payload::manager::v1::TIER_RAM,
-                                                        uint64_t ttl_ms = 0, bool persist = false) const;
+                                                        uint64_t ttl_ms = 0, bool no_evict = false) const;
 
   /// Convert a UUID string into a protobuf PayloadID.
   static arrow::Result<payload::manager::v1::PayloadID> PayloadIdFromUuid(std::string_view uuid);

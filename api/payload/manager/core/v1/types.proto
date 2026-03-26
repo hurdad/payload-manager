@@ -34,5 +34,5 @@ enum EvictionPriority {
   EVICTION_PRIORITY_LOW = 1;         // Evict before NORMAL candidates.
   EVICTION_PRIORITY_NORMAL = 2;      // Default eviction weight.
   EVICTION_PRIORITY_HIGH = 3;        // Evict only after LOW and NORMAL are exhausted.
-  EVICTION_PRIORITY_NEVER = 4;       // Never automatically evicted (implies persist=true).
+  EVICTION_PRIORITY_NEVER = 4;       // Never automatically evicted (implies no_evict=true).
 }

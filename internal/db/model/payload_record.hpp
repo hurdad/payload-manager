@@ -36,7 +36,7 @@ struct PayloadRecord {
   uint64_t expires_at_ms = 0;
 
   // If true, payload is never automatically evicted or expired.
-  bool persist = false;
+  bool no_evict = false;
 
   // Advisory eviction priority (EvictionPriority enum; 0 = UNSPECIFIED = NORMAL).
   int eviction_priority = 0;

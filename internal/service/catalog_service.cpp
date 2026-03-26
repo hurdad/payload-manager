@@ -68,7 +68,7 @@ AllocatePayloadResponse CatalogService::Allocate(const AllocatePayloadRequest& r
     }
     AllocatePayloadResponse resp;
     *resp.mutable_payload_descriptor() =
-        ctx_.manager->Allocate(req.size_bytes(), req.preferred_tier(), req.ttl_ms(), req.persist(), req.eviction_policy());
+        ctx_.manager->Allocate(req.size_bytes(), req.preferred_tier(), req.ttl_ms(), req.no_evict(), req.eviction_policy());
     return resp;
   });
 }

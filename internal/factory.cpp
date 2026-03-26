@@ -61,7 +61,7 @@ void TryExecSqlite(const std::shared_ptr<db::sqlite::SqliteDB>& db, const std::s
 void BootstrapSqliteSchema(const std::shared_ptr<db::sqlite::SqliteDB>& sqlite_db) {
   static const std::vector<std::string> kBootstrapSql = {
       "CREATE TABLE IF NOT EXISTS payload (id BLOB PRIMARY KEY, tier INTEGER NOT NULL, state INTEGER NOT NULL, size_bytes INTEGER NOT NULL, version "
-      "INTEGER NOT NULL, expires_at_ms INTEGER, persist INTEGER NOT NULL DEFAULT 0, eviction_priority INTEGER NOT NULL DEFAULT 0, spill_target "
+      "INTEGER NOT NULL, expires_at_ms INTEGER, no_evict INTEGER NOT NULL DEFAULT 0, eviction_priority INTEGER NOT NULL DEFAULT 0, spill_target "
       "INTEGER NOT NULL DEFAULT 0, created_at_ms INTEGER NOT NULL DEFAULT (unixepoch() * 1000));",
       "CREATE TABLE IF NOT EXISTS payload_metadata (id BLOB PRIMARY KEY, json TEXT NOT NULL, schema TEXT, updated_at_ms INTEGER NOT NULL, FOREIGN "
       "KEY(id) REFERENCES payload(id) ON DELETE CASCADE);",
@@ -86,10 +86,12 @@ void BootstrapSqliteSchema(const std::shared_ptr<db::sqlite::SqliteDB>& sqlite_d
   }
 
   // Migrate existing databases that predate the eviction policy columns.
-  TryExecSqlite(sqlite_db, "ALTER TABLE payload ADD COLUMN persist INTEGER NOT NULL DEFAULT 0;");
+  TryExecSqlite(sqlite_db, "ALTER TABLE payload ADD COLUMN no_evict INTEGER NOT NULL DEFAULT 0;");
   TryExecSqlite(sqlite_db, "ALTER TABLE payload ADD COLUMN eviction_priority INTEGER NOT NULL DEFAULT 0;");
   TryExecSqlite(sqlite_db, "ALTER TABLE payload ADD COLUMN spill_target INTEGER NOT NULL DEFAULT 0;");
   TryExecSqlite(sqlite_db, "ALTER TABLE payload ADD COLUMN created_at_ms INTEGER NOT NULL DEFAULT (unixepoch() * 1000);");
+  // Rename persist → no_evict for databases created before the field was renamed.
+  TryExecSqlite(sqlite_db, "ALTER TABLE payload RENAME COLUMN persist TO no_evict;");
 
   sqlite_db->Exec("SELECT id,tier,state,size_bytes,version FROM payload LIMIT 1;");
   sqlite_db->Exec("SELECT id,json,schema,updated_at_ms FROM payload_metadata LIMIT 1;");
@@ -106,13 +108,20 @@ void BootstrapPostgresSchema(const std::string& conninfo) {
 
   tx.exec(
       "CREATE TABLE IF NOT EXISTS payload (id UUID PRIMARY KEY, tier SMALLINT NOT NULL, state SMALLINT NOT NULL, size_bytes BIGINT NOT NULL, version "
-      "BIGINT NOT NULL, expires_at_ms BIGINT, persist SMALLINT NOT NULL DEFAULT 0, eviction_priority SMALLINT NOT NULL DEFAULT 0, spill_target "
+      "BIGINT NOT NULL, expires_at_ms BIGINT, no_evict SMALLINT NOT NULL DEFAULT 0, eviction_priority SMALLINT NOT NULL DEFAULT 0, spill_target "
       "SMALLINT NOT NULL DEFAULT 0, created_at_ms BIGINT NOT NULL DEFAULT 0);");
   // Migrate existing databases that predate the eviction policy columns.
-  tx.exec("ALTER TABLE payload ADD COLUMN IF NOT EXISTS persist SMALLINT NOT NULL DEFAULT 0;");
+  tx.exec("ALTER TABLE payload ADD COLUMN IF NOT EXISTS no_evict SMALLINT NOT NULL DEFAULT 0;");
   tx.exec("ALTER TABLE payload ADD COLUMN IF NOT EXISTS eviction_priority SMALLINT NOT NULL DEFAULT 0;");
   tx.exec("ALTER TABLE payload ADD COLUMN IF NOT EXISTS spill_target SMALLINT NOT NULL DEFAULT 0;");
   tx.exec("ALTER TABLE payload ADD COLUMN IF NOT EXISTS created_at_ms BIGINT NOT NULL DEFAULT 0;");
+  // Rename persist → no_evict for databases created before the field was renamed.
+  tx.exec(
+      "DO $$ BEGIN "
+      "  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='payload' AND column_name='persist') THEN "
+      "    ALTER TABLE payload RENAME COLUMN persist TO no_evict; "
+      "  END IF; "
+      "END $$;");
   // Migrate id columns from TEXT to UUID if needed (no-op when already UUID).
   tx.exec(
       "DO $$ BEGIN "

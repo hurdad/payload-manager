@@ -331,7 +331,7 @@ void PayloadManager::PopulateLocation(PayloadDescriptor* descriptor) {
   }
 }
 
-PayloadDescriptor PayloadManager::Allocate(uint64_t size_bytes, Tier preferred, uint64_t ttl_ms, bool persist,
+PayloadDescriptor PayloadManager::Allocate(uint64_t size_bytes, Tier preferred, uint64_t ttl_ms, bool no_evict,
                                            const payload::manager::core::v1::EvictionPolicy& eviction_policy) {
   if (size_bytes == 0) {
     throw payload::util::InvalidArgument("allocate payload: size_bytes must be greater than zero");
@@ -387,7 +387,7 @@ PayloadDescriptor PayloadManager::Allocate(uint64_t size_bytes, Tier preferred, 
 
   // Determine effective eviction policy.
   using payload::manager::core::v1::EVICTION_PRIORITY_NEVER;
-  const bool never_evict = persist || eviction_policy.priority() == EVICTION_PRIORITY_NEVER;
+  const bool never_evict = no_evict || eviction_policy.priority() == EVICTION_PRIORITY_NEVER;
 
   auto record              = ToPayloadRecord(desc);
   // Always store the requested allocation size, not the backend-reported size.
@@ -395,14 +395,14 @@ PayloadDescriptor PayloadManager::Allocate(uint64_t size_bytes, Tier preferred, 
   // stub or write-only backends; the authoritative accounting size is the
   // caller-supplied size_bytes used in UpdateTierBytes below.
   record.size_bytes        = size_bytes;
-  record.persist           = persist;
+  record.no_evict          = no_evict;
   record.eviction_priority = static_cast<int>(eviction_policy.priority());
 
   // Determine spill target: use policy hint if set, otherwise fall back to TIER_DISK.
   const Tier spill_tier = (eviction_policy.spill_target() != TIER_UNSPECIFIED) ? eviction_policy.spill_target() : TIER_DISK;
   record.spill_target   = static_cast<int>(spill_tier);
 
-  // persist overrides TTL: a persisted payload never auto-expires.
+  // no_evict overrides TTL: a no_evict payload never auto-expires.
   const auto now_ms    = payload::util::ToUnixMillis(payload::util::Now());
   record.created_at_ms = now_ms;
   if (!never_evict && ttl_ms > 0) {
@@ -790,7 +790,7 @@ void PayloadManager::HydrateCaches() {
     }
     new_snapshot_cache[record.id] = descriptor;
 
-    if (record.persist || record.eviction_priority == static_cast<int>(EVICTION_PRIORITY_NEVER)) {
+    if (record.no_evict || record.eviction_priority == static_cast<int>(EVICTION_PRIORITY_NEVER)) {
       new_no_evict.insert(record.id);
     }
 

@@ -14,7 +14,7 @@ message AllocatePayloadRequest {
   uint64 size_bytes = 1;
   payload.manager.core.v1.Tier preferred_tier = 2;
   uint64 ttl_ms = 3;
-  bool persist = 4;
+  bool no_evict = 4;
   payload.manager.core.v1.EvictionPolicy eviction_policy = 5;
 }
 

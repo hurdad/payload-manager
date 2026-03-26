@@ -34,7 +34,7 @@ class PayloadManager {
                  std::shared_ptr<payload::db::Repository> repository, std::shared_ptr<payload::metadata::MetadataCache> metadata_cache = nullptr);
 
   payload::manager::v1::PayloadDescriptor Allocate(uint64_t size_bytes, payload::manager::v1::Tier preferred, uint64_t ttl_ms = 0,
-                                                   bool persist = false, const payload::manager::core::v1::EvictionPolicy& eviction_policy = {});
+                                                   bool no_evict = false, const payload::manager::core::v1::EvictionPolicy& eviction_policy = {});
   void                                    ExpireStale();
   payload::manager::v1::PayloadDescriptor Commit(const payload::manager::v1::PayloadID& id);
   void                                    Delete(const payload::manager::v1::PayloadID& id, bool force);
@@ -98,7 +98,7 @@ class PayloadManager {
   bool IsPinnedLocked(const std::string& key, uint64_t now_ms);
   void SweepExpiredPins();
 
-  // IDs that must never be automatically evicted (persist=true or EVICTION_PRIORITY_NEVER).
+  // IDs that must never be automatically evicted (no_evict=true or EVICTION_PRIORITY_NEVER).
   mutable std::mutex              no_evict_guard_;
   std::unordered_set<std::string> no_evict_ids_;
 
