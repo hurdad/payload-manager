@@ -1,0 +1,12 @@
+FROM golang:1.22-bookworm as build
+WORKDIR /src
+COPY gateway/go.mod gateway/go.sum* ./gateway/
+RUN cd gateway && go mod download
+COPY gateway ./gateway
+WORKDIR /src/gateway
+RUN go build -o /out/gateway .
+
+FROM gcr.io/distroless/base-debian12
+COPY --from=build /out/gateway /gateway
+EXPOSE 8080
+ENTRYPOINT ["/gateway"]
