@@ -1,0 +1,4 @@
+bin/
+static/
+gen/
+openapi/

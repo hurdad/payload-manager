@@ -1,0 +1,70 @@
+type: google.api.Service
+config_version: 3
+http:
+  rules:
+    - selector: payload.manager.services.v1.PayloadAdminService.Stats
+      get: /v1/admin/stats
+
+    - selector: payload.manager.services.v1.PayloadCatalogService.ListPayloads
+      get: /v1/payloads
+    - selector: payload.manager.services.v1.PayloadCatalogService.AllocatePayload
+      post: /v1/payloads
+      body: "*"
+    - selector: payload.manager.services.v1.PayloadCatalogService.CommitPayload
+      post: /v1/payloads/{id.value}/commit
+      body: "*"
+    - selector: payload.manager.services.v1.PayloadCatalogService.Delete
+      delete: /v1/payloads/{id.value}
+    - selector: payload.manager.services.v1.PayloadCatalogService.Promote
+      post: /v1/payloads/{id.value}/promote
+      body: "*"
+    - selector: payload.manager.services.v1.PayloadCatalogService.Spill
+      post: /v1/payloads/spill
+      body: "*"
+    - selector: payload.manager.services.v1.PayloadCatalogService.Prefetch
+      post: /v1/payloads/{id.value}/prefetch
+      body: "*"
+    - selector: payload.manager.services.v1.PayloadCatalogService.Pin
+      post: /v1/payloads/{id.value}/pin
+      body: "*"
+    - selector: payload.manager.services.v1.PayloadCatalogService.Unpin
+      delete: /v1/payloads/{id.value}/pin
+    - selector: payload.manager.services.v1.PayloadCatalogService.AddLineage
+      post: /v1/payloads/{child.value}/lineage
+      body: "*"
+    - selector: payload.manager.services.v1.PayloadCatalogService.GetLineage
+      get: /v1/payloads/{id.value}/lineage
+    - selector: payload.manager.services.v1.PayloadCatalogService.UpdatePayloadMetadata
+      put: /v1/payloads/{id.value}/metadata
+      body: "*"
+    - selector: payload.manager.services.v1.PayloadCatalogService.AppendPayloadMetadataEvent
+      post: /v1/payloads/{id.value}/metadata/events
+      body: "*"
+
+    - selector: payload.manager.services.v1.PayloadDataService.ResolveSnapshot
+      get: /v1/payloads/{id.value}/snapshot
+    - selector: payload.manager.services.v1.PayloadDataService.AcquireReadLease
+      post: /v1/payloads/{id.value}/lease
+      body: "*"
+    - selector: payload.manager.services.v1.PayloadDataService.ReleaseLease
+      delete: /v1/leases/{lease_id.value}
+
+    - selector: payload.manager.services.v1.PayloadStreamService.CreateStream
+      post: /v1/streams
+      body: "*"
+    - selector: payload.manager.services.v1.PayloadStreamService.DeleteStream
+      delete: /v1/streams/{stream.namespace}/{stream.name}
+    - selector: payload.manager.services.v1.PayloadStreamService.Append
+      post: /v1/streams/{stream.namespace}/{stream.name}/entries
+      body: "*"
+    - selector: payload.manager.services.v1.PayloadStreamService.Read
+      get: /v1/streams/{stream.namespace}/{stream.name}/entries
+    - selector: payload.manager.services.v1.PayloadStreamService.Subscribe
+      get: /v1/streams/{stream.namespace}/{stream.name}/subscribe
+    - selector: payload.manager.services.v1.PayloadStreamService.Commit
+      post: /v1/streams/{stream.namespace}/{stream.name}/commit
+      body: "*"
+    - selector: payload.manager.services.v1.PayloadStreamService.GetCommitted
+      get: /v1/streams/{stream.namespace}/{stream.name}/committed
+    - selector: payload.manager.services.v1.PayloadStreamService.GetRange
+      get: /v1/streams/{stream.namespace}/{stream.name}/range
