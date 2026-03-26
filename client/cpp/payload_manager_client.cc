@@ -258,12 +258,12 @@ PayloadClient::PayloadClient(std::shared_ptr<grpc::Channel> channel)
 }
 
 arrow::Result<PayloadClient::WritablePayload> PayloadClient::AllocateWritableBuffer(uint64_t size_bytes, payload::manager::v1::Tier preferred_tier,
-                                                                                    uint64_t ttl_ms, bool persist) const {
+                                                                                    uint64_t ttl_ms, bool no_evict) const {
   payload::manager::v1::AllocatePayloadRequest req;
   req.set_size_bytes(size_bytes);
   req.set_preferred_tier(preferred_tier);
   req.set_ttl_ms(ttl_ms);
-  req.set_persist(persist);
+  req.set_no_evict(no_evict);
 
   payload::manager::v1::AllocatePayloadResponse resp;
   grpc::ClientContext                           ctx;
