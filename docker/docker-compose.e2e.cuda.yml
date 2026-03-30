@@ -2,10 +2,10 @@ services:
   payload-manager:
     build:
       context: ..
-      dockerfile: docker/Dockerfile
+      dockerfile: docker/Dockerfile.cuda
     restart: unless-stopped
     hostname: payload-manager
-    command: ["./payload-manager", "--config", "/app/conf/runtime-docker-no-otel-sqlite.yaml"]
+    command: ["./payload-manager", "--config", "/app/conf/runtime-docker-gpu-sqlite.yaml"]
     healthcheck:
       test: ["CMD-SHELL", "bash -c '</dev/tcp/localhost/50051'"]
       interval: 5s
@@ -13,9 +13,20 @@ services:
       retries: 20
       start_period: 10s
     ipc: host
+    # Required for cross-container CUDA IPC: cuIpcOpenMemHandle resolves the
+    # exporting process's PID via procfs; without a shared PID namespace the
+    # driver returns CUDA_ERROR_INVALID_CONTEXT even when ipc: host is set.
+    pid: host
     volumes:
-      - ../config/runtime-docker-no-otel-sqlite.yaml:/app/conf/runtime-docker-no-otel-sqlite.yaml:ro
-      - e2e-data:/var/lib/payload-manager
+      - ../config/runtime-docker-gpu-sqlite.yaml:/app/conf/runtime-docker-gpu-sqlite.yaml:ro
+      - e2e-cuda-data:/var/lib/payload-manager
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
 
   payload-gateway:
     build:
@@ -31,7 +42,14 @@ services:
     ports:
       - "8080:8080"
     volumes:
-      - e2e-data:/var/lib/payload-manager:ro
+      - e2e-cuda-data:/var/lib/payload-manager:ro
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
 
   e2e:
     build:
@@ -55,4 +73,4 @@ services:
       - ../ui/playwright-report:/app/playwright-report
 
 volumes:
-  e2e-data:
+  e2e-cuda-data:
