@@ -27,8 +27,11 @@ services:
     environment:
       GRPC_ADDR: payload-manager:50051
       HTTP_ADDR: :8080
+      DISK_ROOT_PATH: /var/lib/payload-manager/payloads
     ports:
       - "8080:8080"
+    volumes:
+      - payload-gateway-data:/var/lib/payload-manager:ro
 
 volumes:
   payload-gateway-data:

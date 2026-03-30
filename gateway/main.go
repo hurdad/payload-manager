@@ -34,8 +34,9 @@ var staticFS embed.FS
 var payloadDownloadPathRe = regexp.MustCompile(`^/v1/payloads/([^/]+)/download$`)
 
 func main() {
-	grpcAddr := flag.String("grpc-addr", envOr("GRPC_ADDR", "localhost:50051"), "gRPC server address")
-	httpAddr := flag.String("http-addr", envOr("HTTP_ADDR", ":8080"), "HTTP listen address")
+	grpcAddr    := flag.String("grpc-addr",     envOr("GRPC_ADDR",     "localhost:50051"),                     "gRPC server address")
+	httpAddr    := flag.String("http-addr",     envOr("HTTP_ADDR",     ":8080"),                                "HTTP listen address")
+	diskRootPath := flag.String("disk-root",    envOr("DISK_ROOT_PATH", "/var/lib/payload-manager/payloads"),  "Payload disk storage root path")
 	flag.Parse()
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -57,7 +58,7 @@ func main() {
 	}
 
 	rootMux := http.NewServeMux()
-	rootMux.Handle("/v1/", withPayloadDownload(mux))
+	rootMux.Handle("/v1/", withPayloadDownload(mux, *diskRootPath))
 
 	staticSub, err := fs.Sub(staticFS, "static")
 	if err != nil {
@@ -93,16 +94,31 @@ type acquireLeaseResponse struct {
 	} `json:"leaseId"`
 }
 
-func withPayloadDownload(next http.Handler) http.Handler {
+func withPayloadDownload(next http.Handler, diskRoot string) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		match := payloadDownloadPathRe.FindStringSubmatch(r.URL.EscapedPath())
 		if len(match) != 2 || r.Method != http.MethodGet {
 			next.ServeHTTP(w, r)
 			return
 		}
-		payloadID := match[1]
-		if decoded, err := url.PathUnescape(payloadID); err == nil {
-			payloadID = decoded
+		// Decode the percent-encoded ID from the URL, then normalize to
+		// URL-safe base64 (no padding) so internal gRPC-gateway routes work
+		// even when the standard base64 ID contains '/' or '+'.
+		rawID := match[1]
+		if decoded, err := url.PathUnescape(rawID); err == nil {
+			rawID = decoded
+		}
+		payloadID := toURLSafeBase64(rawID)
+
+		// For RAM/GPU payloads: spill to disk first so they can be served.
+		if snap, _, snapErr := resolveSnapshot(next, payloadID); snapErr == nil {
+			t := snap.PayloadDescriptor.Tier
+			if t != "" && t != "TIER_DISK" && t != "TIER_OBJECT" {
+				if spillErr := spillPayload(next, payloadID); spillErr != nil {
+					http.Error(w, "failed to spill payload to disk: "+spillErr.Error(), http.StatusInternalServerError)
+					return
+				}
+			}
 		}
 
 		lease, statusCode, err := acquireReadLease(next, payloadID)
@@ -132,11 +148,60 @@ func withPayloadDownload(next http.Handler) http.Handler {
 			http.Error(w, "invalid disk length in lease response", http.StatusInternalServerError)
 			return
 		}
-		if err := streamPayloadBytes(w, payloadID, lease.PayloadDescriptor.Disk.Path, offset, length); err != nil {
+		filePath := lease.PayloadDescriptor.Disk.Path
+		if !strings.HasPrefix(filePath, "/") {
+			filePath = diskRoot + "/" + filePath
+		}
+		if err := streamPayloadBytes(w, payloadID, filePath, offset, length); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
 	})
+}
+
+type resolveSnapshotResponse struct {
+	PayloadDescriptor struct {
+		Tier string `json:"tier"`
+	} `json:"payloadDescriptor"`
+}
+
+// toURLSafeBase64 converts standard base64 to URL-safe base64 (RFC 4648 §5), keeping
+// padding. grpc-gateway decodes bytes path params with base64.URLEncoding which requires
+// '-'/'_' alphabet and '=' padding. The '/' → '_' swap avoids splitting the URL path.
+func toURLSafeBase64(s string) string {
+	return strings.NewReplacer("+", "-", "/", "_").Replace(s)
+}
+
+func resolveSnapshot(next http.Handler, payloadID string) (*resolveSnapshotResponse, int, error) {
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/v1/payloads/"+payloadID+"/snapshot", nil)
+	next.ServeHTTP(rr, req)
+	if rr.Code >= 400 {
+		return nil, rr.Code, parseGatewayError(rr.Body.Bytes())
+	}
+	var resp resolveSnapshotResponse
+	if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
+		return nil, http.StatusInternalServerError, err
+	}
+	return &resp, http.StatusOK, nil
+}
+
+func spillPayload(next http.Handler, payloadID string) error {
+	reqBody := map[string]any{
+		"ids":           []map[string]any{{"value": payloadID}},
+		"policy":        "SPILL_POLICY_BLOCKING",
+		"waitForLeases": false,
+		"fsync":         true,
+	}
+	body, _ := json.Marshal(reqBody)
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/v1/payloads/spill", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	next.ServeHTTP(rr, req)
+	if rr.Code >= 400 {
+		return parseGatewayError(rr.Body.Bytes())
+	}
+	return nil
 }
 
 func acquireReadLease(next http.Handler, payloadID string) (*acquireLeaseResponse, int, error) {
