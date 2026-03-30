@@ -1,12 +1,24 @@
-FROM golang:1.22-bookworm as build
+# Stage 1: Build the Svelte UI
+FROM node:22-alpine AS ui-build
+WORKDIR /src/ui
+COPY ui/package.json ui/package-lock.json ./
+RUN npm ci
+COPY ui/ ./
+RUN npm run build
+
+# Stage 2: Build the Go gateway binary
+FROM golang:1.25-bookworm AS go-build
 WORKDIR /src
-COPY gateway/go.mod gateway/go.sum* ./gateway/
+COPY gateway/go.mod gateway/go.sum ./gateway/
 RUN cd gateway && go mod download
 COPY gateway ./gateway
+# Embed the compiled UI as the static filesystem
+COPY --from=ui-build /src/ui/dist ./gateway/static/
 WORKDIR /src/gateway
 RUN go build -o /out/gateway .
 
+# Stage 3: Minimal runtime image
 FROM gcr.io/distroless/base-debian12
-COPY --from=build /out/gateway /gateway
+COPY --from=go-build /out/gateway /gateway
 EXPOSE 8080
 ENTRYPOINT ["/gateway"]

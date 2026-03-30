@@ -4,3 +4,6 @@
 [submodule "third_party/arrow"]
 	path = third_party/arrow
 	url = https://github.com/apache/arrow.git
+[submodule "third_party/googleapis"]
+	path = third_party/googleapis
+	url = https://github.com/googleapis/googleapis

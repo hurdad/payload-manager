@@ -9,7 +9,7 @@ build:
 	rm -rf static/*
 	cp -R ../ui/dist/* static/
 	mkdir -p bin
-	go build -o bin/gateway ./...
+	go build -o bin/ ./...
 
 run:
 	go run . --grpc-addr localhost:50051 --http-addr :8080

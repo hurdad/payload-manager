@@ -1,0 +1,1082 @@
+{
+  "swagger": "2.0",
+  "info": {
+    "title": "payload/manager/services/v1/payload_catalog_service.proto",
+    "version": "version not set"
+  },
+  "tags": [
+    {
+      "name": "PayloadCatalogService"
+    }
+  ],
+  "consumes": [
+    "application/json"
+  ],
+  "produces": [
+    "application/json"
+  ],
+  "paths": {
+    "/v1/payloads": {
+      "get": {
+        "summary": "Returns a summary row for every payload known to the service.\nOptionally filtered by tier.",
+        "operationId": "PayloadCatalogService_ListPayloads",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1ListPayloadsResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "tierFilter",
+            "description": "Optional tier filter; TIER_UNSPECIFIED means return all tiers.\n\n - TIER_UNSPECIFIED: Not set; treated as an error in most contexts.\n - TIER_GPU: GPU device memory (fastest, smallest, most volatile).\n - TIER_RAM: Host DRAM / shared-memory segment.\n - TIER_DISK: Local NVMe/SSD/HDD (durable, larger, slower than RAM).\n - TIER_OBJECT: Remote object storage (S3/GCS/Azure; durable, largest).",
+            "in": "query",
+            "required": false,
+            "type": "string",
+            "enum": [
+              "TIER_UNSPECIFIED",
+              "TIER_GPU",
+              "TIER_RAM",
+              "TIER_DISK",
+              "TIER_OBJECT"
+            ],
+            "default": "TIER_UNSPECIFIED"
+          }
+        ],
+        "tags": [
+          "PayloadCatalogService"
+        ]
+      },
+      "post": {
+        "summary": "Allocate reserves placement but the payload is invisible to readers\nuntil CommitPayload succeeds.",
+        "operationId": "PayloadCatalogService_AllocatePayload",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1AllocatePayloadResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "description": "Allocate reserves placement but payload is not visible\nuntil CommitPayload succeeds.",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/v1AllocatePayloadRequest"
+            }
+          }
+        ],
+        "tags": [
+          "PayloadCatalogService"
+        ]
+      }
+    },
+    "/v1/payloads/spill": {
+      "post": {
+        "summary": "Requests durable storage (usually disk/object storage).",
+        "description": "BLOCKING policy waits until durable or failure.",
+        "operationId": "PayloadCatalogService_Spill",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1SpillResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/v1SpillRequest"
+            }
+          }
+        ],
+        "tags": [
+          "PayloadCatalogService"
+        ]
+      }
+    },
+    "/v1/payloads/{child.value}/lineage": {
+      "post": {
+        "summary": "Records descriptive relationships between payloads.",
+        "description": "Does NOT enforce execution order.",
+        "operationId": "PayloadCatalogService_AddLineage",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "type": "object",
+              "properties": {}
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "child.value",
+            "in": "path",
+            "required": true,
+            "type": "string",
+            "format": "byte"
+          },
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/PayloadCatalogServiceAddLineageBody"
+            }
+          }
+        ],
+        "tags": [
+          "PayloadCatalogService"
+        ]
+      }
+    },
+    "/v1/payloads/{id.value}": {
+      "delete": {
+        "summary": "Deletes payload placement and metadata.",
+        "description": "If force=true:\n- active leases are invalidated immediately\n- future reads must fail",
+        "operationId": "PayloadCatalogService_Delete",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "type": "object",
+              "properties": {}
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id.value",
+            "in": "path",
+            "required": true,
+            "type": "string",
+            "format": "byte"
+          },
+          {
+            "name": "force",
+            "in": "query",
+            "required": false,
+            "type": "boolean"
+          }
+        ],
+        "tags": [
+          "PayloadCatalogService"
+        ]
+      }
+    },
+    "/v1/payloads/{id.value}/commit": {
+      "post": {
+        "summary": "Marks payload immutable and readable.\nAfter this point the payload must never change.",
+        "operationId": "PayloadCatalogService_CommitPayload",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1CommitPayloadResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id.value",
+            "in": "path",
+            "required": true,
+            "type": "string",
+            "format": "byte"
+          },
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/PayloadCatalogServiceCommitPayloadBody"
+            }
+          }
+        ],
+        "tags": [
+          "PayloadCatalogService"
+        ]
+      }
+    },
+    "/v1/payloads/{id.value}/lineage": {
+      "get": {
+        "operationId": "PayloadCatalogService_GetLineage",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1GetLineageResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id.value",
+            "in": "path",
+            "required": true,
+            "type": "string",
+            "format": "byte"
+          },
+          {
+            "name": "upstream",
+            "in": "query",
+            "required": false,
+            "type": "boolean"
+          },
+          {
+            "name": "maxDepth",
+            "in": "query",
+            "required": false,
+            "type": "integer",
+            "format": "int64"
+          }
+        ],
+        "tags": [
+          "PayloadCatalogService"
+        ]
+      }
+    },
+    "/v1/payloads/{id.value}/metadata": {
+      "put": {
+        "summary": "Updates current metadata view.",
+        "operationId": "PayloadCatalogService_UpdatePayloadMetadata",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1UpdatePayloadMetadataResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id.value",
+            "in": "path",
+            "required": true,
+            "type": "string",
+            "format": "byte"
+          },
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/PayloadCatalogServiceUpdatePayloadMetadataBody"
+            }
+          }
+        ],
+        "tags": [
+          "PayloadCatalogService"
+        ]
+      }
+    },
+    "/v1/payloads/{id.value}/metadata/events": {
+      "post": {
+        "summary": "Appends immutable metadata history event.",
+        "operationId": "PayloadCatalogService_AppendPayloadMetadataEvent",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1AppendPayloadMetadataEventResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id.value",
+            "in": "path",
+            "required": true,
+            "type": "string",
+            "format": "byte"
+          },
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/PayloadCatalogServiceAppendPayloadMetadataEventBody"
+            }
+          }
+        ],
+        "tags": [
+          "PayloadCatalogService"
+        ]
+      }
+    },
+    "/v1/payloads/{id.value}/pin": {
+      "delete": {
+        "summary": "Removes an existing pin.",
+        "description": "Idempotent: unpinning an unpinned payload is a no-op.",
+        "operationId": "PayloadCatalogService_Unpin",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "type": "object",
+              "properties": {}
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id.value",
+            "in": "path",
+            "required": true,
+            "type": "string",
+            "format": "byte"
+          }
+        ],
+        "tags": [
+          "PayloadCatalogService"
+        ]
+      },
+      "post": {
+        "summary": "Best-effort advisory that blocks spill while active.",
+        "description": "Pin duration is in milliseconds. duration_ms=0 means indefinite pin until Unpin.",
+        "operationId": "PayloadCatalogService_Pin",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "type": "object",
+              "properties": {}
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id.value",
+            "in": "path",
+            "required": true,
+            "type": "string",
+            "format": "byte"
+          },
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/PayloadCatalogServicePinBody"
+            }
+          }
+        ],
+        "tags": [
+          "PayloadCatalogService"
+        ]
+      }
+    },
+    "/v1/payloads/{id.value}/prefetch": {
+      "post": {
+        "summary": "Hint to move payload bytes to a faster tier.",
+        "description": "Best-effort and idempotent.",
+        "operationId": "PayloadCatalogService_Prefetch",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "type": "object",
+              "properties": {}
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id.value",
+            "in": "path",
+            "required": true,
+            "type": "string",
+            "format": "byte"
+          },
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/PayloadCatalogServicePrefetchBody"
+            }
+          }
+        ],
+        "tags": [
+          "PayloadCatalogService"
+        ]
+      }
+    },
+    "/v1/payloads/{id.value}/promote": {
+      "post": {
+        "summary": "Requests movement to a higher tier (RAM/GPU/etc).",
+        "operationId": "PayloadCatalogService_Promote",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1PromoteResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id.value",
+            "in": "path",
+            "required": true,
+            "type": "string",
+            "format": "byte"
+          },
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/PayloadCatalogServicePromoteBody"
+            }
+          }
+        ],
+        "tags": [
+          "PayloadCatalogService"
+        ]
+      }
+    }
+  },
+  "definitions": {
+    "PayloadCatalogServiceAddLineageBody": {
+      "type": "object",
+      "properties": {
+        "child": {
+          "type": "object",
+          "description": "Canonical payload identifier.\n\nMUST contain exactly 16 bytes (binary RFC4122 UUID).\nThe server rejects any other length.\n\nThis is intentionally NOT a string to avoid formatting ambiguity."
+        },
+        "parents": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1LineageEdge"
+          }
+        }
+      }
+    },
+    "PayloadCatalogServiceAppendPayloadMetadataEventBody": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "object",
+          "description": "Canonical payload identifier.\n\nMUST contain exactly 16 bytes (binary RFC4122 UUID).\nThe server rejects any other length.\n\nThis is intentionally NOT a string to avoid formatting ambiguity."
+        },
+        "metadata": {
+          "$ref": "#/definitions/v1PayloadMetadata"
+        },
+        "source": {
+          "type": "string"
+        },
+        "version": {
+          "type": "string"
+        }
+      },
+      "description": "Append-only history event.\n\nUsed for provenance tracking, reproducibility, and lineage context."
+    },
+    "PayloadCatalogServiceCommitPayloadBody": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "object",
+          "description": "Canonical payload identifier.\n\nMUST contain exactly 16 bytes (binary RFC4122 UUID).\nThe server rejects any other length.\n\nThis is intentionally NOT a string to avoid formatting ambiguity."
+        }
+      }
+    },
+    "PayloadCatalogServicePinBody": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "object",
+          "description": "Canonical payload identifier.\n\nMUST contain exactly 16 bytes (binary RFC4122 UUID).\nThe server rejects any other length.\n\nThis is intentionally NOT a string to avoid formatting ambiguity."
+        },
+        "durationMs": {
+          "type": "string",
+          "format": "uint64"
+        }
+      },
+      "description": "Stronger than eviction policy but still best-effort."
+    },
+    "PayloadCatalogServicePrefetchBody": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "object",
+          "description": "Canonical payload identifier.\n\nMUST contain exactly 16 bytes (binary RFC4122 UUID).\nThe server rejects any other length.\n\nThis is intentionally NOT a string to avoid formatting ambiguity."
+        },
+        "targetTier": {
+          "$ref": "#/definitions/v1Tier"
+        }
+      },
+      "description": "Hint only — no guarantee."
+    },
+    "PayloadCatalogServicePromoteBody": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "object",
+          "description": "Canonical payload identifier.\n\nMUST contain exactly 16 bytes (binary RFC4122 UUID).\nThe server rejects any other length.\n\nThis is intentionally NOT a string to avoid formatting ambiguity."
+        },
+        "targetTier": {
+          "$ref": "#/definitions/v1Tier"
+        },
+        "policy": {
+          "$ref": "#/definitions/v1PromotionPolicy"
+        }
+      },
+      "description": "BLOCKING policy waits until requested durability\nor definitive failure."
+    },
+    "PayloadCatalogServiceUpdatePayloadMetadataBody": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "object",
+          "title": "Target payload"
+        },
+        "mode": {
+          "$ref": "#/definitions/v1MetadataUpdateMode",
+          "title": "How to apply update"
+        },
+        "metadata": {
+          "$ref": "#/definitions/v1PayloadMetadata",
+          "title": "New metadata"
+        },
+        "actor": {
+          "type": "string",
+          "title": "Optional attribution"
+        },
+        "reason": {
+          "type": "string"
+        }
+      },
+      "description": "Updates the \"current\" metadata view.\n\nMERGE vs REPLACE behavior is implementation-defined and applies only\nto the opaque metadata blob — not placement state."
+    },
+    "SpillResponseResult": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/v1PayloadID"
+        },
+        "ok": {
+          "type": "boolean"
+        },
+        "errorMessage": {
+          "type": "string"
+        },
+        "payloadDescriptor": {
+          "$ref": "#/definitions/v1PayloadDescriptor"
+        }
+      }
+    },
+    "protobufAny": {
+      "type": "object",
+      "properties": {
+        "@type": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": {}
+    },
+    "rpcStatus": {
+      "type": "object",
+      "properties": {
+        "code": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "message": {
+          "type": "string"
+        },
+        "details": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/protobufAny"
+          }
+        }
+      }
+    },
+    "v1AllocatePayloadRequest": {
+      "type": "object",
+      "properties": {
+        "sizeBytes": {
+          "type": "string",
+          "format": "uint64"
+        },
+        "preferredTier": {
+          "$ref": "#/definitions/v1Tier"
+        },
+        "ttlMs": {
+          "type": "string",
+          "format": "uint64"
+        },
+        "noEvict": {
+          "type": "boolean"
+        },
+        "evictionPolicy": {
+          "$ref": "#/definitions/v1EvictionPolicy"
+        }
+      },
+      "description": "Allocate reserves placement but payload is not visible\nuntil CommitPayload succeeds."
+    },
+    "v1AllocatePayloadResponse": {
+      "type": "object",
+      "properties": {
+        "payloadDescriptor": {
+          "$ref": "#/definitions/v1PayloadDescriptor"
+        }
+      }
+    },
+    "v1AppendPayloadMetadataEventResponse": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/v1PayloadID"
+        },
+        "eventTime": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    },
+    "v1CommitPayloadResponse": {
+      "type": "object",
+      "properties": {
+        "payloadDescriptor": {
+          "$ref": "#/definitions/v1PayloadDescriptor"
+        }
+      }
+    },
+    "v1DiskLocation": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "string"
+        },
+        "offsetBytes": {
+          "type": "string",
+          "format": "uint64"
+        },
+        "lengthBytes": {
+          "type": "string",
+          "format": "uint64"
+        }
+      }
+    },
+    "v1EvictionPolicy": {
+      "type": "object",
+      "properties": {
+        "priority": {
+          "$ref": "#/definitions/v1EvictionPriority",
+          "title": "Relative eviction importance"
+        },
+        "requireDurable": {
+          "type": "boolean",
+          "title": "Require durable copy before removing from volatile tier"
+        },
+        "spillTarget": {
+          "$ref": "#/definitions/v1Tier",
+          "title": "Preferred durability tier (usually DISK)"
+        },
+        "minResidencyTier": {
+          "$ref": "#/definitions/v1Tier",
+          "title": "Attempt to keep payload at or above this tier"
+        }
+      },
+      "description": "Advisory eviction hints.\n\nThese are not strict guarantees — the system MAY violate them\nunder critical resource pressure."
+    },
+    "v1EvictionPriority": {
+      "type": "string",
+      "enum": [
+        "EVICTION_PRIORITY_UNSPECIFIED",
+        "EVICTION_PRIORITY_LOW",
+        "EVICTION_PRIORITY_NORMAL",
+        "EVICTION_PRIORITY_HIGH",
+        "EVICTION_PRIORITY_NEVER"
+      ],
+      "default": "EVICTION_PRIORITY_UNSPECIFIED",
+      "description": " - EVICTION_PRIORITY_UNSPECIFIED: Treated as NORMAL.\n - EVICTION_PRIORITY_LOW: Evict before NORMAL candidates.\n - EVICTION_PRIORITY_NORMAL: Default eviction weight.\n - EVICTION_PRIORITY_HIGH: Evict only after LOW and NORMAL are exhausted.\n - EVICTION_PRIORITY_NEVER: Never automatically evicted (implies no_evict=true)."
+    },
+    "v1GetLineageResponse": {
+      "type": "object",
+      "properties": {
+        "edges": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1LineageEdge"
+          }
+        }
+      }
+    },
+    "v1GpuLocation": {
+      "type": "object",
+      "properties": {
+        "deviceId": {
+          "type": "integer",
+          "format": "int64"
+        },
+        "ipcHandle": {
+          "type": "string",
+          "format": "byte",
+          "title": "opaque CUDA IPC handle"
+        },
+        "lengthBytes": {
+          "type": "string",
+          "format": "uint64"
+        }
+      }
+    },
+    "v1LineageEdge": {
+      "type": "object",
+      "properties": {
+        "parent": {
+          "$ref": "#/definitions/v1PayloadID"
+        },
+        "operation": {
+          "type": "string"
+        },
+        "role": {
+          "type": "string"
+        },
+        "parameters": {
+          "type": "string",
+          "format": "byte"
+        }
+      },
+      "description": "Descriptive relationships only.\nDoes NOT enforce execution ordering."
+    },
+    "v1ListPayloadsResponse": {
+      "type": "object",
+      "properties": {
+        "payloads": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1PayloadSummary"
+          }
+        }
+      }
+    },
+    "v1MetadataUpdateMode": {
+      "type": "string",
+      "enum": [
+        "METADATA_UPDATE_MODE_UNSPECIFIED",
+        "METADATA_UPDATE_MODE_MERGE",
+        "METADATA_UPDATE_MODE_REPLACE"
+      ],
+      "default": "METADATA_UPDATE_MODE_UNSPECIFIED",
+      "description": "Metadata update behavior.\nThis only affects stored opaque metadata — not placement state.\n\n - METADATA_UPDATE_MODE_MERGE: Implementation-defined merge semantics\n - METADATA_UPDATE_MODE_REPLACE: Replace entire metadata blob"
+    },
+    "v1PayloadDescriptor": {
+      "type": "object",
+      "properties": {
+        "payloadId": {
+          "$ref": "#/definitions/v1PayloadID"
+        },
+        "tier": {
+          "$ref": "#/definitions/v1Tier"
+        },
+        "state": {
+          "$ref": "#/definitions/v1PayloadState"
+        },
+        "gpu": {
+          "$ref": "#/definitions/v1GpuLocation"
+        },
+        "ram": {
+          "$ref": "#/definitions/v1RamLocation"
+        },
+        "disk": {
+          "$ref": "#/definitions/v1DiskLocation"
+        },
+        "version": {
+          "type": "string",
+          "format": "uint64"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "expiresAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "evictionPolicy": {
+          "$ref": "#/definitions/v1EvictionPolicy",
+          "title": "advisory eviction behavior only"
+        }
+      },
+      "description": "Authoritative placement descriptor.\n\nversion increments whenever:\n- tier changes\n- location changes\n- lifecycle state changes\n\nClients MUST invalidate cached descriptors when version changes."
+    },
+    "v1PayloadID": {
+      "type": "object",
+      "properties": {
+        "value": {
+          "type": "string",
+          "format": "byte"
+        }
+      },
+      "description": "Canonical payload identifier.\n\nMUST contain exactly 16 bytes (binary RFC4122 UUID).\nThe server rejects any other length.\n\nThis is intentionally NOT a string to avoid formatting ambiguity."
+    },
+    "v1PayloadMetadata": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/v1PayloadID"
+        },
+        "data": {
+          "type": "string",
+          "format": "byte"
+        },
+        "schema": {
+          "type": "string"
+        }
+      },
+      "description": "Opaque application metadata.\n\nThe payload manager stores but NEVER interprets this.\nKeep size small (KBs)."
+    },
+    "v1PayloadState": {
+      "type": "string",
+      "enum": [
+        "PAYLOAD_STATE_UNSPECIFIED",
+        "PAYLOAD_STATE_ALLOCATED",
+        "PAYLOAD_STATE_ACTIVE",
+        "PAYLOAD_STATE_SPILLING",
+        "PAYLOAD_STATE_DURABLE",
+        "PAYLOAD_STATE_EVICTING",
+        "PAYLOAD_STATE_DELETING",
+        "PAYLOAD_STATE_EXPIRED",
+        "PAYLOAD_STATE_DELETED"
+      ],
+      "default": "PAYLOAD_STATE_UNSPECIFIED",
+      "description": "Lifecycle states are monotonic.\nClients MUST NOT assume a reversible transition.\n\n - PAYLOAD_STATE_UNSPECIFIED: Not set; treated as an error.\n - PAYLOAD_STATE_ALLOCATED: Reserved; writer has not yet committed data.\n - PAYLOAD_STATE_ACTIVE: Committed and readable by consumers.\n - PAYLOAD_STATE_SPILLING: Being moved to a lower tier; temporarily locked.\n - PAYLOAD_STATE_DURABLE: Confirmed written to a durable tier (DISK/OBJECT).\n - PAYLOAD_STATE_EVICTING: Being removed from its current tier under pressure.\n - PAYLOAD_STATE_DELETING: Deletion in progress.\n - PAYLOAD_STATE_EXPIRED: TTL elapsed; pending final deletion.\n - PAYLOAD_STATE_DELETED: Fully deleted; ID is no longer valid."
+    },
+    "v1PayloadSummary": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/v1PayloadID"
+        },
+        "tier": {
+          "$ref": "#/definitions/v1Tier"
+        },
+        "state": {
+          "$ref": "#/definitions/v1PayloadState"
+        },
+        "sizeBytes": {
+          "type": "string",
+          "format": "uint64"
+        },
+        "createdAtMs": {
+          "type": "string",
+          "format": "uint64",
+          "title": "0 = unknown (legacy row)"
+        },
+        "expiresAtMs": {
+          "type": "string",
+          "format": "uint64",
+          "title": "0 = no expiration"
+        },
+        "activeLeases": {
+          "type": "integer",
+          "format": "int64"
+        }
+      },
+      "description": "Summary row returned by ListPayloads."
+    },
+    "v1PromoteResponse": {
+      "type": "object",
+      "properties": {
+        "payloadDescriptor": {
+          "$ref": "#/definitions/v1PayloadDescriptor"
+        }
+      }
+    },
+    "v1PromotionPolicy": {
+      "type": "string",
+      "enum": [
+        "PROMOTION_POLICY_UNSPECIFIED",
+        "PROMOTION_POLICY_BEST_EFFORT",
+        "PROMOTION_POLICY_BLOCKING"
+      ],
+      "default": "PROMOTION_POLICY_UNSPECIFIED",
+      "description": "Promotion policy controls behavior when a payload must move to a higher tier.\n\n - PROMOTION_POLICY_BEST_EFFORT: Schedule asynchronously if possible\n - PROMOTION_POLICY_BLOCKING: RPC returns only when target tier satisfied or fails"
+    },
+    "v1RamLocation": {
+      "type": "object",
+      "properties": {
+        "shmName": {
+          "type": "string"
+        },
+        "slabId": {
+          "type": "integer",
+          "format": "int64"
+        },
+        "blockIndex": {
+          "type": "string",
+          "format": "uint64"
+        },
+        "lengthBytes": {
+          "type": "string",
+          "format": "uint64"
+        }
+      }
+    },
+    "v1SpillPolicy": {
+      "type": "string",
+      "enum": [
+        "SPILL_POLICY_UNSPECIFIED",
+        "SPILL_POLICY_BEST_EFFORT",
+        "SPILL_POLICY_BLOCKING"
+      ],
+      "default": "SPILL_POLICY_UNSPECIFIED",
+      "description": "Spill policy controls durability operations.\n\n - SPILL_POLICY_BEST_EFFORT: Background durability\n - SPILL_POLICY_BLOCKING: Wait until durable or failure"
+    },
+    "v1SpillRequest": {
+      "type": "object",
+      "properties": {
+        "ids": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1PayloadID"
+          }
+        },
+        "policy": {
+          "$ref": "#/definitions/v1SpillPolicy"
+        },
+        "waitForLeases": {
+          "type": "boolean"
+        },
+        "fsync": {
+          "type": "boolean"
+        }
+      }
+    },
+    "v1SpillResponse": {
+      "type": "object",
+      "properties": {
+        "results": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/SpillResponseResult"
+          }
+        }
+      }
+    },
+    "v1Tier": {
+      "type": "string",
+      "enum": [
+        "TIER_UNSPECIFIED",
+        "TIER_GPU",
+        "TIER_RAM",
+        "TIER_DISK",
+        "TIER_OBJECT"
+      ],
+      "default": "TIER_UNSPECIFIED",
+      "description": "Ordered from fastest → most durable.\nHigher tiers may not always be available.\n\n - TIER_UNSPECIFIED: Not set; treated as an error in most contexts.\n - TIER_GPU: GPU device memory (fastest, smallest, most volatile).\n - TIER_RAM: Host DRAM / shared-memory segment.\n - TIER_DISK: Local NVMe/SSD/HDD (durable, larger, slower than RAM).\n - TIER_OBJECT: Remote object storage (S3/GCS/Azure; durable, largest)."
+    },
+    "v1UpdatePayloadMetadataResponse": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/v1PayloadID"
+        },
+        "metadata": {
+          "$ref": "#/definitions/v1PayloadMetadata"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    }
+  }
+}

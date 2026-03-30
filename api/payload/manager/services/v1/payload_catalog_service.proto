@@ -2,6 +2,7 @@ syntax = "proto3";
 
 package payload.manager.services.v1;
 
+import "google/api/annotations.proto";
 import "google/protobuf/empty.proto";
 
 import "payload/manager/runtime/v1/lifecycle.proto";
@@ -36,14 +37,24 @@ service PayloadCatalogService {
     until CommitPayload succeeds.
   */
   rpc AllocatePayload(payload.manager.runtime.v1.AllocatePayloadRequest)
-      returns (payload.manager.runtime.v1.AllocatePayloadResponse);
+      returns (payload.manager.runtime.v1.AllocatePayloadResponse) {
+    option (google.api.http) = {
+      post: "/v1/payloads"
+      body: "*"
+    };
+  }
 
   /*
     Marks payload immutable and readable.
     After this point the payload must never change.
   */
   rpc CommitPayload(payload.manager.runtime.v1.CommitPayloadRequest)
-      returns (payload.manager.runtime.v1.CommitPayloadResponse);
+      returns (payload.manager.runtime.v1.CommitPayloadResponse) {
+    option (google.api.http) = {
+      post: "/v1/payloads/{id.value}/commit"
+      body: "*"
+    };
+  }
 
   /*
     Deletes payload placement and metadata.
@@ -53,7 +64,11 @@ service PayloadCatalogService {
       - future reads must fail
   */
   rpc Delete(payload.manager.runtime.v1.DeleteRequest)
-      returns (google.protobuf.Empty);
+      returns (google.protobuf.Empty) {
+    option (google.api.http) = {
+      delete: "/v1/payloads/{id.value}"
+    };
+  }
 
 
   // ---------------------------------------------------------------------------
@@ -64,7 +79,12 @@ service PayloadCatalogService {
     Requests movement to a higher tier (RAM/GPU/etc).
   */
   rpc Promote(payload.manager.runtime.v1.PromoteRequest)
-      returns (payload.manager.runtime.v1.PromoteResponse);
+      returns (payload.manager.runtime.v1.PromoteResponse) {
+    option (google.api.http) = {
+      post: "/v1/payloads/{id.value}/promote"
+      body: "*"
+    };
+  }
 
   /*
     Requests durable storage (usually disk/object storage).
@@ -72,7 +92,12 @@ service PayloadCatalogService {
     BLOCKING policy waits until durable or failure.
   */
   rpc Spill(payload.manager.runtime.v1.SpillRequest)
-      returns (payload.manager.runtime.v1.SpillResponse);
+      returns (payload.manager.runtime.v1.SpillResponse) {
+    option (google.api.http) = {
+      post: "/v1/payloads/spill"
+      body: "*"
+    };
+  }
 
   /*
     Hint to move payload bytes to a faster tier.
@@ -80,7 +105,12 @@ service PayloadCatalogService {
     Best-effort and idempotent.
   */
   rpc Prefetch(payload.manager.runtime.v1.PrefetchRequest)
-      returns (google.protobuf.Empty);
+      returns (google.protobuf.Empty) {
+    option (google.api.http) = {
+      post: "/v1/payloads/{id.value}/prefetch"
+      body: "*"
+    };
+  }
 
   /*
     Best-effort advisory that blocks spill while active.
@@ -88,7 +118,12 @@ service PayloadCatalogService {
     Pin duration is in milliseconds. duration_ms=0 means indefinite pin until Unpin.
   */
   rpc Pin(payload.manager.runtime.v1.PinRequest)
-      returns (google.protobuf.Empty);
+      returns (google.protobuf.Empty) {
+    option (google.api.http) = {
+      post: "/v1/payloads/{id.value}/pin"
+      body: "*"
+    };
+  }
 
   /*
     Removes an existing pin.
@@ -96,7 +131,11 @@ service PayloadCatalogService {
     Idempotent: unpinning an unpinned payload is a no-op.
   */
   rpc Unpin(payload.manager.runtime.v1.UnpinRequest)
-      returns (google.protobuf.Empty);
+      returns (google.protobuf.Empty) {
+    option (google.api.http) = {
+      delete: "/v1/payloads/{id.value}/pin"
+    };
+  }
 
 
   // ---------------------------------------------------------------------------
@@ -109,10 +148,19 @@ service PayloadCatalogService {
     Does NOT enforce execution order.
   */
   rpc AddLineage(payload.manager.catalog.v1.AddLineageRequest)
-      returns (google.protobuf.Empty);
+      returns (google.protobuf.Empty) {
+    option (google.api.http) = {
+      post: "/v1/payloads/{child.value}/lineage"
+      body: "*"
+    };
+  }
 
   rpc GetLineage(payload.manager.catalog.v1.GetLineageRequest)
-      returns (payload.manager.catalog.v1.GetLineageResponse);
+      returns (payload.manager.catalog.v1.GetLineageResponse) {
+    option (google.api.http) = {
+      get: "/v1/payloads/{id.value}/lineage"
+    };
+  }
 
 
   // ---------------------------------------------------------------------------
@@ -123,13 +171,23 @@ service PayloadCatalogService {
     Updates current metadata view.
   */
   rpc UpdatePayloadMetadata(payload.manager.catalog.v1.UpdatePayloadMetadataRequest)
-      returns (payload.manager.catalog.v1.UpdatePayloadMetadataResponse);
+      returns (payload.manager.catalog.v1.UpdatePayloadMetadataResponse) {
+    option (google.api.http) = {
+      put: "/v1/payloads/{id.value}/metadata"
+      body: "*"
+    };
+  }
 
   /*
     Appends immutable metadata history event.
   */
   rpc AppendPayloadMetadataEvent(payload.manager.catalog.v1.AppendPayloadMetadataEventRequest)
-      returns (payload.manager.catalog.v1.AppendPayloadMetadataEventResponse);
+      returns (payload.manager.catalog.v1.AppendPayloadMetadataEventResponse) {
+    option (google.api.http) = {
+      post: "/v1/payloads/{id.value}/metadata/events"
+      body: "*"
+    };
+  }
 
 
   // ---------------------------------------------------------------------------
@@ -141,5 +199,9 @@ service PayloadCatalogService {
     Optionally filtered by tier.
   */
   rpc ListPayloads(payload.manager.runtime.v1.ListPayloadsRequest)
-      returns (payload.manager.runtime.v1.ListPayloadsResponse);
+      returns (payload.manager.runtime.v1.ListPayloadsResponse) {
+    option (google.api.http) = {
+      get: "/v1/payloads"
+    };
+  }
 }

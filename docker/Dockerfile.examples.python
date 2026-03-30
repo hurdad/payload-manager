@@ -118,7 +118,8 @@ COPY --from=builder /usr/local/lib/python3.12/site-packages/pyarrow \
 RUN pip install --no-cache-dir \
     "numpy>=1.25" \
     "grpcio>=1.50" \
-    "protobuf>=3.19,<4"
+    "protobuf>=3.19,<4" \
+    "googleapis-common-protos>=1.56"
 
 # Copy the cmake-generated Python client stubs and examples
 COPY client/python /app/client/python

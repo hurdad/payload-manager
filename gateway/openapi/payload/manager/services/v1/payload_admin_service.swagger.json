@@ -1,0 +1,109 @@
+{
+  "swagger": "2.0",
+  "info": {
+    "title": "payload/manager/services/v1/payload_admin_service.proto",
+    "version": "version not set"
+  },
+  "tags": [
+    {
+      "name": "PayloadAdminService"
+    }
+  ],
+  "consumes": [
+    "application/json"
+  ],
+  "produces": [
+    "application/json"
+  ],
+  "paths": {
+    "/v1/admin/stats": {
+      "get": {
+        "operationId": "PayloadAdminService_Stats",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1StatsResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "tags": [
+          "PayloadAdminService"
+        ]
+      }
+    }
+  },
+  "definitions": {
+    "protobufAny": {
+      "type": "object",
+      "properties": {
+        "@type": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": {}
+    },
+    "rpcStatus": {
+      "type": "object",
+      "properties": {
+        "code": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "message": {
+          "type": "string"
+        },
+        "details": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/protobufAny"
+          }
+        }
+      }
+    },
+    "v1StatsResponse": {
+      "type": "object",
+      "properties": {
+        "payloadsGpu": {
+          "type": "string",
+          "format": "uint64"
+        },
+        "payloadsRam": {
+          "type": "string",
+          "format": "uint64"
+        },
+        "payloadsDisk": {
+          "type": "string",
+          "format": "uint64"
+        },
+        "payloadsObject": {
+          "type": "string",
+          "format": "uint64"
+        },
+        "bytesGpu": {
+          "type": "string",
+          "format": "uint64"
+        },
+        "bytesRam": {
+          "type": "string",
+          "format": "uint64"
+        },
+        "bytesDisk": {
+          "type": "string",
+          "format": "uint64"
+        },
+        "bytesObject": {
+          "type": "string",
+          "format": "uint64"
+        }
+      }
+    }
+  }
+}

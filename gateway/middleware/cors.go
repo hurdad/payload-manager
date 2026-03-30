@@ -1,6 +1,10 @@
 package middleware
 
-import "net/http"
+import (
+	"io/fs"
+	"net/http"
+	"strings"
+)
 
 func WithCORS(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -15,16 +19,21 @@ func WithCORS(next http.Handler) http.Handler {
 	})
 }
 
-func SPAHandler(static http.FileSystem, indexPath string) http.Handler {
-	files := http.FileServer(static)
+// SPAHandler serves a Single-Page Application from fsys, falling back to
+// indexPath for any path that doesn't match an existing file.
+func SPAHandler(fsys fs.FS, indexPath string) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/" || r.URL.Path == "" {
-			r.URL.Path = "/" + indexPath
+		// Strip leading slash for fs.FS path lookups.
+		name := strings.TrimPrefix(r.URL.Path, "/")
+		if name == "" {
+			name = indexPath
 		}
-		_, err := static.Open(r.URL.Path)
-		if err != nil {
-			r.URL.Path = "/" + indexPath
+
+		// Fall back to index for unknown paths (SPA client-side routing).
+		if _, err := fs.Stat(fsys, name); err != nil {
+			name = indexPath
 		}
-		files.ServeHTTP(w, r)
+
+		http.ServeFileFS(w, r, fsys, name)
 	})
 }

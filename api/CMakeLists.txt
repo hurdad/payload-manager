@@ -57,6 +57,14 @@ set(PROTO_ROOT ${CMAKE_CURRENT_SOURCE_DIR})
 set(GENERATED_DIR ${CMAKE_CURRENT_BINARY_DIR}/generated)
 file(MAKE_DIRECTORY ${GENERATED_DIR})
 
+# googleapis submodule — provides google/api/annotations.proto etc.
+set(GOOGLEAPIS_PROTO_ROOT ${CMAKE_SOURCE_DIR}/third_party/googleapis)
+if(NOT EXISTS "${GOOGLEAPIS_PROTO_ROOT}/google/api/annotations.proto")
+  message(FATAL_ERROR
+    "third_party/googleapis submodule is missing.\n"
+    "Run: git submodule update --init third_party/googleapis")
+endif()
+
 # ------------------------------------------------------------------------------
 # All schema protos
 # ------------------------------------------------------------------------------
@@ -88,6 +96,12 @@ set(SERVICE_PROTO_FILES
         payload/manager/services/v1/payload_admin_service.proto
 )
 
+# googleapis protos needed by the service stubs (google/api/annotations.pb.h)
+set(GOOGLEAPIS_PROTO_FILES
+        google/api/annotations.proto
+        google/api/http.proto
+)
+
 set(ALL_DEP_PROTOS ${ALL_PROTO_FILES} ${SERVICE_PROTO_FILES})
 
 # Absolute dependency paths
@@ -105,13 +119,30 @@ set(PROTO_HDRS)
 set(GRPC_SRCS)
 set(GRPC_HDRS)
 
-# protobuf outputs
+# protobuf outputs for our own protos
 foreach(PROTO_FILE IN LISTS ALL_DEP_PROTOS)
   get_filename_component(PROTO_WE ${PROTO_FILE} NAME_WE)
   get_filename_component(PROTO_DIR ${PROTO_FILE} DIRECTORY)
 
   list(APPEND PROTO_SRCS ${GENERATED_DIR}/${PROTO_DIR}/${PROTO_WE}.pb.cc)
   list(APPEND PROTO_HDRS ${GENERATED_DIR}/${PROTO_DIR}/${PROTO_WE}.pb.h)
+endforeach()
+
+# protobuf outputs for googleapis stubs (needed by the generated service headers)
+set(GOOGLEAPIS_SRCS)
+set(GOOGLEAPIS_HDRS)
+foreach(PROTO_FILE IN LISTS GOOGLEAPIS_PROTO_FILES)
+  get_filename_component(PROTO_WE ${PROTO_FILE} NAME_WE)
+  get_filename_component(PROTO_DIR ${PROTO_FILE} DIRECTORY)
+
+  list(APPEND GOOGLEAPIS_SRCS ${GENERATED_DIR}/${PROTO_DIR}/${PROTO_WE}.pb.cc)
+  list(APPEND GOOGLEAPIS_HDRS ${GENERATED_DIR}/${PROTO_DIR}/${PROTO_WE}.pb.h)
+endforeach()
+
+# Absolute paths for dependency tracking
+set(GOOGLEAPIS_ABS_FILES)
+foreach(PROTO_FILE IN LISTS GOOGLEAPIS_PROTO_FILES)
+  list(APPEND GOOGLEAPIS_ABS_FILES ${GOOGLEAPIS_PROTO_ROOT}/${PROTO_FILE})
 endforeach()
 
 # grpc outputs
@@ -234,6 +265,25 @@ elseif(DEFINED Protobuf_INCLUDE_DIR AND Protobuf_INCLUDE_DIR)
   list(APPEND _PROTOC_WELLKNOWN_ARGS --proto_path=${Protobuf_INCLUDE_DIR})
 endif()
 
+list(APPEND _PROTOC_WELLKNOWN_ARGS --proto_path=${GOOGLEAPIS_PROTO_ROOT})
+
+# ------------------------------------------------------------------------------
+# Generate googleapis stub C++ sources (google/api/annotations.pb.h etc.)
+# ------------------------------------------------------------------------------
+
+add_custom_command(
+        OUTPUT ${GOOGLEAPIS_SRCS} ${GOOGLEAPIS_HDRS}
+        COMMAND ${PROTOC}
+        --proto_path=${GOOGLEAPIS_PROTO_ROOT}
+        ${_PROTOC_WELLKNOWN_ARGS}
+        --cpp_out=${GENERATED_DIR}
+        ${GOOGLEAPIS_PROTO_FILES}
+        WORKING_DIRECTORY ${GOOGLEAPIS_PROTO_ROOT}
+        DEPENDS ${GOOGLEAPIS_ABS_FILES}
+        COMMENT "Generating googleapis stub C++ sources"
+        VERBATIM
+)
+
 # ------------------------------------------------------------------------------
 # Generate protobuf C++ sources
 # ------------------------------------------------------------------------------
@@ -279,6 +329,7 @@ if(ENABLE_PYTHON_PROTO)
           OUTPUT ${PY_PROTO_SRCS}
           COMMAND ${Python3_EXECUTABLE} -m grpc_tools.protoc
           -I ${PROTO_ROOT}
+          -I ${GOOGLEAPIS_PROTO_ROOT}
           --python_out=${PYTHON_OUT_DIR}
           ${ALL_DEP_PROTOS}
           WORKING_DIRECTORY ${PROTO_ROOT}
@@ -292,6 +343,7 @@ if(ENABLE_PYTHON_PROTO)
           OUTPUT ${PY_GRPC_SRCS}
           COMMAND ${Python3_EXECUTABLE} -m grpc_tools.protoc
           -I ${PROTO_ROOT}
+          -I ${GOOGLEAPIS_PROTO_ROOT}
           --grpc_python_out=${PYTHON_OUT_DIR}
           ${SERVICE_PROTO_FILES}
           WORKING_DIRECTORY ${PROTO_ROOT}
@@ -307,6 +359,8 @@ endif()
 
 add_custom_target(generate_protos ALL
         DEPENDS
+        ${GOOGLEAPIS_SRCS}
+        ${GOOGLEAPIS_HDRS}
         ${PROTO_SRCS}
         ${PROTO_HDRS}
         ${GRPC_SRCS}
@@ -319,7 +373,7 @@ add_custom_target(generate_protos ALL
 # Proto-only library
 # ------------------------------------------------------------------------------
 
-add_library(payload_manager_proto STATIC ${PROTO_SRCS})
+add_library(payload_manager_proto STATIC ${GOOGLEAPIS_SRCS} ${PROTO_SRCS})
 add_library(payload_manager::proto ALIAS payload_manager_proto)
 
 target_include_directories(payload_manager_proto

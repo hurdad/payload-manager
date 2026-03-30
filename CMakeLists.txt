@@ -108,21 +108,28 @@ option(PAYLOAD_MANAGER_ENABLE_ARROW_CUDA
        "Enable Arrow CUDA integration (requires GPU build)"
        OFF)
 
-# Require at least the version matching the vendored submodule (apache-arrow-23.0.1).
-# Do not update this minimum without regression testing against the new version.
-find_package(Arrow 23.0 QUIET)
-if(Arrow_FOUND AND Arrow_VERSION VERSION_LESS "23.0")
-  message(WARNING "Arrow ${Arrow_VERSION} is older than the tested minimum 23.0; falling back to vendored submodule")
-  set(Arrow_FOUND FALSE)
-endif()
-# When CUDA is requested, the system Arrow must also provide ArrowCUDA.
-# If it doesn't, fall back to the vendored submodule which will be built
-# with ARROW_CUDA=ON.
-if(Arrow_FOUND AND PAYLOAD_MANAGER_ENABLE_ARROW_CUDA)
-  find_package(ArrowCUDA QUIET)
-  if(NOT ArrowCUDA_FOUND)
-    message(STATUS "Arrow: pre-installed package has no CUDA support; falling back to submodule")
+# By default always use the vendored submodule for Arrow so all non-Jetson
+# builds are hermetic.  Set PAYLOAD_MANAGER_ARROW_PREFER_SYSTEM=ON to use a
+# pre-installed package (e.g. on Jetson where the base image ships Arrow).
+option(PAYLOAD_MANAGER_ARROW_PREFER_SYSTEM
+       "Use pre-installed Arrow instead of the vendored submodule (e.g. on Jetson)"
+       OFF)
+
+set(Arrow_FOUND FALSE)
+if(PAYLOAD_MANAGER_ARROW_PREFER_SYSTEM)
+  # Require at least the version matching the vendored submodule (apache-arrow-23.0.1).
+  find_package(Arrow 23.0 QUIET)
+  if(Arrow_FOUND AND Arrow_VERSION VERSION_LESS "23.0")
+    message(WARNING "Arrow ${Arrow_VERSION} is older than the tested minimum 23.0; falling back to vendored submodule")
     set(Arrow_FOUND FALSE)
+  endif()
+  # When CUDA is requested, the system Arrow must also provide ArrowCUDA.
+  if(Arrow_FOUND AND PAYLOAD_MANAGER_ENABLE_ARROW_CUDA)
+    find_package(ArrowCUDA QUIET)
+    if(NOT ArrowCUDA_FOUND)
+      message(STATUS "Arrow: pre-installed package has no CUDA support; falling back to submodule")
+      set(Arrow_FOUND FALSE)
+    endif()
   endif()
 endif()
 if(Arrow_FOUND)
@@ -241,6 +248,13 @@ else()
     set(ARROW_CUDA OFF CACHE BOOL "" FORCE)
   endif()
 
+  # Arrow's CMakeLists.txt uses string(TOLOWER ${CMAKE_BUILD_TYPE} ...) which
+  # expands to nothing when CMAKE_BUILD_TYPE is unset, causing a CMake error.
+  # Its own guard uses CACHE STRING without FORCE so it silently no-ops as a
+  # subdirectory.  Ensure a default is set before entering the subdirectory.
+  if(NOT CMAKE_BUILD_TYPE)
+    set(CMAKE_BUILD_TYPE Release CACHE STRING "Build type" FORCE)
+  endif()
   add_subdirectory(${_arrow_dir} arrow_build)
   unset(_arrow_dir)
   unset(_arrow_s3)

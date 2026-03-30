@@ -1,4 +1,22 @@
 services:
+  payload-manager:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    restart: unless-stopped
+    hostname: payload-manager
+    command: ["./payload-manager", "--config", "/app/conf/runtime-docker-no-otel-sqlite.yaml"]
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c '</dev/tcp/localhost/50051'"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 10s
+    ipc: host
+    volumes:
+      - ../config/runtime-docker-no-otel-sqlite.yaml:/app/conf/runtime-docker-no-otel-sqlite.yaml:ro
+      - payload-gateway-data:/var/lib/payload-manager
+
   payload-gateway:
     build:
       context: ..
@@ -11,3 +29,6 @@ services:
       HTTP_ADDR: :8080
     ports:
       - "8080:8080"
+
+volumes:
+  payload-gateway-data:

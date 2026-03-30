@@ -1,0 +1,646 @@
+{
+  "swagger": "2.0",
+  "info": {
+    "title": "payload/manager/services/v1/payload_stream_service.proto",
+    "version": "version not set"
+  },
+  "tags": [
+    {
+      "name": "PayloadStreamService"
+    }
+  ],
+  "consumes": [
+    "application/json"
+  ],
+  "produces": [
+    "application/json"
+  ],
+  "paths": {
+    "/v1/streams": {
+      "post": {
+        "summary": "management",
+        "operationId": "PayloadStreamService_CreateStream",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "type": "object",
+              "properties": {}
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/v1CreateStreamRequest"
+            }
+          }
+        ],
+        "tags": [
+          "PayloadStreamService"
+        ]
+      }
+    },
+    "/v1/streams/{stream.namespace}/{stream.name}": {
+      "delete": {
+        "operationId": "PayloadStreamService_DeleteStream",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "type": "object",
+              "properties": {}
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "stream.namespace",
+            "description": "optional tenant / environment",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "stream.name",
+            "description": "ex: \"rf.iq.radio0\", \"decoder.frames\"",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          }
+        ],
+        "tags": [
+          "PayloadStreamService"
+        ]
+      }
+    },
+    "/v1/streams/{stream.namespace}/{stream.name}/commit": {
+      "post": {
+        "summary": "consumer checkpointing",
+        "operationId": "PayloadStreamService_Commit",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "type": "object",
+              "properties": {}
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "stream.namespace",
+            "description": "optional tenant / environment",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "stream.name",
+            "description": "ex: \"rf.iq.radio0\", \"decoder.frames\"",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/PayloadStreamServiceCommitBody"
+            }
+          }
+        ],
+        "tags": [
+          "PayloadStreamService"
+        ]
+      }
+    },
+    "/v1/streams/{stream.namespace}/{stream.name}/committed": {
+      "get": {
+        "operationId": "PayloadStreamService_GetCommitted",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1GetCommittedResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "stream.namespace",
+            "description": "optional tenant / environment",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "stream.name",
+            "description": "ex: \"rf.iq.radio0\", \"decoder.frames\"",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "consumerGroup",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          }
+        ],
+        "tags": [
+          "PayloadStreamService"
+        ]
+      }
+    },
+    "/v1/streams/{stream.namespace}/{stream.name}/entries": {
+      "get": {
+        "summary": "batch read",
+        "operationId": "PayloadStreamService_Read",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1ReadResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "stream.namespace",
+            "description": "optional tenant / environment",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "stream.name",
+            "description": "ex: \"rf.iq.radio0\", \"decoder.frames\"",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "startOffset",
+            "in": "query",
+            "required": false,
+            "type": "string",
+            "format": "uint64"
+          },
+          {
+            "name": "maxEntries",
+            "in": "query",
+            "required": false,
+            "type": "string",
+            "format": "uint64"
+          },
+          {
+            "name": "notBefore",
+            "description": "optional time filter (post-order filtering)",
+            "in": "query",
+            "required": false,
+            "type": "string",
+            "format": "date-time"
+          }
+        ],
+        "tags": [
+          "PayloadStreamService"
+        ]
+      },
+      "post": {
+        "summary": "producer",
+        "operationId": "PayloadStreamService_Append",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1AppendResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "stream.namespace",
+            "description": "optional tenant / environment",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "stream.name",
+            "description": "ex: \"rf.iq.radio0\", \"decoder.frames\"",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/PayloadStreamServiceAppendBody"
+            }
+          }
+        ],
+        "tags": [
+          "PayloadStreamService"
+        ]
+      }
+    },
+    "/v1/streams/{stream.namespace}/{stream.name}/range": {
+      "get": {
+        "summary": "recording snapshot",
+        "operationId": "PayloadStreamService_GetRange",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1GetRangeResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "stream.namespace",
+            "description": "optional tenant / environment",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "stream.name",
+            "description": "ex: \"rf.iq.radio0\", \"decoder.frames\"",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "startOffset",
+            "in": "query",
+            "required": false,
+            "type": "string",
+            "format": "uint64"
+          },
+          {
+            "name": "endOffset",
+            "description": "inclusive",
+            "in": "query",
+            "required": false,
+            "type": "string",
+            "format": "uint64"
+          }
+        ],
+        "tags": [
+          "PayloadStreamService"
+        ]
+      }
+    },
+    "/v1/streams/{stream.namespace}/{stream.name}/subscribe": {
+      "get": {
+        "summary": "live processing",
+        "operationId": "PayloadStreamService_Subscribe",
+        "responses": {
+          "200": {
+            "description": "A successful response.(streaming responses)",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "result": {
+                  "$ref": "#/definitions/v1SubscribeResponse"
+                },
+                "error": {
+                  "$ref": "#/definitions/rpcStatus"
+                }
+              },
+              "title": "Stream result of v1SubscribeResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "stream.namespace",
+            "description": "optional tenant / environment",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "stream.name",
+            "description": "ex: \"rf.iq.radio0\", \"decoder.frames\"",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "offset",
+            "description": "resume",
+            "in": "query",
+            "required": false,
+            "type": "string",
+            "format": "uint64"
+          },
+          {
+            "name": "fromBeginning",
+            "description": "full replay then live",
+            "in": "query",
+            "required": false,
+            "type": "boolean"
+          },
+          {
+            "name": "fromLatest",
+            "description": "live only",
+            "in": "query",
+            "required": false,
+            "type": "boolean"
+          },
+          {
+            "name": "maxInflight",
+            "description": "advisory backpressure window",
+            "in": "query",
+            "required": false,
+            "type": "integer",
+            "format": "int64"
+          }
+        ],
+        "tags": [
+          "PayloadStreamService"
+        ]
+      }
+    }
+  },
+  "definitions": {
+    "PayloadStreamServiceAppendBody": {
+      "type": "object",
+      "properties": {
+        "stream": {
+          "type": "object",
+          "title": "============================================================================\nSTREAM IDENTITY\n----------------------------------------------------------------------------\nA logical name that remains stable across restarts.\nNamespace allows multi-tenant or multi-system isolation.\nTogether they uniquely identify a stream.\n============================================================================"
+        },
+        "items": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1AppendItem"
+          }
+        }
+      },
+      "description": "============================================================================\nAPPEND\n----------------------------------------------------------------------------\nAppends payload UUIDs in order received.\n\nGuarantees:\n  - items in request remain ordered\n  - requests serialized by server\n  - offsets assigned atomically\n\nIMPORTANT:\n  Producer must only append AFTER payload commit succeeds.\n============================================================================"
+    },
+    "PayloadStreamServiceCommitBody": {
+      "type": "object",
+      "properties": {
+        "stream": {
+          "type": "object",
+          "title": "============================================================================\nSTREAM IDENTITY\n----------------------------------------------------------------------------\nA logical name that remains stable across restarts.\nNamespace allows multi-tenant or multi-system isolation.\nTogether they uniquely identify a stream.\n============================================================================"
+        },
+        "consumerGroup": {
+          "type": "string"
+        },
+        "offset": {
+          "type": "string",
+          "format": "uint64"
+        }
+      },
+      "description": "============================================================================\nCONSUMER GROUP CHECKPOINTS\n----------------------------------------------------------------------------\nEnables exactly-once style processing.\n\nConsumer commits last fully processed offset.\nServer stores position durably.\n============================================================================"
+    },
+    "protobufAny": {
+      "type": "object",
+      "properties": {
+        "@type": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": {}
+    },
+    "rpcStatus": {
+      "type": "object",
+      "properties": {
+        "code": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "message": {
+          "type": "string"
+        },
+        "details": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/protobufAny"
+          }
+        }
+      }
+    },
+    "v1AppendItem": {
+      "type": "object",
+      "properties": {
+        "payloadId": {
+          "$ref": "#/definitions/v1PayloadID",
+          "title": "must exist in payload manager"
+        },
+        "eventTime": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "durationNs": {
+          "type": "string",
+          "format": "uint64"
+        },
+        "tags": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "v1AppendResponse": {
+      "type": "object",
+      "properties": {
+        "firstOffset": {
+          "type": "string",
+          "format": "uint64"
+        },
+        "lastOffset": {
+          "type": "string",
+          "format": "uint64"
+        }
+      }
+    },
+    "v1CreateStreamRequest": {
+      "type": "object",
+      "properties": {
+        "stream": {
+          "$ref": "#/definitions/v1StreamID"
+        },
+        "retentionMaxEntries": {
+          "type": "string",
+          "format": "uint64",
+          "title": "retention expressed as logical history\nif zero -\u003e infinite retention"
+        },
+        "retentionMaxAgeSec": {
+          "type": "string",
+          "format": "uint64"
+        }
+      }
+    },
+    "v1GetCommittedResponse": {
+      "type": "object",
+      "properties": {
+        "offset": {
+          "type": "string",
+          "format": "uint64"
+        }
+      }
+    },
+    "v1GetRangeResponse": {
+      "type": "object",
+      "properties": {
+        "entries": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1StreamEntry"
+          }
+        }
+      }
+    },
+    "v1PayloadID": {
+      "type": "object",
+      "properties": {
+        "value": {
+          "type": "string",
+          "format": "byte"
+        }
+      },
+      "description": "Canonical payload identifier.\n\nMUST contain exactly 16 bytes (binary RFC4122 UUID).\nThe server rejects any other length.\n\nThis is intentionally NOT a string to avoid formatting ambiguity."
+    },
+    "v1ReadResponse": {
+      "type": "object",
+      "properties": {
+        "entries": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1StreamEntry"
+          }
+        }
+      }
+    },
+    "v1StreamEntry": {
+      "type": "object",
+      "properties": {
+        "stream": {
+          "$ref": "#/definitions/v1StreamID",
+          "title": "stream identity"
+        },
+        "offset": {
+          "type": "string",
+          "format": "uint64",
+          "title": "assigned by server at append time\nnever reused, never decreases"
+        },
+        "payloadId": {
+          "$ref": "#/definitions/v1PayloadID",
+          "title": "Canonical payload identity returned by PayloadManager::Commit"
+        },
+        "eventTime": {
+          "type": "string",
+          "format": "date-time",
+          "title": "producer event timestamp (capture time)"
+        },
+        "appendTime": {
+          "type": "string",
+          "format": "date-time",
+          "title": "when the stream committed the entry"
+        },
+        "durationNs": {
+          "type": "string",
+          "format": "uint64",
+          "title": "logical playback duration of payload\nused for paced replay"
+        },
+        "tags": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          },
+          "title": "lightweight routing/filter metadata"
+        }
+      },
+      "description": "============================================================================\nSTREAM ENTRY\n----------------------------------------------------------------------------\nThe fundamental record stored in the commit log.\n\nOrdering rule:\n  Offsets are strictly monotonically increasing per stream.\n  Offset is the ONLY source of truth for ordering.\n  Timestamps must never be used for ordering.\n\nReplay rule:\n  Replaying the same offset range must produce identical sequence.\n\nDurability rule:\n  Entry is visible only AFTER payload is committed to PayloadManager.\n============================================================================"
+    },
+    "v1StreamID": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "title": "ex: \"rf.iq.radio0\", \"decoder.frames\""
+        },
+        "namespace": {
+          "type": "string",
+          "title": "optional tenant / environment"
+        }
+      },
+      "title": "============================================================================\nSTREAM IDENTITY\n----------------------------------------------------------------------------\nA logical name that remains stable across restarts.\nNamespace allows multi-tenant or multi-system isolation.\nTogether they uniquely identify a stream.\n============================================================================"
+    },
+    "v1SubscribeResponse": {
+      "type": "object",
+      "properties": {
+        "entry": {
+          "$ref": "#/definitions/v1StreamEntry"
+        }
+      }
+    }
+  }
+}

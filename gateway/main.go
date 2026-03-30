@@ -63,7 +63,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("failed to read embedded static files: %v", err)
 	}
-	spa := middleware.SPAHandler(http.FS(staticSub), "index.html")
+	spa := middleware.SPAHandler(staticSub, "index.html")
 	rootMux.Handle("/", spa)
 
 	handler := middleware.WithUUIDPathRewrite(middleware.WithCORS(rootMux))
