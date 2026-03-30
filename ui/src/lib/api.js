@@ -1,3 +1,9 @@
+/** Convert standard base64 to URL-safe base64 for use in URL path segments.
+ *  Keeps = padding — grpc-gateway URL encoding requires it. */
+function toURLSafe(id) {
+  return id.replace(/\+/g, '-').replace(/\//g, '_');
+}
+
 async function apiFetch(path, options = {}) {
   const res = await fetch(path, {
     headers: { 'Content-Type': 'application/json', ...options.headers },
@@ -18,7 +24,7 @@ export const api = {
     apiFetch(`/v1/payloads${tier ? `?tierFilter=${tier}` : ''}`),
 
   deletePayload: (id, force = false) =>
-    apiFetch(`/v1/payloads/${encodeURIComponent(id)}${force ? '?force=true' : ''}`, { method: 'DELETE' }),
+    apiFetch(`/v1/payloads/${toURLSafe(id)}${force ? '?force=true' : ''}`, { method: 'DELETE' }),
 
   spill: (ids) =>
     apiFetch('/v1/payloads/spill', {
@@ -27,34 +33,34 @@ export const api = {
     }),
 
   promote: (id, targetTier = 'TIER_RAM') =>
-    apiFetch(`/v1/payloads/${encodeURIComponent(id)}/promote`, {
+    apiFetch(`/v1/payloads/${toURLSafe(id)}/promote`, {
       method: 'POST',
       body: JSON.stringify({ targetTier, policy: 'PROMOTION_POLICY_BLOCKING' }),
     }),
 
   pin: (id, durationMs = 0) =>
-    apiFetch(`/v1/payloads/${encodeURIComponent(id)}/pin`, {
+    apiFetch(`/v1/payloads/${toURLSafe(id)}/pin`, {
       method: 'POST',
       body: JSON.stringify({ durationMs: String(durationMs) }),
     }),
 
   unpin: (id) =>
-    apiFetch(`/v1/payloads/${encodeURIComponent(id)}/pin`, { method: 'DELETE' }),
+    apiFetch(`/v1/payloads/${toURLSafe(id)}/pin`, { method: 'DELETE' }),
 
   prefetch: (id, targetTier = 'TIER_RAM') =>
-    apiFetch(`/v1/payloads/${encodeURIComponent(id)}/prefetch`, {
+    apiFetch(`/v1/payloads/${toURLSafe(id)}/prefetch`, {
       method: 'POST',
       body: JSON.stringify({ targetTier }),
     }),
 
   snapshot: (id) =>
-    apiFetch(`/v1/payloads/${encodeURIComponent(id)}/snapshot`),
+    apiFetch(`/v1/payloads/${toURLSafe(id)}/snapshot`),
 
   lineage: (id, upstream = false, maxDepth = 10) =>
-    apiFetch(`/v1/payloads/${encodeURIComponent(id)}/lineage?upstream=${upstream}&maxDepth=${maxDepth}`),
+    apiFetch(`/v1/payloads/${toURLSafe(id)}/lineage?upstream=${upstream}&maxDepth=${maxDepth}`),
 
   updateMetadata: (id, raw, schema = '') =>
-    apiFetch(`/v1/payloads/${encodeURIComponent(id)}/metadata`, {
+    apiFetch(`/v1/payloads/${toURLSafe(id)}/metadata`, {
       method: 'PUT',
       body: JSON.stringify({
         mode: 'METADATA_UPDATE_MODE_REPLACE',
@@ -63,7 +69,7 @@ export const api = {
     }),
 
   appendMetadataEvent: (id, raw, source = '', version = '') =>
-    apiFetch(`/v1/payloads/${encodeURIComponent(id)}/metadata/events`, {
+    apiFetch(`/v1/payloads/${toURLSafe(id)}/metadata/events`, {
       method: 'POST',
       body: JSON.stringify({
         metadata: { data: btoa(raw), schema: '' },
@@ -74,10 +80,10 @@ export const api = {
 
   // Payload Data
   resolveSnapshot: (id) =>
-    apiFetch(`/v1/payloads/${encodeURIComponent(id)}/snapshot`),
+    apiFetch(`/v1/payloads/${toURLSafe(id)}/snapshot`),
 
   acquireLease: (id, minTier = 'TIER_DISK', durationMs = 30000) =>
-    apiFetch(`/v1/payloads/${encodeURIComponent(id)}/lease`, {
+    apiFetch(`/v1/payloads/${toURLSafe(id)}/lease`, {
       method: 'POST',
       body: JSON.stringify({
         mode: 'LEASE_MODE_READ',
@@ -88,7 +94,7 @@ export const api = {
     }),
 
   releaseLease: (leaseId) =>
-    apiFetch(`/v1/leases/${encodeURIComponent(leaseId)}`, { method: 'DELETE' }),
+    apiFetch(`/v1/leases/${toURLSafe(leaseId)}`, { method: 'DELETE' }),
 
   // Admin
   stats: () => apiFetch('/v1/admin/stats'),

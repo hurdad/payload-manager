@@ -164,7 +164,8 @@
     runAction(p.id.value, () => api.prefetch(p.id.value, 'TIER_RAM'), 'Prefetch');
   }
 
-  function downloadUrl(id) { return `/v1/payloads/${encodeURIComponent(id)}/download`; }
+  function toURLSafe(id) { return id.replace(/\+/g, '-').replace(/\//g, '_'); }
+  function downloadUrl(id) { return `/v1/payloads/${toURLSafe(id)}/download`; }
 
   function fmtPlacement(snap) {
     if (!snap?.payloadDescriptor) return null;
