@@ -8,6 +8,7 @@ This directory contains all Docker build and Docker Compose assets for Payload M
 - `Dockerfile.otel` — payload-manager image with OpenTelemetry support.
 - `Dockerfile.cuda` — payload-manager image with GPU + OpenTelemetry support.
 - `Dockerfile.payloadctl` — `payloadctl` CLI image.
+- `Dockerfile.gateway` — multi-stage image: Node UI build → Go gateway build → distroless runtime. Embeds the compiled Svelte UI into the gateway binary.
 - `Dockerfile.test` — integration test image used by Compose overlays.
 - `Dockerfile.examples.cpp` — C++ examples image.
 - `Dockerfile.examples.python` — Python examples image.
@@ -34,6 +35,10 @@ Base stacks:
 - `docker-compose.gpu.sqlite.yml`
 - `docker-compose.gpu.postgres.yml`
 
+Gateway stack (self-contained):
+
+- `docker-compose.gateway.yml` — runs `payload-manager` (SQLite) + `payload-gateway` together. The gateway UI is available at `http://localhost:8080/`. Both containers share the same data volume so payload downloads work across all tiers.
+
 Overlays:
 
 - `docker-compose.observability.yml`
@@ -47,7 +52,13 @@ Overlays:
 Run examples from repository root:
 
 ```bash
+# gRPC-Gateway + UI (SQLite)
+docker compose -f docker/docker-compose.gateway.yml up --build
+
+# Plain gRPC only (SQLite)
 docker compose -f docker/docker-compose.sqlite.yml up --build
+
+# With observability
 docker compose -f docker/docker-compose.otel.sqlite.yml -f docker/docker-compose.observability.yml up --build
 ```
 

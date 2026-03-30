@@ -6,6 +6,19 @@ Payload Manager provides a control plane for binary payload lifecycle and placem
 
 ## 2. Major architectural layers
 
+### Gateway (REST + UI)
+
+`gateway/` is a standalone Go binary that sits in front of the gRPC server:
+
+- Translates HTTP/JSON requests to gRPC using [gRPC-Gateway v2](https://github.com/grpc-ecosystem/grpc-gateway).
+- Serves a compiled Svelte single-page application embedded directly in the binary via `embed.FS`.
+- Exposes a merged OpenAPI 2.0 spec at `gateway/openapi/apidocs.swagger.json`.
+- Provides a `GET /v1/payloads/{id}/download` endpoint that spills RAM/GPU payloads to disk on demand and streams the file bytes back to the client.
+- HTTP annotations (`google.api.http`) are defined inline in the proto files under `api/payload/manager/services/v1/`.
+- Generated Go stubs live in `gateway/gen/go/`; regenerate with `make generate` (requires `buf` and local `protoc-gen-*` plugins).
+
+The gateway is stateless and can be restarted independently of the payload-manager. It requires read-only access to the disk payload storage path (`DISK_ROOT_PATH`) to serve downloads.
+
 ### API and runtime boundary
 
 - **Entrypoints:** `cmd/payload-manager`, `cmd/payloadctl`.
@@ -66,12 +79,21 @@ A common interface allows placement/tiering logic to stay backend-agnostic.
 
 ## 4. Control flow (high-level)
 
+### gRPC path (native clients)
+
 1. Client calls gRPC API.
 2. gRPC server validates and maps request to service layer.
 3. Service executes lifecycle/placement/lease logic via core modules.
 4. Service persists and reads state via repository interface.
 5. Service returns descriptor + lease metadata to caller.
 6. Caller accesses payload bytes directly from resolved storage tier.
+
+### HTTP/REST path (gateway)
+
+1. Browser or HTTP client sends JSON request to the gateway.
+2. Gateway translates to gRPC and forwards to the payload-manager.
+3. Response is translated back to JSON and returned.
+4. For `GET /v1/payloads/{id}/download`: gateway resolves the current tier via `ResolveSnapshot`; if the payload is in RAM or GPU it calls `Spill` (blocking) to move it to disk, then acquires a disk read lease and streams the file contents directly from the shared data volume.
 
 ## 5. Deployment security considerations
 

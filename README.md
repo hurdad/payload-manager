@@ -23,7 +23,10 @@ Modern pipelines often spend more time moving bytes through orchestration servic
 ## Architecture at a glance
 
 ```text
-Clients (producers / workers)
+Browser / HTTP clients
+   |
+   v
+gRPC-Gateway  (REST → gRPC, embedded Svelte UI, OpenAPI docs)
    |
    v
 gRPC Servers (admin/data/catalog/stream)
@@ -98,6 +101,7 @@ All Dockerfiles and Compose manifests now live under [`docker/`](docker/README.m
 | `docker/Dockerfile` | Off | Off | Lightweight production image |
 | `docker/Dockerfile.otel` | On | Off | Production image with OpenTelemetry |
 | `docker/Dockerfile.cuda` | On | On | GPU-capable image with OpenTelemetry |
+| `docker/Dockerfile.gateway` | — | — | gRPC-Gateway + embedded Svelte UI |
 
 ```bash
 # No-OTEL image (default)
@@ -125,6 +129,7 @@ Full compose matrix — pick one backend × feature combination:
 | `docker/docker-compose.otel.postgres.yml` | Postgres | On | Off | 50055 |
 | `docker/docker-compose.gpu.sqlite.yml` | SQLite | On | On | 50053 |
 | `docker/docker-compose.gpu.postgres.yml` | Postgres | On | On | 50056 |
+| `docker/docker-compose.gateway.yml` | SQLite | Off | Off | 8080 (HTTP) |
 
 ```bash
 # SQLite, no OTEL
@@ -199,11 +204,57 @@ Current GPU client runtime status:
 - Python client: GPU descriptor read/write runtime handling is implemented when installed with CUDA extras and Arrow CUDA dependencies are available.
 - Result: Both C++ and Python clients can use GPU descriptors at runtime in CUDA-capable environments.
 
+## Gateway and UI
+
+The `gateway/` directory contains a Go binary that bridges REST/HTTP to the gRPC backend and serves an embedded Svelte web UI.
+
+### Features
+
+- REST API via [gRPC-Gateway](https://github.com/grpc-ecosystem/grpc-gateway) — all gRPC services exposed as JSON over HTTP.
+- OpenAPI spec at `gateway/openapi/apidocs.swagger.json`.
+- Embedded Svelte UI served at `/` — no separate web server needed.
+- Payload download endpoint (`GET /v1/payloads/{id}/download`) — automatically spills RAM/GPU payloads to disk before streaming.
+
+### Quick start (Docker)
+
+```bash
+# Start payload-manager + gateway (SQLite, no GPU)
+docker compose -f docker/docker-compose.gateway.yml up --build
+```
+
+The UI is then available at `http://localhost:8080/`.
+
+### UI overview
+
+| Page | API coverage |
+|------|-------------|
+| Payloads | List, filter by tier, download, spill, promote, pin/unpin, prefetch, delete, view snapshot/lineage/metadata |
+| Streams | Create/delete streams, read entries, append entries, manage consumer group offsets |
+| Admin | Per-tier stats (GPU/RAM/Disk/Object) with totals |
+
+### Environment variables
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `GRPC_ADDR` | `localhost:50051` | gRPC backend address |
+| `HTTP_ADDR` | `:8080` | HTTP listen address |
+| `DISK_ROOT_PATH` | `/var/lib/payload-manager/payloads` | Disk storage root (must match payload-manager config) |
+
+### Regenerate code
+
+```bash
+# Regenerate Go stubs + OpenAPI from proto definitions
+make generate
+```
+
+Requires `buf`, `protoc-gen-go`, `protoc-gen-go-grpc`, `protoc-gen-grpc-gateway`, and `protoc-gen-openapiv2` on `PATH`.
+
 ## Repository layout
 
 - `cmd/`: executable entrypoints (`payload-manager`, `payloadctl`).
 - `internal/`: core runtime, services, storage tiers, DB adapters, lease/tiering/spill logic.
 - `api/`: protobuf definitions and generated interface artifacts.
+- `gateway/`: gRPC-Gateway binary and Svelte UI.
 - `client/`: C++ and Python client surfaces.
 - `tests/`: unit and integration coverage.
 - `docs/`: architecture, design, and testing documentation.
