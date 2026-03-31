@@ -20,13 +20,24 @@ async function apiFetch(path, options = {}) {
 
 export const api = {
   // Payload Catalog
-  listPayloads: (tier, pageSize = 50, pageToken = '') => {
+  listPayloads: async (tier, pageSize = 50, pageToken = '') => {
     const params = new URLSearchParams();
     if (tier) params.set('tierFilter', tier);
     if (pageSize !== 50) params.set('pageSize', String(pageSize));
     if (pageToken) params.set('pageToken', pageToken);
     const qs = params.toString();
-    return apiFetch(`/v1/payloads${qs ? `?${qs}` : ''}`);
+    const res = await fetch(`/v1/payloads${qs ? `?${qs}` : ''}`, {
+      headers: { 'Content-Type': 'application/json' },
+    });
+    if (!res.ok) {
+      let msg = `HTTP ${res.status}`;
+      try { const e = await res.json(); msg = e.message || msg; } catch {}
+      throw new Error(msg);
+    }
+    const data = await res.json();
+    const dateHeader = res.headers.get('Date');
+    const serverNow = dateHeader ? new Date(dateHeader).getTime() : null;
+    return { ...data, serverNow };
   },
 
   deletePayload: (id, force = false) =>

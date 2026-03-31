@@ -36,6 +36,22 @@
   let actionBusy = {};  // id -> bool
   let actionMsg = {};   // id -> {ok, err}
 
+  // Server clock reference — avoids browser/server clock skew in age display
+  let serverNow = null;   // server time (ms) at last fetch
+  let fetchedAt = null;   // browser Date.now() at last fetch
+
+  // Sorting — client-side within the current page
+  // Default: newest first (desc), matching server ORDER BY created_at_ms DESC
+  let sortDir = 'desc'; // 'asc' | 'desc'
+
+  function toggleAgeSort() {
+    sortDir = sortDir === 'desc' ? 'asc' : 'desc';
+  }
+
+  $: sortedPayloads = sortDir === 'asc'
+    ? [...payloads].sort((a, b) => parseInt(a.createdAtMs || '0') - parseInt(b.createdAtMs || '0'))
+    : [...payloads].sort((a, b) => parseInt(b.createdAtMs || '0') - parseInt(a.createdAtMs || '0'));
+
   const TIERS = ['', 'TIER_GPU', 'TIER_RAM', 'TIER_DISK', 'TIER_OBJECT'];
   const TIER_LABELS = { '': 'All', TIER_GPU: 'GPU', TIER_RAM: 'RAM', TIER_DISK: 'Disk', TIER_OBJECT: 'Object' };
   const TIER_CLS   = { TIER_GPU: 'badge-gpu', TIER_RAM: 'badge-ram', TIER_DISK: 'badge-disk', TIER_OBJECT: 'badge-object' };
@@ -56,7 +72,10 @@
 
   function fmtAge(ms) {
     if (!ms || ms === '0') return '—';
-    const diff = Date.now() - parseInt(ms);
+    const ts = parseInt(ms);
+    if (isNaN(ts)) return '—';
+    const now = serverNow != null ? serverNow + (Date.now() - fetchedAt) : Date.now();
+    const diff = now - ts;
     if (diff < 0) return '—';
     const s = Math.floor(diff / 1000);
     if (s < 60) return `${s}s`;
@@ -72,6 +91,7 @@
       payloads       = res?.payloads ?? [];
       totalCount     = res?.totalCount ?? 0;
       nextPageToken  = res?.nextPageToken ?? '';
+      if (res?.serverNow) { serverNow = res.serverNow; fetchedAt = Date.now(); }
     } catch (e) {
       error = e.message;
     } finally {
@@ -250,13 +270,15 @@
             <th>Tier</th>
             <th>State</th>
             <th>Size</th>
-            <th>Age</th>
+            <th class="sortable-th" on:click={toggleAgeSort}>
+              Age {sortDir === 'desc' ? '↓' : '↑'}
+            </th>
             <th>Leases</th>
             <th>Actions</th>
           </tr>
         </thead>
         <tbody>
-          {#each payloads as p (p.id?.value)}
+          {#each sortedPayloads as p (p.id?.value)}
             {@const uuid = base64ToUuid(p.id?.value ?? '')}
             {@const pinned = p.noEvict || p.pinned}
             <tr
@@ -450,6 +472,13 @@
     border-radius: 8px;
     border: 1px solid var(--border);
   }
+
+  .sortable-th {
+    cursor: pointer;
+    user-select: none;
+    white-space: nowrap;
+  }
+  .sortable-th:hover { color: var(--accent); }
 
   .payload-row { cursor: pointer; }
   .payload-row.selected td { background: color-mix(in srgb, var(--accent) 6%, transparent) !important; }
