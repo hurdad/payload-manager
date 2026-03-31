@@ -33,9 +33,13 @@
   const TIERS = ['', 'TIER_GPU', 'TIER_RAM', 'TIER_DISK', 'TIER_OBJECT'];
   const TIER_LABELS = { '': 'All', TIER_GPU: 'GPU', TIER_RAM: 'RAM', TIER_DISK: 'Disk', TIER_OBJECT: 'Object' };
   const TIER_CLS   = { TIER_GPU: 'badge-gpu', TIER_RAM: 'badge-ram', TIER_DISK: 'badge-disk', TIER_OBJECT: 'badge-object' };
+  // Ordered from fastest to slowest; used to derive spill/promote targets
+  const TIER_ORDER = ['TIER_GPU', 'TIER_RAM', 'TIER_DISK', 'TIER_OBJECT'];
 
   function tierLabel(t) { return TIER_LABELS[t] ?? t?.replace('TIER_','') ?? '—'; }
   function tierClass(t) { return TIER_CLS[t] ?? 'badge-other'; }
+  function tiersBelow(t) { const i = TIER_ORDER.indexOf(t); return i < 0 ? [] : TIER_ORDER.slice(i + 1); }
+  function tiersAbove(t) { const i = TIER_ORDER.indexOf(t); return i < 0 ? [] : TIER_ORDER.slice(0, i); }
 
   function stateClass(s) {
     const m = { PAYLOAD_STATE_ACTIVE: 'active', PAYLOAD_STATE_ALLOCATED: 'allocated', PAYLOAD_STATE_DURABLE: 'durable',
@@ -156,8 +160,8 @@
     runAction(p.id.value, () => api.deletePayload(p.id.value, true), 'Delete');
   }
 
-  function handleSpill(p) {
-    runAction(p.id.value, () => api.spill([p.id.value]), 'Spill');
+  function handleSpill(p, targetTier) {
+    runAction(p.id.value, () => api.spill([p.id.value], targetTier), 'Spill');
   }
 
   function handlePromote(p, tier) {
@@ -246,20 +250,16 @@
                    title={p.tier !== 'TIER_DISK' && p.tier !== 'TIER_OBJECT' ? 'Download (will spill to disk)' : 'Download'}>
                   ↓
                 </a>
-                <!-- Spill -->
-                {#if p.tier === 'TIER_GPU' || p.tier === 'TIER_RAM'}
-                  <button class="action-btn" title="Spill to disk"
-                    disabled={busy(p.id?.value)} on:click={() => handleSpill(p)}>⬇</button>
-                {/if}
-                <!-- Promote -->
-                {#if p.tier === 'TIER_DISK' || p.tier === 'TIER_OBJECT'}
-                  <button class="action-btn" title="Promote to RAM"
-                    disabled={busy(p.id?.value)} on:click={() => handlePromote(p, 'TIER_RAM')}>⬆</button>
-                {/if}
-                {#if p.tier === 'TIER_RAM'}
-                  <button class="action-btn" title="Promote to GPU"
-                    disabled={busy(p.id?.value)} on:click={() => handlePromote(p, 'TIER_GPU')}>⬆</button>
-                {/if}
+                <!-- Spill to any tier below -->
+                {#each tiersBelow(p.tier) as t}
+                  <button class="action-btn" title="Spill to {tierLabel(t)}"
+                    disabled={busy(p.id?.value)} on:click={() => handleSpill(p, t)}>⬇{tierLabel(t)}</button>
+                {/each}
+                <!-- Promote to any tier above -->
+                {#each tiersAbove(p.tier) as t}
+                  <button class="action-btn" title="Promote to {tierLabel(t)}"
+                    disabled={busy(p.id?.value)} on:click={() => handlePromote(p, t)}>⬆{tierLabel(t)}</button>
+                {/each}
                 <!-- Prefetch -->
                 <button class="action-btn" title="Prefetch to RAM"
                   disabled={busy(p.id?.value)} on:click={() => handlePrefetch(p)}>⟳</button>

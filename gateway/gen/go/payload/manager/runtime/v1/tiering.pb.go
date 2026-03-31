@@ -134,6 +134,9 @@ type SpillRequest struct {
 	Policy        v1.SpillPolicy         `protobuf:"varint,2,opt,name=policy,proto3,enum=payload.manager.core.v1.SpillPolicy" json:"policy,omitempty"`
 	WaitForLeases bool                   `protobuf:"varint,3,opt,name=wait_for_leases,json=waitForLeases,proto3" json:"wait_for_leases,omitempty"`
 	Fsync         bool                   `protobuf:"varint,4,opt,name=fsync,proto3" json:"fsync,omitempty"`
+	// Optional override: spill to this tier instead of the per-payload default.
+	// Must be a tier below the payload's current tier.
+	TargetTier    v1.Tier `protobuf:"varint,5,opt,name=target_tier,json=targetTier,proto3,enum=payload.manager.core.v1.Tier" json:"target_tier,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -194,6 +197,13 @@ func (x *SpillRequest) GetFsync() bool {
 		return x.Fsync
 	}
 	return false
+}
+
+func (x *SpillRequest) GetTargetTier() v1.Tier {
+	if x != nil {
+		return x.TargetTier
+	}
+	return v1.Tier(0)
 }
 
 type SpillResponse struct {
@@ -469,12 +479,14 @@ const file_payload_manager_runtime_v1_tiering_proto_rawDesc = "" +
 	"targetTier\x12@\n" +
 	"\x06policy\x18\x03 \x01(\x0e2(.payload.manager.core.v1.PromotionPolicyR\x06policy\"l\n" +
 	"\x0fPromoteResponse\x12Y\n" +
-	"\x12payload_descriptor\x18\x01 \x01(\v2*.payload.manager.core.v1.PayloadDescriptorR\x11payloadDescriptor\"\xc0\x01\n" +
+	"\x12payload_descriptor\x18\x01 \x01(\v2*.payload.manager.core.v1.PayloadDescriptorR\x11payloadDescriptor\"\x80\x02\n" +
 	"\fSpillRequest\x124\n" +
 	"\x03ids\x18\x01 \x03(\v2\".payload.manager.core.v1.PayloadIDR\x03ids\x12<\n" +
 	"\x06policy\x18\x02 \x01(\x0e2$.payload.manager.core.v1.SpillPolicyR\x06policy\x12&\n" +
 	"\x0fwait_for_leases\x18\x03 \x01(\bR\rwaitForLeases\x12\x14\n" +
-	"\x05fsync\x18\x04 \x01(\bR\x05fsync\"\xaa\x02\n" +
+	"\x05fsync\x18\x04 \x01(\bR\x05fsync\x12>\n" +
+	"\vtarget_tier\x18\x05 \x01(\x0e2\x1d.payload.manager.core.v1.TierR\n" +
+	"targetTier\"\xaa\x02\n" +
 	"\rSpillResponse\x12J\n" +
 	"\aresults\x18\x01 \x03(\v20.payload.manager.runtime.v1.SpillResponse.ResultR\aresults\x1a\xcc\x01\n" +
 	"\x06Result\x122\n" +
@@ -530,18 +542,19 @@ var file_payload_manager_runtime_v1_tiering_proto_depIdxs = []int32{
 	11, // 3: payload.manager.runtime.v1.PromoteResponse.payload_descriptor:type_name -> payload.manager.core.v1.PayloadDescriptor
 	8,  // 4: payload.manager.runtime.v1.SpillRequest.ids:type_name -> payload.manager.core.v1.PayloadID
 	12, // 5: payload.manager.runtime.v1.SpillRequest.policy:type_name -> payload.manager.core.v1.SpillPolicy
-	7,  // 6: payload.manager.runtime.v1.SpillResponse.results:type_name -> payload.manager.runtime.v1.SpillResponse.Result
-	8,  // 7: payload.manager.runtime.v1.PrefetchRequest.id:type_name -> payload.manager.core.v1.PayloadID
-	9,  // 8: payload.manager.runtime.v1.PrefetchRequest.target_tier:type_name -> payload.manager.core.v1.Tier
-	8,  // 9: payload.manager.runtime.v1.PinRequest.id:type_name -> payload.manager.core.v1.PayloadID
-	8,  // 10: payload.manager.runtime.v1.UnpinRequest.id:type_name -> payload.manager.core.v1.PayloadID
-	8,  // 11: payload.manager.runtime.v1.SpillResponse.Result.id:type_name -> payload.manager.core.v1.PayloadID
-	11, // 12: payload.manager.runtime.v1.SpillResponse.Result.payload_descriptor:type_name -> payload.manager.core.v1.PayloadDescriptor
-	13, // [13:13] is the sub-list for method output_type
-	13, // [13:13] is the sub-list for method input_type
-	13, // [13:13] is the sub-list for extension type_name
-	13, // [13:13] is the sub-list for extension extendee
-	0,  // [0:13] is the sub-list for field type_name
+	9,  // 6: payload.manager.runtime.v1.SpillRequest.target_tier:type_name -> payload.manager.core.v1.Tier
+	7,  // 7: payload.manager.runtime.v1.SpillResponse.results:type_name -> payload.manager.runtime.v1.SpillResponse.Result
+	8,  // 8: payload.manager.runtime.v1.PrefetchRequest.id:type_name -> payload.manager.core.v1.PayloadID
+	9,  // 9: payload.manager.runtime.v1.PrefetchRequest.target_tier:type_name -> payload.manager.core.v1.Tier
+	8,  // 10: payload.manager.runtime.v1.PinRequest.id:type_name -> payload.manager.core.v1.PayloadID
+	8,  // 11: payload.manager.runtime.v1.UnpinRequest.id:type_name -> payload.manager.core.v1.PayloadID
+	8,  // 12: payload.manager.runtime.v1.SpillResponse.Result.id:type_name -> payload.manager.core.v1.PayloadID
+	11, // 13: payload.manager.runtime.v1.SpillResponse.Result.payload_descriptor:type_name -> payload.manager.core.v1.PayloadDescriptor
+	14, // [14:14] is the sub-list for method output_type
+	14, // [14:14] is the sub-list for method input_type
+	14, // [14:14] is the sub-list for extension type_name
+	14, // [14:14] is the sub-list for extension extendee
+	0,  // [0:14] is the sub-list for field type_name
 }
 
 func init() { file_payload_manager_runtime_v1_tiering_proto_init() }

@@ -113,11 +113,16 @@ SpillResponse CatalogService::Spill(const SpillRequest& req) {
           }
         }
 
+        // Resolve effective target: caller override takes precedence over per-payload default.
+        const auto effective_target = (req.target_tier() != TIER_UNSPECIFIED)
+                                          ? req.target_tier()
+                                          : ctx_.manager->GetSpillTarget(id);
+
         if (best_effort) {
           // Fire-and-forget: enqueue to the background spill workers.
           spill::SpillTask task;
           task.id          = id;
-          task.target_tier = ctx_.manager->GetSpillTarget(id);
+          task.target_tier = effective_target;
           task.fsync       = req.fsync();
           ctx_.spill_scheduler->Enqueue(task);
           result->set_ok(true);
@@ -126,9 +131,8 @@ SpillResponse CatalogService::Spill(const SpillRequest& req) {
           // Blocking: execute synchronously and return the final descriptor.
           payload::observability::SpanScope spill_span("CatalogService.SpillItem");
           spill_span.SetAttribute("payload.id", payload::util::PayloadIdToHex(id));
-          const auto target_tier = ctx_.manager->GetSpillTarget(id);
           const auto spill_start = std::chrono::steady_clock::now();
-          ctx_.manager->ExecuteSpill(id, target_tier, req.fsync());
+          ctx_.manager->ExecuteSpill(id, effective_target, req.fsync());
           const auto spill_ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - spill_start).count();
           payload::observability::Metrics::Instance().ObserveSpillDurationMs("rpc", spill_ms);
           result->set_ok(true);

@@ -26,11 +26,10 @@ export const api = {
   deletePayload: (id, force = false) =>
     apiFetch(`/v1/payloads/${toURLSafe(id)}${force ? '?force=true' : ''}`, { method: 'DELETE' }),
 
-  spill: async (ids) => {
-    const res = await apiFetch('/v1/payloads/spill', {
-      method: 'POST',
-      body: JSON.stringify({ ids: ids.map((v) => ({ value: v })), policy: 'SPILL_POLICY_BLOCKING', fsync: true }),
-    });
+  spill: async (ids, targetTier) => {
+    const body = { ids: ids.map((v) => ({ value: v })), policy: 'SPILL_POLICY_BLOCKING', fsync: true };
+    if (targetTier) body.targetTier = targetTier;
+    const res = await apiFetch('/v1/payloads/spill', { method: 'POST', body: JSON.stringify(body) });
     const failed = (res?.results ?? []).filter(r => !r.ok);
     if (failed.length > 0) throw new Error(failed.map(r => r.errorMessage).join('; '));
     return res;

@@ -25,6 +25,9 @@ message SpillRequest {
   payload.manager.core.v1.SpillPolicy policy = 2;
   bool wait_for_leases = 3;
   bool fsync = 4;
+  // Optional override: spill to this tier instead of the per-payload default.
+  // Must be a tier below the payload's current tier.
+  payload.manager.core.v1.Tier target_tier = 5;
 }
 
 message SpillResponse {

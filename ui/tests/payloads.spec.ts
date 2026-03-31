@@ -210,8 +210,10 @@ test.describe('Payloads page', () => {
     await page.reload();
     await expect(page.locator('table tbody tr.payload-row').first()).toBeVisible({ timeout: 8000 });
 
-    const payloadRow = page.locator('table tbody tr.payload-row', { hasText: uuid });
-    const spillBtn = payloadRow.locator('button.action-btn[title="Spill to disk"]');
+    const payloadRow = page.locator('table tbody tr.payload-row').filter({
+      has: page.locator(`td.uuid-cell[title="${uuid}"]`),
+    });
+    const spillBtn = payloadRow.locator('button.action-btn[title="Spill to Disk"]');
     if (await spillBtn.count() === 0) {
       await deletePayload(p.raw);
       test.skip();
@@ -223,31 +225,34 @@ test.describe('Payloads page', () => {
   });
 
   test('promote action moves a disk payload to RAM', async ({ page }) => {
-    // Wait for table to settle after potential spill from previous test
-    await page.waitForTimeout(500);
-    await page.locator('button[title="Refresh"]').click();
-    await page.waitForTimeout(500);
-
-    const rows = page.locator('table tbody tr.payload-row');
-    const count = await rows.count();
-    let promoteRow = null;
-    for (let i = 0; i < count; i++) {
-      const row = rows.nth(i);
-      const tier = await row.locator('.badge').first().textContent();
-      if (tier?.trim() === 'Disk') {
-        const promoteBtn = row.locator('button.action-btn[title="Promote to RAM"]');
-        if (await promoteBtn.count() > 0) {
-          promoteRow = row;
-          break;
-        }
-      }
-    }
-    if (!promoteRow) {
+    // Create a fresh RAM payload, spill it to disk via API, then promote it back via UI
+    const p = await createPayload(8, 'TIER_RAM');
+    const spillResp = await page.request.post('/v1/payloads/spill', {
+      data: { ids: [{ value: p.raw }], policy: 'SPILL_POLICY_BLOCKING', fsync: true },
+    });
+    if (!spillResp.ok()) {
+      await deletePayload(p.raw);
       test.skip();
       return;
     }
-    await promoteRow.locator('button.action-btn[title="Promote to RAM"]').click();
-    await expect(promoteRow.locator('.action-status.ok')).toBeVisible({ timeout: 15000 });
+    const hex = Buffer.from(p.raw, 'base64').toString('hex');
+    const uuid = [hex.slice(0,8), hex.slice(8,12), hex.slice(12,16), hex.slice(16,20), hex.slice(20,32)].join('-');
+
+    await page.reload();
+    await expect(page.locator('table tbody tr.payload-row').first()).toBeVisible({ timeout: 8000 });
+
+    const payloadRow = page.locator('table tbody tr.payload-row').filter({
+      has: page.locator(`td.uuid-cell[title="${uuid}"]`),
+    });
+    const promoteBtn = payloadRow.locator('button.action-btn[title="Promote to RAM"]');
+    if (await promoteBtn.count() === 0) {
+      await deletePayload(p.raw);
+      test.skip();
+      return;
+    }
+    await promoteBtn.click();
+    await expect(payloadRow.locator('.action-status.ok')).toBeVisible({ timeout: 15000 });
+    await deletePayload(p.raw);
   });
 
   test('delete action removes a payload (with confirmation)', async ({ page }) => {
