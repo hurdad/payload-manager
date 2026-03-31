@@ -20,8 +20,14 @@ async function apiFetch(path, options = {}) {
 
 export const api = {
   // Payload Catalog
-  listPayloads: (tier) =>
-    apiFetch(`/v1/payloads${tier ? `?tierFilter=${tier}` : ''}`),
+  listPayloads: (tier, pageSize = 50, pageToken = '') => {
+    const params = new URLSearchParams();
+    if (tier) params.set('tierFilter', tier);
+    if (pageSize !== 50) params.set('pageSize', String(pageSize));
+    if (pageToken) params.set('pageToken', pageToken);
+    const qs = params.toString();
+    return apiFetch(`/v1/payloads${qs ? `?${qs}` : ''}`);
+  },
 
   deletePayload: (id, force = false) =>
     apiFetch(`/v1/payloads/${toURLSafe(id)}${force ? '?force=true' : ''}`, { method: 'DELETE' }),

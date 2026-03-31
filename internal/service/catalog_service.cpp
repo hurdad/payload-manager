@@ -291,11 +291,29 @@ AppendPayloadMetadataEventResponse CatalogService::AppendMetadataEvent(const App
 
 ListPayloadsResponse CatalogService::ListPayloads(const ListPayloadsRequest& req) {
   return ObserveRpc("CatalogService.ListPayloads", nullptr, [&] {
+    // Clamp page_size: 0 → server default (50); hard max 500.
+    const int32_t page_size = (req.page_size() <= 0) ? 50 : std::min(req.page_size(), 500);
+
+    // Decode opaque offset token (decimal string).
+    int32_t offset = 0;
+    if (!req.page_token().empty()) {
+      try { offset = std::stoi(req.page_token()); } catch (...) { offset = 0; }
+      if (offset < 0) offset = 0;
+    }
+
     ListPayloadsResponse resp;
 
-    auto tx      = ctx_.repository->Begin();
-    auto records = ctx_.repository->ListPayloads(*tx, req.tier_filter());
+    auto tx          = ctx_.repository->Begin();
+    const auto total = ctx_.repository->CountPayloads(*tx, req.tier_filter());
+    auto records     = ctx_.repository->ListPayloads(*tx, req.tier_filter(), page_size, offset);
     tx->Commit();
+
+    resp.set_total_count(total);
+
+    // Emit next page token only when there are more rows.
+    if (offset + page_size < total) {
+      resp.set_next_page_token(std::to_string(offset + page_size));
+    }
 
     for (const auto& r : records) {
       const auto proto_id  = payload::util::ToProto(r.id);

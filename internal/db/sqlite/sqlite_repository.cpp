@@ -200,19 +200,26 @@ std::optional<model::PayloadRecord> SqliteRepository::GetPayload(Transaction& t,
   return r;
 }
 
-std::vector<model::PayloadRecord> SqliteRepository::ListPayloads(Transaction& t, payload::manager::v1::Tier tier_filter) {
+std::vector<model::PayloadRecord> SqliteRepository::ListPayloads(Transaction& t, payload::manager::v1::Tier tier_filter, int32_t limit, int32_t offset) {
   auto* db = TX(t).Handle();
 
-  const bool  filter = (tier_filter != payload::manager::v1::TIER_UNSPECIFIED);
-  const char* sql =
-      filter ? "SELECT id,tier,state,size_bytes,version,expires_at_ms,no_evict,eviction_priority,spill_target,created_at_ms FROM payload WHERE tier=?;"
-             : "SELECT id,tier,state,size_bytes,version,expires_at_ms,no_evict,eviction_priority,spill_target,created_at_ms FROM payload;";
+  const bool    filter          = (tier_filter != payload::manager::v1::TIER_UNSPECIFIED);
+  const int64_t effective_limit = (limit > 0) ? limit : -1; // SQLite treats -1 as no limit
+
+  const char* sql = filter
+      ? "SELECT id,tier,state,size_bytes,version,expires_at_ms,no_evict,eviction_priority,spill_target,created_at_ms"
+        " FROM payload WHERE tier=? ORDER BY created_at_ms DESC LIMIT ? OFFSET ?;"
+      : "SELECT id,tier,state,size_bytes,version,expires_at_ms,no_evict,eviction_priority,spill_target,created_at_ms"
+        " FROM payload ORDER BY created_at_ms DESC LIMIT ? OFFSET ?;";
+
   sqlite3_stmt* st = nullptr;
   if (sqlite3_prepare_v2(db, sql, -1, &st, nullptr) != SQLITE_OK)
     throw std::runtime_error(std::string("sqlite prepare failed (ListPayloads): ") + sqlite3_errmsg(db));
-  if (filter) {
-    BindI32(st, 1, static_cast<int>(tier_filter));
-  }
+
+  int bind_idx = 1;
+  if (filter) sqlite3_bind_int(st, bind_idx++, static_cast<int>(tier_filter));
+  sqlite3_bind_int64(st, bind_idx++, effective_limit);
+  sqlite3_bind_int(st, bind_idx, offset > 0 ? offset : 0);
 
   std::vector<model::PayloadRecord> records;
   while (sqlite3_step(st) == SQLITE_ROW) {
@@ -232,6 +239,23 @@ std::vector<model::PayloadRecord> SqliteRepository::ListPayloads(Transaction& t,
 
   sqlite3_finalize(st);
   return records;
+}
+
+int32_t SqliteRepository::CountPayloads(Transaction& t, payload::manager::v1::Tier tier_filter) {
+  auto* db = TX(t).Handle();
+
+  const bool  filter = (tier_filter != payload::manager::v1::TIER_UNSPECIFIED);
+  const char* sql    = filter ? "SELECT COUNT(*) FROM payload WHERE tier=?;" : "SELECT COUNT(*) FROM payload;";
+
+  sqlite3_stmt* st = nullptr;
+  if (sqlite3_prepare_v2(db, sql, -1, &st, nullptr) != SQLITE_OK)
+    throw std::runtime_error(std::string("sqlite prepare failed (CountPayloads): ") + sqlite3_errmsg(db));
+  if (filter) sqlite3_bind_int(st, 1, static_cast<int>(tier_filter));
+
+  int32_t count = 0;
+  if (sqlite3_step(st) == SQLITE_ROW) count = sqlite3_column_int(st, 0);
+  sqlite3_finalize(st);
+  return count;
 }
 
 Result SqliteRepository::UpdatePayload(Transaction& t, const model::PayloadRecord& r) {

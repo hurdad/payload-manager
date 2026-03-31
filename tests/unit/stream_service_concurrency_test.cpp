@@ -49,8 +49,13 @@ class HookedRepository : public Repository {
   }
 
   std::vector<payload::db::model::PayloadRecord> ListPayloads(
-      Transaction& tx, payload::manager::v1::Tier tier_filter = payload::manager::v1::TIER_UNSPECIFIED) override {
-    return inner_.ListPayloads(tx, tier_filter);
+      Transaction& tx, payload::manager::v1::Tier tier_filter = payload::manager::v1::TIER_UNSPECIFIED,
+      int32_t limit = 0, int32_t offset = 0) override {
+    return inner_.ListPayloads(tx, tier_filter, limit, offset);
+  }
+  int32_t CountPayloads(Transaction& tx,
+                        payload::manager::v1::Tier tier_filter = payload::manager::v1::TIER_UNSPECIFIED) override {
+    return inner_.CountPayloads(tx, tier_filter);
   }
 
   Result UpdatePayload(Transaction& tx, const payload::db::model::PayloadRecord& record) override {

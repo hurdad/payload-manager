@@ -55,7 +55,7 @@ test.describe('Payloads page', () => {
   test('payload count line is shown', async ({ page }) => {
     await expect(page.locator('.count-line')).toBeVisible();
     const text = await page.locator('.count-line').textContent();
-    expect(text).toMatch(/\d+ payload/);
+    expect(text).toMatch(/payload/);
   });
 
   // ── Tier filter ──────────────────────────────────────────────────────

@@ -52,7 +52,13 @@ class Repository {
   virtual std::optional<model::PayloadRecord> GetPayload(Transaction&, const payload::util::UUID& id) = 0;
 
   virtual std::vector<model::PayloadRecord> ListPayloads(Transaction&,
-                                                         payload::manager::v1::Tier tier_filter = payload::manager::v1::TIER_UNSPECIFIED) = 0;
+                                                         payload::manager::v1::Tier tier_filter = payload::manager::v1::TIER_UNSPECIFIED,
+                                                         int32_t limit = 0,
+                                                         int32_t offset = 0) = 0;
+
+  // Returns total count matching tier_filter (ignores pagination).
+  virtual int32_t CountPayloads(Transaction&,
+                                payload::manager::v1::Tier tier_filter = payload::manager::v1::TIER_UNSPECIFIED) = 0;
 
   virtual Result UpdatePayload(Transaction&, const model::PayloadRecord&) = 0;
 

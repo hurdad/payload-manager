@@ -79,7 +79,18 @@ export async function deleteStream(namespace: string, name: string) {
   } catch {}
 }
 
-export async function listPayloads(): Promise<any[]> {
-  const res = await apiFetch('/v1/payloads');
-  return res?.payloads ?? [];
+export interface ListPayloadsResponse {
+  payloads: any[];
+  totalCount: number;
+  nextPageToken: string;
+}
+
+export async function listPayloads(tier?: string, pageSize?: number, pageToken?: string): Promise<ListPayloadsResponse> {
+  const params = new URLSearchParams();
+  if (tier) params.set('tierFilter', tier);
+  if (pageSize != null && pageSize !== 50) params.set('pageSize', String(pageSize));
+  if (pageToken) params.set('pageToken', pageToken);
+  const qs = params.toString();
+  const res = await apiFetch(`/v1/payloads${qs ? `?${qs}` : ''}`);
+  return { payloads: res?.payloads ?? [], totalCount: res?.totalCount ?? 0, nextPageToken: res?.nextPageToken ?? '' };
 }

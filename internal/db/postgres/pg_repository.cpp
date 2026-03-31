@@ -1,5 +1,6 @@
 #include "pg_repository.hpp"
 
+#include <limits>
 #include <stdexcept>
 #include <string>
 
@@ -68,16 +69,22 @@ std::optional<model::PayloadRecord> PgRepository::GetPayload(Transaction& t, con
   }
 }
 
-std::vector<model::PayloadRecord> PgRepository::ListPayloads(Transaction& t, payload::manager::v1::Tier tier_filter) {
+std::vector<model::PayloadRecord> PgRepository::ListPayloads(Transaction& t, payload::manager::v1::Tier tier_filter, int32_t limit, int32_t offset) {
   try {
     pqxx::result res;
+    const int64_t effective_limit  = (limit > 0) ? limit : std::numeric_limits<int64_t>::max();
+    const int32_t effective_offset = (offset > 0) ? offset : 0;
+
     if (tier_filter != payload::manager::v1::TIER_UNSPECIFIED) {
       res = TX(t).Work().exec_params(
-          "SELECT id,tier,state,size_bytes,version,expires_at_ms,no_evict,eviction_priority,spill_target,created_at_ms FROM payload WHERE tier=$1;",
-          static_cast<int>(tier_filter));
+          "SELECT id,tier,state,size_bytes,version,expires_at_ms,no_evict,eviction_priority,spill_target,created_at_ms"
+          " FROM payload WHERE tier=$1 ORDER BY created_at_ms DESC LIMIT $2 OFFSET $3;",
+          static_cast<int>(tier_filter), effective_limit, effective_offset);
     } else {
-      res = TX(t).Work().exec(
-          "SELECT id,tier,state,size_bytes,version,expires_at_ms,no_evict,eviction_priority,spill_target,created_at_ms FROM payload;");
+      res = TX(t).Work().exec_params(
+          "SELECT id,tier,state,size_bytes,version,expires_at_ms,no_evict,eviction_priority,spill_target,created_at_ms"
+          " FROM payload ORDER BY created_at_ms DESC LIMIT $1 OFFSET $2;",
+          effective_limit, effective_offset);
     }
 
     std::vector<model::PayloadRecord> records;
@@ -99,6 +106,20 @@ std::vector<model::PayloadRecord> PgRepository::ListPayloads(Transaction& t, pay
     return records;
   } catch (const std::exception& e) {
     throw std::runtime_error(std::string("ListPayloads failed: ") + e.what());
+  }
+}
+
+int32_t PgRepository::CountPayloads(Transaction& t, payload::manager::v1::Tier tier_filter) {
+  try {
+    pqxx::result res;
+    if (tier_filter != payload::manager::v1::TIER_UNSPECIFIED) {
+      res = TX(t).Work().exec_params("SELECT COUNT(*) FROM payload WHERE tier=$1;", static_cast<int>(tier_filter));
+    } else {
+      res = TX(t).Work().exec("SELECT COUNT(*) FROM payload;");
+    }
+    return res.empty() ? 0 : res[0][0].as<int32_t>();
+  } catch (const std::exception& e) {
+    throw std::runtime_error(std::string("CountPayloads failed: ") + e.what());
   }
 }
 Result PgRepository::UpdatePayload(Transaction& t, const model::PayloadRecord& r) {

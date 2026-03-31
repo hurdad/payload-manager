@@ -10,6 +10,12 @@
   let tierFilter = localStorage.getItem('pm-tier-filter') ?? '';
   let interval;
 
+  // Pagination
+  let pageToken = '';       // current page cursor
+  let nextPageToken = '';   // cursor for the next page (empty = last page)
+  let pageHistory = [];     // stack of previous cursors for "Prev"
+  let totalCount = 0;       // total matching filter
+
   // Detail panel
   let selectedId = null;
   let detailTab = 'snapshot';
@@ -62,13 +68,33 @@
   async function refresh() {
     try {
       error = '';
-      const res = await api.listPayloads(tierFilter || undefined);
-      payloads = res?.payloads ?? [];
+      const res = await api.listPayloads(tierFilter || undefined, 50, pageToken);
+      payloads       = res?.payloads ?? [];
+      totalCount     = res?.totalCount ?? 0;
+      nextPageToken  = res?.nextPageToken ?? '';
     } catch (e) {
       error = e.message;
     } finally {
       loading = false;
     }
+  }
+
+  function goNextPage() {
+    pageHistory = [...pageHistory, pageToken];
+    pageToken = nextPageToken;
+    refresh();
+  }
+
+  function goPrevPage() {
+    pageToken = pageHistory[pageHistory.length - 1];
+    pageHistory = pageHistory.slice(0, -1);
+    refresh();
+  }
+
+  function resetPagination() {
+    pageToken = '';
+    nextPageToken = '';
+    pageHistory = [];
   }
 
   onMount(() => { refresh(); interval = setInterval(refresh, 5000); });
@@ -201,7 +227,7 @@
           <button
             class="tier-tab"
             class:active={tierFilter === t}
-            on:click={() => { tierFilter = t; localStorage.setItem('pm-tier-filter', t); refresh(); }}
+            on:click={() => { tierFilter = t; localStorage.setItem('pm-tier-filter', t); resetPagination(); refresh(); }}
           >{TIER_LABELS[t]}</button>
         {/each}
       </div>
@@ -374,7 +400,19 @@
       </table>
     </div>
 
-    <p class="muted count-line">{payloads.length} payload{payloads.length === 1 ? '' : 's'}</p>
+    <div class="pagination-bar">
+      <p class="muted count-line">
+        {#if totalCount > 0}
+          {pageHistory.length * 50 + 1}–{pageHistory.length * 50 + payloads.length} of {totalCount} payload{totalCount === 1 ? '' : 's'}
+        {:else}
+          0 payloads
+        {/if}
+      </p>
+      <div class="page-btns">
+        <button class="page-btn" disabled={pageHistory.length === 0} on:click={goPrevPage}>← Prev</button>
+        <button class="page-btn" disabled={!nextPageToken} on:click={goNextPage}>Next →</button>
+      </div>
+    </div>
   {/if}
 </div>
 
@@ -506,5 +544,24 @@
   .field-label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); margin-bottom: 0.3rem; }
   .meta-actions { display: flex; align-items: center; gap: 0.4rem; }
 
-  .count-line { font-size: 12px; margin-top: 0.5rem; }
+  .pagination-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-top: 0.5rem;
+    gap: 0.5rem;
+  }
+  .count-line { font-size: 12px; margin: 0; }
+  .page-btns { display: flex; gap: 4px; }
+  .page-btn {
+    padding: 0.2rem 0.6rem;
+    font-size: 12px;
+    border-radius: 4px;
+    background: transparent;
+    border: 1px solid var(--buttonBorder);
+    color: var(--muted);
+    cursor: pointer;
+  }
+  .page-btn:hover:not(:disabled) { color: var(--text); background: var(--button); }
+  .page-btn:disabled { opacity: 0.3; cursor: default; }
 </style>

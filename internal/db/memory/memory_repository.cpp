@@ -50,7 +50,7 @@ std::optional<model::PayloadRecord> MemoryRepository::GetPayload(Transaction& t,
   return it->second;
 }
 
-std::vector<model::PayloadRecord> MemoryRepository::ListPayloads(Transaction& t, payload::manager::v1::Tier tier_filter) {
+std::vector<model::PayloadRecord> MemoryRepository::ListPayloads(Transaction& t, payload::manager::v1::Tier tier_filter, int32_t limit, int32_t offset) {
   const auto&                       s = TX(t).View();
   std::vector<model::PayloadRecord> records;
   records.reserve(s.payloads.size());
@@ -60,7 +60,27 @@ std::vector<model::PayloadRecord> MemoryRepository::ListPayloads(Transaction& t,
     }
     records.push_back(record);
   }
-  return records;
+  // Sort newest first for stable ordering.
+  std::sort(records.begin(), records.end(), [](const auto& a, const auto& b) {
+    return a.created_at_ms > b.created_at_ms;
+  });
+  // Apply offset/limit.
+  const int32_t start = (offset > 0 && offset < static_cast<int32_t>(records.size())) ? offset : 0;
+  const int32_t end   = (limit > 0) ? std::min(start + limit, static_cast<int32_t>(records.size()))
+                                     : static_cast<int32_t>(records.size());
+  return {records.begin() + start, records.begin() + end};
+}
+
+int32_t MemoryRepository::CountPayloads(Transaction& t, payload::manager::v1::Tier tier_filter) {
+  const auto& s = TX(t).View();
+  if (tier_filter == payload::manager::v1::TIER_UNSPECIFIED) {
+    return static_cast<int32_t>(s.payloads.size());
+  }
+  int32_t count = 0;
+  for (const auto& [_, record] : s.payloads) {
+    if (record.tier == tier_filter) ++count;
+  }
+  return count;
 }
 
 Result MemoryRepository::UpdatePayload(Transaction& t, const model::PayloadRecord& r) {

@@ -381,7 +381,12 @@ func (x *PayloadSummary) GetActiveLeases() uint32 {
 type ListPayloadsRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Optional tier filter; TIER_UNSPECIFIED means return all tiers.
-	TierFilter    v1.Tier `protobuf:"varint,1,opt,name=tier_filter,json=tierFilter,proto3,enum=payload.manager.core.v1.Tier" json:"tier_filter,omitempty"`
+	TierFilter v1.Tier `protobuf:"varint,1,opt,name=tier_filter,json=tierFilter,proto3,enum=payload.manager.core.v1.Tier" json:"tier_filter,omitempty"`
+	// Maximum number of payloads to return. 0 = server default (50); max 500.
+	PageSize int32 `protobuf:"varint,2,opt,name=page_size,json=pageSize,proto3" json:"page_size,omitempty"`
+	// Opaque cursor from a previous ListPayloadsResponse.next_page_token.
+	// Omit or leave empty to start from the beginning.
+	PageToken     string `protobuf:"bytes,3,opt,name=page_token,json=pageToken,proto3" json:"page_token,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -423,9 +428,27 @@ func (x *ListPayloadsRequest) GetTierFilter() v1.Tier {
 	return v1.Tier(0)
 }
 
+func (x *ListPayloadsRequest) GetPageSize() int32 {
+	if x != nil {
+		return x.PageSize
+	}
+	return 0
+}
+
+func (x *ListPayloadsRequest) GetPageToken() string {
+	if x != nil {
+		return x.PageToken
+	}
+	return ""
+}
+
 type ListPayloadsResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Payloads      []*PayloadSummary      `protobuf:"bytes,1,rep,name=payloads,proto3" json:"payloads,omitempty"`
+	state    protoimpl.MessageState `protogen:"open.v1"`
+	Payloads []*PayloadSummary      `protobuf:"bytes,1,rep,name=payloads,proto3" json:"payloads,omitempty"`
+	// Opaque cursor for the next page. Empty when this is the last page.
+	NextPageToken string `protobuf:"bytes,2,opt,name=next_page_token,json=nextPageToken,proto3" json:"next_page_token,omitempty"`
+	// Total number of payloads matching the filter (ignoring pagination).
+	TotalCount    int32 `protobuf:"varint,3,opt,name=total_count,json=totalCount,proto3" json:"total_count,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -467,6 +490,20 @@ func (x *ListPayloadsResponse) GetPayloads() []*PayloadSummary {
 	return nil
 }
 
+func (x *ListPayloadsResponse) GetNextPageToken() string {
+	if x != nil {
+		return x.NextPageToken
+	}
+	return ""
+}
+
+func (x *ListPayloadsResponse) GetTotalCount() int32 {
+	if x != nil {
+		return x.TotalCount
+	}
+	return 0
+}
+
 var File_payload_manager_runtime_v1_lifecycle_proto protoreflect.FileDescriptor
 
 const file_payload_manager_runtime_v1_lifecycle_proto_rawDesc = "" +
@@ -496,12 +533,18 @@ const file_payload_manager_runtime_v1_lifecycle_proto_rawDesc = "" +
 	"size_bytes\x18\x04 \x01(\x04R\tsizeBytes\x12\"\n" +
 	"\rcreated_at_ms\x18\x05 \x01(\x04R\vcreatedAtMs\x12\"\n" +
 	"\rexpires_at_ms\x18\x06 \x01(\x04R\vexpiresAtMs\x12#\n" +
-	"\ractive_leases\x18\a \x01(\rR\factiveLeases\"U\n" +
+	"\ractive_leases\x18\a \x01(\rR\factiveLeases\"\x91\x01\n" +
 	"\x13ListPayloadsRequest\x12>\n" +
 	"\vtier_filter\x18\x01 \x01(\x0e2\x1d.payload.manager.core.v1.TierR\n" +
-	"tierFilter\"^\n" +
+	"tierFilter\x12\x1b\n" +
+	"\tpage_size\x18\x02 \x01(\x05R\bpageSize\x12\x1d\n" +
+	"\n" +
+	"page_token\x18\x03 \x01(\tR\tpageToken\"\xa7\x01\n" +
 	"\x14ListPayloadsResponse\x12F\n" +
-	"\bpayloads\x18\x01 \x03(\v2*.payload.manager.runtime.v1.PayloadSummaryR\bpayloadsB\x9b\x02\n" +
+	"\bpayloads\x18\x01 \x03(\v2*.payload.manager.runtime.v1.PayloadSummaryR\bpayloads\x12&\n" +
+	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\x12\x1f\n" +
+	"\vtotal_count\x18\x03 \x01(\x05R\n" +
+	"totalCountB\x9b\x02\n" +
 	"\x1ecom.payload.manager.runtime.v1B\x0eLifecycleProtoP\x01Z^github.com/payload-manager/payload-manager/gateway/gen/go/payload/manager/runtime/v1;runtimev1\xa2\x02\x03PMR\xaa\x02\x1aPayload.Manager.Runtime.V1\xca\x02\x1aPayload\\Manager\\Runtime\\V1\xe2\x02&Payload\\Manager\\Runtime\\V1\\GPBMetadata\xea\x02\x1dPayload::Manager::Runtime::V1b\x06proto3"
 
 var (

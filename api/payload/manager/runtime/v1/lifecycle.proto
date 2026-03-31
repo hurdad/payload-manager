@@ -52,8 +52,17 @@ message PayloadSummary {
 message ListPayloadsRequest {
   // Optional tier filter; TIER_UNSPECIFIED means return all tiers.
   payload.manager.core.v1.Tier tier_filter = 1;
+  // Maximum number of payloads to return. 0 = server default (50); max 500.
+  int32 page_size = 2;
+  // Opaque cursor from a previous ListPayloadsResponse.next_page_token.
+  // Omit or leave empty to start from the beginning.
+  string page_token = 3;
 }
 
 message ListPayloadsResponse {
   repeated PayloadSummary payloads = 1;
+  // Opaque cursor for the next page. Empty when this is the last page.
+  string next_page_token = 2;
+  // Total number of payloads matching the filter (ignoring pagination).
+  int32 total_count = 3;
 }

@@ -1,4 +1,4 @@
-lets{
+{
   "swagger": "2.0",
   "info": {
     "title": "google/api/http.proto",
