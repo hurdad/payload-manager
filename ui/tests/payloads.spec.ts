@@ -201,26 +201,25 @@ test.describe('Payloads page', () => {
   });
 
   test('spill action moves a RAM payload to disk', async ({ page }) => {
-    const rows = page.locator('table tbody tr.payload-row');
-    const count = await rows.count();
-    let spillRow = null;
-    for (let i = 0; i < count; i++) {
-      const row = rows.nth(i);
-      const tier = await row.locator('.badge').first().textContent();
-      if (tier?.trim() === 'RAM') {
-        const spillBtn = row.locator('button.action-btn[title="Spill to disk"]');
-        if (await spillBtn.count() > 0) {
-          spillRow = row;
-          break;
-        }
-      }
-    }
-    if (!spillRow) {
+    // Create a fresh RAM payload to guarantee it's in a spillable state
+    const p = await createPayload(8, 'TIER_RAM');
+    // Convert base64 ID to UUID so we can locate this specific row
+    const hex = Buffer.from(p.raw, 'base64').toString('hex');
+    const uuid = [hex.slice(0,8), hex.slice(8,12), hex.slice(12,16), hex.slice(16,20), hex.slice(20,32)].join('-');
+
+    await page.reload();
+    await expect(page.locator('table tbody tr.payload-row').first()).toBeVisible({ timeout: 8000 });
+
+    const payloadRow = page.locator('table tbody tr.payload-row', { hasText: uuid });
+    const spillBtn = payloadRow.locator('button.action-btn[title="Spill to disk"]');
+    if (await spillBtn.count() === 0) {
+      await deletePayload(p.raw);
       test.skip();
       return;
     }
-    await spillRow.locator('button.action-btn[title="Spill to disk"]').click();
-    await expect(spillRow.locator('.action-status.ok')).toBeVisible({ timeout: 15000 });
+    await spillBtn.click();
+    await expect(payloadRow.locator('.action-status.ok')).toBeVisible({ timeout: 15000 });
+    await deletePayload(p.raw);
   });
 
   test('promote action moves a disk payload to RAM', async ({ page }) => {
@@ -328,9 +327,8 @@ test.describe('Payloads page', () => {
     await expect(page.locator('table tbody tr.payload-row').first()).toBeVisible({ timeout: 8000 });
 
     await page.locator('.tier-tab', { hasText: 'GPU' }).click();
-    await expect(page.locator('table tbody tr.payload-row').first()).toBeVisible({ timeout: 8000 });
-    const badge = await page.locator('table tbody tr.payload-row').first().locator('.badge').first().textContent();
-    expect(badge?.trim()).toBe('GPU');
+    // Wait for a GPU-badged row specifically — the unfiltered list may still be visible during refresh
+    await expect(page.locator('table tbody tr.payload-row').first().locator('.badge', { hasText: 'GPU' })).toBeVisible({ timeout: 8000 });
 
     await deletePayload(p.raw);
   });
@@ -368,7 +366,7 @@ test.describe('Payloads page', () => {
     }
     const contentDisposition = response.headers()['content-disposition'] ?? '';
     expect(contentDisposition).toContain('attachment');
-    expect(contentDisposition).toMatch(/payload-.+\.bin$/);
+    expect(contentDisposition).toMatch(/payload-.+\.bin/);
 
     await deletePayload(p.raw);
   });

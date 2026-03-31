@@ -1,5 +1,6 @@
 #include "cuda_arrow_store.hpp"
 
+#include <arrow/buffer.h>
 #include <arrow/result.h>
 
 #include <stdexcept>
@@ -35,7 +36,8 @@ std::shared_ptr<arrow::Buffer> CudaArrowStore::Allocate(const PayloadID& id, uin
 }
 
 /*
-  Returns GPU buffer handle (caller must know tier)
+  Copy GPU → host and return a host-accessible buffer.
+  Callers (spill, etc.) expect a CPU-readable buffer.
 */
 std::shared_ptr<arrow::Buffer> CudaArrowStore::Read(const PayloadID& id) {
   std::shared_lock lock(mutex_);
@@ -43,7 +45,13 @@ std::shared_ptr<arrow::Buffer> CudaArrowStore::Read(const PayloadID& id) {
   auto it = buffers_.find(Key(id));
   if (it == buffers_.end()) throw std::runtime_error("GPU payload not found");
 
-  return it->second;
+  auto maybe_host = arrow::AllocateBuffer(it->second->size());
+  if (!maybe_host.ok()) throw std::runtime_error("Host allocate failed: " + maybe_host.status().ToString());
+
+  auto copy_status = it->second->CopyToHost(/*position=*/0, it->second->size(), (*maybe_host)->mutable_data());
+  if (!copy_status.ok()) throw std::runtime_error("GPU device-to-host copy failed: " + copy_status.ToString());
+
+  return std::move(*maybe_host);
 }
 
 /*

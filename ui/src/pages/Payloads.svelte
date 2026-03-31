@@ -140,6 +140,9 @@
       await fn();
       actionMsg = { ...actionMsg, [id]: { ok: label + ' done' } };
       await refresh();
+      if (selectedId === id && detailTab === 'snapshot') {
+        await loadDetailTab('snapshot');
+      }
     } catch (e) {
       actionMsg = { ...actionMsg, [id]: { err: e.message } };
     } finally {
@@ -252,6 +255,10 @@
                 {#if p.tier === 'TIER_DISK' || p.tier === 'TIER_OBJECT'}
                   <button class="action-btn" title="Promote to RAM"
                     disabled={busy(p.id?.value)} on:click={() => handlePromote(p, 'TIER_RAM')}>⬆</button>
+                {/if}
+                {#if p.tier === 'TIER_RAM'}
+                  <button class="action-btn" title="Promote to GPU"
+                    disabled={busy(p.id?.value)} on:click={() => handlePromote(p, 'TIER_GPU')}>⬆</button>
                 {/if}
                 <!-- Prefetch -->
                 <button class="action-btn" title="Prefetch to RAM"
