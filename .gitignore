@@ -48,3 +48,4 @@ __pycache__/
 
 # debug information files
 *.dwo
+ui/test-results/
