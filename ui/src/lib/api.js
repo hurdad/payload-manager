@@ -1,6 +1,6 @@
 /** Convert standard base64 to URL-safe base64 for use in URL path segments.
  *  Keeps = padding — grpc-gateway URL encoding requires it. */
-function toURLSafe(id) {
+export function toURLSafe(id) {
   return id.replace(/\+/g, '-').replace(/\//g, '_');
 }
 

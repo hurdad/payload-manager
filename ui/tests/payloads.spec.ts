@@ -313,6 +313,16 @@ test.describe('Payloads page', () => {
       test.skip(); // GPU not available in this environment
       return;
     }
+    // Verify the payload actually landed in GPU tier (non-CUDA builds fall back to RAM)
+    const snapResp = await page.request.get(`/v1/payloads/${p.urlSafe}/snapshot`);
+    if (snapResp.status() === 200) {
+      const snap = await snapResp.json();
+      if (snap?.payloadDescriptor?.tier !== 'TIER_GPU') {
+        await deletePayload(p.raw);
+        test.skip();
+        return;
+      }
+    }
     await page.reload();
     // Wait for initial list to load before switching to GPU tab
     await expect(page.locator('table tbody tr.payload-row').first()).toBeVisible({ timeout: 8000 });

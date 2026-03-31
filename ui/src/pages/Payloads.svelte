@@ -2,12 +2,12 @@
   import { onMount, onDestroy } from 'svelte';
   import { fmtBytes } from '../lib/fmt.js';
   import { base64ToUuid } from '../lib/uuid.js';
-  import { api } from '../lib/api.js';
+  import { api, toURLSafe } from '../lib/api.js';
 
   let payloads = [];
   let loading = true;
   let error = '';
-  let tierFilter = '';
+  let tierFilter = localStorage.getItem('pm-tier-filter') ?? '';
   let interval;
 
   // Detail panel
@@ -19,6 +19,7 @@
   let detailLoading = false;
 
   // Metadata editing
+  let metaCache = {};  // id -> { raw, schema, source }
   let metaRaw = '';
   let metaSchema = '';
   let metaSource = '';
@@ -88,14 +89,22 @@
       } else if (tab === 'lineage') {
         lineage = await api.lineage(selectedId, false, 10);
       } else if (tab === 'metadata') {
-        // No GET metadata endpoint — just show empty editor
-        metaRaw = ''; metaMsg = '';
+        // No GET metadata endpoint — restore cached draft or start empty
+        const cached = metaCache[selectedId];
+        metaRaw    = cached?.raw    ?? '';
+        metaSchema = cached?.schema ?? '';
+        metaSource = cached?.source ?? '';
+        metaMsg = '';
       }
     } catch (e) {
       detailError = e.message;
     } finally {
       detailLoading = false;
     }
+  }
+
+  function updateMetaCache(id) {
+    metaCache = { ...metaCache, [id]: { raw: metaRaw, schema: metaSchema, source: metaSource } };
   }
 
   async function saveMetadata(id) {
@@ -164,7 +173,6 @@
     runAction(p.id.value, () => api.prefetch(p.id.value, 'TIER_RAM'), 'Prefetch');
   }
 
-  function toURLSafe(id) { return id.replace(/\+/g, '-').replace(/\//g, '_'); }
   function downloadUrl(id) { return `/v1/payloads/${toURLSafe(id)}/download`; }
 
   function fmtPlacement(snap) {
@@ -186,7 +194,7 @@
           <button
             class="tier-tab"
             class:active={tierFilter === t}
-            on:click={() => { tierFilter = t; refresh(); }}
+            on:click={() => { tierFilter = t; localStorage.setItem('pm-tier-filter', t); refresh(); }}
           >{TIER_LABELS[t]}</button>
         {/each}
       </div>
@@ -334,7 +342,7 @@
                         <div class="meta-row">
                           <div class="meta-col">
                             <label class="field-label">Data (raw text / JSON)</label>
-                            <textarea bind:value={metaRaw} rows="5" style="width:100%;resize:vertical;font-family:monospace;font-size:12px" placeholder="JSON payload data"></textarea>
+                            <textarea bind:value={metaRaw} rows="5" style="width:100%;resize:vertical;font-family:monospace;font-size:12px" placeholder="JSON payload data" on:input={() => updateMetaCache(p.id?.value)}></textarea>
                           </div>
                           <div class="meta-col meta-col-sm">
                             <label class="field-label">Schema (optional)</label>

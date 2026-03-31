@@ -1,0 +1,480 @@
+# Page snapshot
+
+```yaml
+- generic [ref=e3]:
+  - banner [ref=e4]:
+    - generic [ref=e5]:
+      - generic [ref=e6]: ⬡
+      - generic [ref=e7]: Payload Manager
+    - generic [ref=e8]:
+      - button "●" [ref=e9] [cursor=pointer]
+      - button "›" [ref=e10] [cursor=pointer]
+  - generic [ref=e11]:
+    - main [ref=e12]:
+      - generic [ref=e13]:
+        - generic [ref=e14]:
+          - heading "Payloads" [level=2] [ref=e15]
+          - generic [ref=e16]:
+            - generic [ref=e17]:
+              - button "All" [ref=e18] [cursor=pointer]
+              - button "GPU" [active] [ref=e19] [cursor=pointer]
+              - button "RAM" [ref=e20] [cursor=pointer]
+              - button "Disk" [ref=e21] [cursor=pointer]
+              - button "Object" [ref=e22] [cursor=pointer]
+            - button "↺" [ref=e23] [cursor=pointer]
+        - table [ref=e25]:
+          - rowgroup [ref=e26]:
+            - row "UUID Tier State Size Age Leases Actions" [ref=e27]:
+              - columnheader "UUID" [ref=e28]
+              - columnheader "Tier" [ref=e29]
+              - columnheader "State" [ref=e30]
+              - columnheader "Size" [ref=e31]
+              - columnheader "Age" [ref=e32]
+              - columnheader "Leases" [ref=e33]
+              - columnheader "Actions" [ref=e34]
+          - rowgroup [ref=e35]:
+            - row "128ac3ce-7d73-4303-ac8e-20fb599b1bfd GPU ACTIVE 8 B 4h 0 ↓ ⬇ ⟳ 📌 ✕" [ref=e36] [cursor=pointer]:
+              - cell "128ac3ce-7d73-4303-ac8e-20fb599b1bfd" [ref=e37]
+              - cell "GPU" [ref=e38]:
+                - generic [ref=e39]: GPU
+              - cell "ACTIVE" [ref=e40]:
+                - generic [ref=e41]: ACTIVE
+              - cell "8 B" [ref=e42]
+              - cell "4h" [ref=e43]
+              - cell "0" [ref=e44]
+              - cell "↓ ⬇ ⟳ 📌 ✕" [ref=e45]:
+                - link "↓" [ref=e46]:
+                  - /url: /v1/payloads/EorDzn1zQwOsjiD7WZsb_Q==/download
+                - button "⬇" [ref=e47]
+                - button "⟳" [ref=e48]
+                - button "📌" [ref=e49]
+                - button "✕" [ref=e50]
+            - row "23a6fef0-00b2-4278-afa9-bb2cb3fec10d GPU ACTIVE 8 B 4h 0 ↓ ⬇ ⟳ 📌 ✕" [ref=e51] [cursor=pointer]:
+              - cell "23a6fef0-00b2-4278-afa9-bb2cb3fec10d" [ref=e52]
+              - cell "GPU" [ref=e53]:
+                - generic [ref=e54]: GPU
+              - cell "ACTIVE" [ref=e55]:
+                - generic [ref=e56]: ACTIVE
+              - cell "8 B" [ref=e57]
+              - cell "4h" [ref=e58]
+              - cell "0" [ref=e59]
+              - cell "↓ ⬇ ⟳ 📌 ✕" [ref=e60]:
+                - link "↓" [ref=e61]:
+                  - /url: /v1/payloads/I6b-8ACyQnivqbsss_7BDQ==/download
+                - button "⬇" [ref=e62]
+                - button "⟳" [ref=e63]
+                - button "📌" [ref=e64]
+                - button "✕" [ref=e65]
+            - row "0e7e7370-849f-40bc-b18b-ad38e03eeffc GPU ACTIVE 8 B 4h 0 ↓ ⬇ ⟳ 📌 ✕" [ref=e66] [cursor=pointer]:
+              - cell "0e7e7370-849f-40bc-b18b-ad38e03eeffc" [ref=e67]
+              - cell "GPU" [ref=e68]:
+                - generic [ref=e69]: GPU
+              - cell "ACTIVE" [ref=e70]:
+                - generic [ref=e71]: ACTIVE
+              - cell "8 B" [ref=e72]
+              - cell "4h" [ref=e73]
+              - cell "0" [ref=e74]
+              - cell "↓ ⬇ ⟳ 📌 ✕" [ref=e75]:
+                - link "↓" [ref=e76]:
+                  - /url: /v1/payloads/Dn5zcISfQLyxi6044D7v_A==/download
+                - button "⬇" [ref=e77]
+                - button "⟳" [ref=e78]
+                - button "📌" [ref=e79]
+                - button "✕" [ref=e80]
+            - row "cb0bf464-159a-4ffe-9e2b-d4414dd932f0 GPU ACTIVE 8 B 4h 0 ↓ ⬇ ⟳ 📌 ✕" [ref=e81] [cursor=pointer]:
+              - cell "cb0bf464-159a-4ffe-9e2b-d4414dd932f0" [ref=e82]
+              - cell "GPU" [ref=e83]:
+                - generic [ref=e84]: GPU
+              - cell "ACTIVE" [ref=e85]:
+                - generic [ref=e86]: ACTIVE
+              - cell "8 B" [ref=e87]
+              - cell "4h" [ref=e88]
+              - cell "0" [ref=e89]
+              - cell "↓ ⬇ ⟳ 📌 ✕" [ref=e90]:
+                - link "↓" [ref=e91]:
+                  - /url: /v1/payloads/ywv0ZBWaT_6eK9RBTdky8A==/download
+                - button "⬇" [ref=e92]
+                - button "⟳" [ref=e93]
+                - button "📌" [ref=e94]
+                - button "✕" [ref=e95]
+            - row "883461cc-41b0-4c0b-8ece-ba9429bbb936 GPU ACTIVE 8 B 4h 0 ↓ ⬇ ⟳ 📌 ✕" [ref=e96] [cursor=pointer]:
+              - cell "883461cc-41b0-4c0b-8ece-ba9429bbb936" [ref=e97]
+              - cell "GPU" [ref=e98]:
+                - generic [ref=e99]: GPU
+              - cell "ACTIVE" [ref=e100]:
+                - generic [ref=e101]: ACTIVE
+              - cell "8 B" [ref=e102]
+              - cell "4h" [ref=e103]
+              - cell "0" [ref=e104]
+              - cell "↓ ⬇ ⟳ 📌 ✕" [ref=e105]:
+                - link "↓" [ref=e106]:
+                  - /url: /v1/payloads/iDRhzEGwTAuOzrqUKbu5Ng==/download
+                - button "⬇" [ref=e107]
+                - button "⟳" [ref=e108]
+                - button "📌" [ref=e109]
+                - button "✕" [ref=e110]
+            - row "ba21962d-a383-4fee-bee1-136039839cd3 GPU ACTIVE 8 B 4h 0 ↓ ⬇ ⟳ 📌 ✕" [ref=e111] [cursor=pointer]:
+              - cell "ba21962d-a383-4fee-bee1-136039839cd3" [ref=e112]
+              - cell "GPU" [ref=e113]:
+                - generic [ref=e114]: GPU
+              - cell "ACTIVE" [ref=e115]:
+                - generic [ref=e116]: ACTIVE
+              - cell "8 B" [ref=e117]
+              - cell "4h" [ref=e118]
+              - cell "0" [ref=e119]
+              - cell "↓ ⬇ ⟳ 📌 ✕" [ref=e120]:
+                - link "↓" [ref=e121]:
+                  - /url: /v1/payloads/uiGWLaODT-6-4RNgOYOc0w==/download
+                - button "⬇" [ref=e122]
+                - button "⟳" [ref=e123]
+                - button "📌" [ref=e124]
+                - button "✕" [ref=e125]
+            - row "ea579f1f-8577-4596-bc98-021a18deaa8e GPU ACTIVE 8 B 4h 0 ↓ ⬇ ⟳ 📌 ✕" [ref=e126] [cursor=pointer]:
+              - cell "ea579f1f-8577-4596-bc98-021a18deaa8e" [ref=e127]
+              - cell "GPU" [ref=e128]:
+                - generic [ref=e129]: GPU
+              - cell "ACTIVE" [ref=e130]:
+                - generic [ref=e131]: ACTIVE
+              - cell "8 B" [ref=e132]
+              - cell "4h" [ref=e133]
+              - cell "0" [ref=e134]
+              - cell "↓ ⬇ ⟳ 📌 ✕" [ref=e135]:
+                - link "↓" [ref=e136]:
+                  - /url: /v1/payloads/6lefH4V3RZa8mAIaGN6qjg==/download
+                - button "⬇" [ref=e137]
+                - button "⟳" [ref=e138]
+                - button "📌" [ref=e139]
+                - button "✕" [ref=e140]
+            - row "d2f20c2b-13c8-4525-a773-f208137c9222 GPU ACTIVE 8 B 4h 0 ↓ ⬇ ⟳ 📌 ✕" [ref=e141] [cursor=pointer]:
+              - cell "d2f20c2b-13c8-4525-a773-f208137c9222" [ref=e142]
+              - cell "GPU" [ref=e143]:
+                - generic [ref=e144]: GPU
+              - cell "ACTIVE" [ref=e145]:
+                - generic [ref=e146]: ACTIVE
+              - cell "8 B" [ref=e147]
+              - cell "4h" [ref=e148]
+              - cell "0" [ref=e149]
+              - cell "↓ ⬇ ⟳ 📌 ✕" [ref=e150]:
+                - link "↓" [ref=e151]:
+                  - /url: /v1/payloads/0vIMKxPIRSWnc_IIE3ySIg==/download
+                - button "⬇" [ref=e152]
+                - button "⟳" [ref=e153]
+                - button "📌" [ref=e154]
+                - button "✕" [ref=e155]
+            - row "15b2e136-bed6-4b22-a50d-764dcad6c0c0 GPU ACTIVE 8 B 4h 0 ↓ ⬇ ⟳ 📌 ✕" [ref=e156] [cursor=pointer]:
+              - cell "15b2e136-bed6-4b22-a50d-764dcad6c0c0" [ref=e157]
+              - cell "GPU" [ref=e158]:
+                - generic [ref=e159]: GPU
+              - cell "ACTIVE" [ref=e160]:
+                - generic [ref=e161]: ACTIVE
+              - cell "8 B" [ref=e162]
+              - cell "4h" [ref=e163]
+              - cell "0" [ref=e164]
+              - cell "↓ ⬇ ⟳ 📌 ✕" [ref=e165]:
+                - link "↓" [ref=e166]:
+                  - /url: /v1/payloads/FbLhNr7WSyKlDXZNytbAwA==/download
+                - button "⬇" [ref=e167]
+                - button "⟳" [ref=e168]
+                - button "📌" [ref=e169]
+                - button "✕" [ref=e170]
+            - row "2814a5a8-6732-4ed7-9d1f-33e5d06f793f GPU ACTIVE 8 B 4h 0 ↓ ⬇ ⟳ 📌 ✕" [ref=e171] [cursor=pointer]:
+              - cell "2814a5a8-6732-4ed7-9d1f-33e5d06f793f" [ref=e172]
+              - cell "GPU" [ref=e173]:
+                - generic [ref=e174]: GPU
+              - cell "ACTIVE" [ref=e175]:
+                - generic [ref=e176]: ACTIVE
+              - cell "8 B" [ref=e177]
+              - cell "4h" [ref=e178]
+              - cell "0" [ref=e179]
+              - cell "↓ ⬇ ⟳ 📌 ✕" [ref=e180]:
+                - link "↓" [ref=e181]:
+                  - /url: /v1/payloads/KBSlqGcyTtedHzPl0G95Pw==/download
+                - button "⬇" [ref=e182]
+                - button "⟳" [ref=e183]
+                - button "📌" [ref=e184]
+                - button "✕" [ref=e185]
+            - row "02820c7d-f25d-4c67-9bda-d8d1f50ba003 GPU ACTIVE 8 B 4h 0 ↓ ⬇ ⟳ 📌 ✕" [ref=e186] [cursor=pointer]:
+              - cell "02820c7d-f25d-4c67-9bda-d8d1f50ba003" [ref=e187]
+              - cell "GPU" [ref=e188]:
+                - generic [ref=e189]: GPU
+              - cell "ACTIVE" [ref=e190]:
+                - generic [ref=e191]: ACTIVE
+              - cell "8 B" [ref=e192]
+              - cell "4h" [ref=e193]
+              - cell "0" [ref=e194]
+              - cell "↓ ⬇ ⟳ 📌 ✕" [ref=e195]:
+                - link "↓" [ref=e196]:
+                  - /url: /v1/payloads/AoIMffJdTGeb2tjR9QugAw==/download
+                - button "⬇" [ref=e197]
+                - button "⟳" [ref=e198]
+                - button "📌" [ref=e199]
+                - button "✕" [ref=e200]
+            - row "22b9be92-4882-4ef6-a427-6cade85b186f GPU ACTIVE 8 B 4h 0 ↓ ⬇ ⟳ 📌 ✕" [ref=e201] [cursor=pointer]:
+              - cell "22b9be92-4882-4ef6-a427-6cade85b186f" [ref=e202]
+              - cell "GPU" [ref=e203]:
+                - generic [ref=e204]: GPU
+              - cell "ACTIVE" [ref=e205]:
+                - generic [ref=e206]: ACTIVE
+              - cell "8 B" [ref=e207]
+              - cell "4h" [ref=e208]
+              - cell "0" [ref=e209]
+              - cell "↓ ⬇ ⟳ 📌 ✕" [ref=e210]:
+                - link "↓" [ref=e211]:
+                  - /url: /v1/payloads/Irm-kkiCTvakJ2yt6FsYbw==/download
+                - button "⬇" [ref=e212]
+                - button "⟳" [ref=e213]
+                - button "📌" [ref=e214]
+                - button "✕" [ref=e215]
+            - row "5df14ac4-f80b-48bc-bf2d-94e0cbf055cf GPU ACTIVE 8 B 4h 0 ↓ ⬇ ⟳ 📌 ✕" [ref=e216] [cursor=pointer]:
+              - cell "5df14ac4-f80b-48bc-bf2d-94e0cbf055cf" [ref=e217]
+              - cell "GPU" [ref=e218]:
+                - generic [ref=e219]: GPU
+              - cell "ACTIVE" [ref=e220]:
+                - generic [ref=e221]: ACTIVE
+              - cell "8 B" [ref=e222]
+              - cell "4h" [ref=e223]
+              - cell "0" [ref=e224]
+              - cell "↓ ⬇ ⟳ 📌 ✕" [ref=e225]:
+                - link "↓" [ref=e226]:
+                  - /url: /v1/payloads/XfFKxPgLSLy_LZTgy_BVzw==/download
+                - button "⬇" [ref=e227]
+                - button "⟳" [ref=e228]
+                - button "📌" [ref=e229]
+                - button "✕" [ref=e230]
+            - row "59e39cb7-73a7-4767-82a6-b7230cec7ddc GPU ACTIVE 8 B 4h 0 ↓ ⬇ ⟳ 📌 ✕" [ref=e231] [cursor=pointer]:
+              - cell "59e39cb7-73a7-4767-82a6-b7230cec7ddc" [ref=e232]
+              - cell "GPU" [ref=e233]:
+                - generic [ref=e234]: GPU
+              - cell "ACTIVE" [ref=e235]:
+                - generic [ref=e236]: ACTIVE
+              - cell "8 B" [ref=e237]
+              - cell "4h" [ref=e238]
+              - cell "0" [ref=e239]
+              - cell "↓ ⬇ ⟳ 📌 ✕" [ref=e240]:
+                - link "↓" [ref=e241]:
+                  - /url: /v1/payloads/WeOct3OnR2eCprcjDOx93A==/download
+                - button "⬇" [ref=e242]
+                - button "⟳" [ref=e243]
+                - button "📌" [ref=e244]
+                - button "✕" [ref=e245]
+            - row "6768b007-fb0d-453b-906f-4bcc430b4bfe GPU ACTIVE 8 B 4h 0 ↓ ⬇ ⟳ 📌 ✕" [ref=e246] [cursor=pointer]:
+              - cell "6768b007-fb0d-453b-906f-4bcc430b4bfe" [ref=e247]
+              - cell "GPU" [ref=e248]:
+                - generic [ref=e249]: GPU
+              - cell "ACTIVE" [ref=e250]:
+                - generic [ref=e251]: ACTIVE
+              - cell "8 B" [ref=e252]
+              - cell "4h" [ref=e253]
+              - cell "0" [ref=e254]
+              - cell "↓ ⬇ ⟳ 📌 ✕" [ref=e255]:
+                - link "↓" [ref=e256]:
+                  - /url: /v1/payloads/Z2iwB_sNRTuQb0vMQwtL_g==/download
+                - button "⬇" [ref=e257]
+                - button "⟳" [ref=e258]
+                - button "📌" [ref=e259]
+                - button "✕" [ref=e260]
+            - row "b7ec67eb-40d3-456d-ae75-167c3c153e05 GPU ACTIVE 8 B 4h 0 ↓ ⬇ ⟳ 📌 ✕" [ref=e261] [cursor=pointer]:
+              - cell "b7ec67eb-40d3-456d-ae75-167c3c153e05" [ref=e262]
+              - cell "GPU" [ref=e263]:
+                - generic [ref=e264]: GPU
+              - cell "ACTIVE" [ref=e265]:
+                - generic [ref=e266]: ACTIVE
+              - cell "8 B" [ref=e267]
+              - cell "4h" [ref=e268]
+              - cell "0" [ref=e269]
+              - cell "↓ ⬇ ⟳ 📌 ✕" [ref=e270]:
+                - link "↓" [ref=e271]:
+                  - /url: /v1/payloads/t-xn60DTRW2udRZ8PBU-BQ==/download
+                - button "⬇" [ref=e272]
+                - button "⟳" [ref=e273]
+                - button "📌" [ref=e274]
+                - button "✕" [ref=e275]
+            - row "07a5e2a5-dbb9-44ee-b507-c94071a57b35 GPU ACTIVE 8 B 4h 0 ↓ ⬇ ⟳ 📌 ✕" [ref=e276] [cursor=pointer]:
+              - cell "07a5e2a5-dbb9-44ee-b507-c94071a57b35" [ref=e277]
+              - cell "GPU" [ref=e278]:
+                - generic [ref=e279]: GPU
+              - cell "ACTIVE" [ref=e280]:
+                - generic [ref=e281]: ACTIVE
+              - cell "8 B" [ref=e282]
+              - cell "4h" [ref=e283]
+              - cell "0" [ref=e284]
+              - cell "↓ ⬇ ⟳ 📌 ✕" [ref=e285]:
+                - link "↓" [ref=e286]:
+                  - /url: /v1/payloads/B6Xipdu5RO61B8lAcaV7NQ==/download
+                - button "⬇" [ref=e287]
+                - button "⟳" [ref=e288]
+                - button "📌" [ref=e289]
+                - button "✕" [ref=e290]
+            - row "fa509b4a-9bd9-44d5-9511-c5f3eccf773d GPU ACTIVE 8 B 4h 0 ↓ ⬇ ⟳ 📌 ✕" [ref=e291] [cursor=pointer]:
+              - cell "fa509b4a-9bd9-44d5-9511-c5f3eccf773d" [ref=e292]
+              - cell "GPU" [ref=e293]:
+                - generic [ref=e294]: GPU
+              - cell "ACTIVE" [ref=e295]:
+                - generic [ref=e296]: ACTIVE
+              - cell "8 B" [ref=e297]
+              - cell "4h" [ref=e298]
+              - cell "0" [ref=e299]
+              - cell "↓ ⬇ ⟳ 📌 ✕" [ref=e300]:
+                - link "↓" [ref=e301]:
+                  - /url: /v1/payloads/-lCbSpvZRNWVEcXz7M93PQ==/download
+                - button "⬇" [ref=e302]
+                - button "⟳" [ref=e303]
+                - button "📌" [ref=e304]
+                - button "✕" [ref=e305]
+            - row "e2ea78df-df23-4b9f-b431-28aac3a4e9ad GPU ACTIVE 8 B 4h 0 ↓ ⬇ ⟳ 📌 ✕" [ref=e306] [cursor=pointer]:
+              - cell "e2ea78df-df23-4b9f-b431-28aac3a4e9ad" [ref=e307]
+              - cell "GPU" [ref=e308]:
+                - generic [ref=e309]: GPU
+              - cell "ACTIVE" [ref=e310]:
+                - generic [ref=e311]: ACTIVE
+              - cell "8 B" [ref=e312]
+              - cell "4h" [ref=e313]
+              - cell "0" [ref=e314]
+              - cell "↓ ⬇ ⟳ 📌 ✕" [ref=e315]:
+                - link "↓" [ref=e316]:
+                  - /url: /v1/payloads/4up4398jS5-0MSiqw6TprQ==/download
+                - button "⬇" [ref=e317]
+                - button "⟳" [ref=e318]
+                - button "📌" [ref=e319]
+                - button "✕" [ref=e320]
+            - row "fb916feb-9903-44cc-86df-a1e718d8ee1b GPU ACTIVE 8 B 3h 0 ↓ ⬇ ⟳ 📌 ✕" [ref=e321] [cursor=pointer]:
+              - cell "fb916feb-9903-44cc-86df-a1e718d8ee1b" [ref=e322]
+              - cell "GPU" [ref=e323]:
+                - generic [ref=e324]: GPU
+              - cell "ACTIVE" [ref=e325]:
+                - generic [ref=e326]: ACTIVE
+              - cell "8 B" [ref=e327]
+              - cell "3h" [ref=e328]
+              - cell "0" [ref=e329]
+              - cell "↓ ⬇ ⟳ 📌 ✕" [ref=e330]:
+                - link "↓" [ref=e331]:
+                  - /url: /v1/payloads/-5Fv65kDRMyG36HnGNjuGw==/download
+                - button "⬇" [ref=e332]
+                - button "⟳" [ref=e333]
+                - button "📌" [ref=e334]
+                - button "✕" [ref=e335]
+            - row "04d1f086-9526-4c4c-9285-01f5d269d5b0 GPU ACTIVE 8 B 3h 0 ↓ ⬇ ⟳ 📌 ✕" [ref=e336] [cursor=pointer]:
+              - cell "04d1f086-9526-4c4c-9285-01f5d269d5b0" [ref=e337]
+              - cell "GPU" [ref=e338]:
+                - generic [ref=e339]: GPU
+              - cell "ACTIVE" [ref=e340]:
+                - generic [ref=e341]: ACTIVE
+              - cell "8 B" [ref=e342]
+              - cell "3h" [ref=e343]
+              - cell "0" [ref=e344]
+              - cell "↓ ⬇ ⟳ 📌 ✕" [ref=e345]:
+                - link "↓" [ref=e346]:
+                  - /url: /v1/payloads/BNHwhpUmTEyShQH10mnVsA==/download
+                - button "⬇" [ref=e347]
+                - button "⟳" [ref=e348]
+                - button "📌" [ref=e349]
+                - button "✕" [ref=e350]
+            - row "c3ba0969-ef36-4eb4-80ad-e0d8d8bd9108 GPU ACTIVE 8 B 3h 0 ↓ ⬇ ⟳ 📌 ✕" [ref=e351] [cursor=pointer]:
+              - cell "c3ba0969-ef36-4eb4-80ad-e0d8d8bd9108" [ref=e352]
+              - cell "GPU" [ref=e353]:
+                - generic [ref=e354]: GPU
+              - cell "ACTIVE" [ref=e355]:
+                - generic [ref=e356]: ACTIVE
+              - cell "8 B" [ref=e357]
+              - cell "3h" [ref=e358]
+              - cell "0" [ref=e359]
+              - cell "↓ ⬇ ⟳ 📌 ✕" [ref=e360]:
+                - link "↓" [ref=e361]:
+                  - /url: /v1/payloads/w7oJae82TrSAreDY2L2RCA==/download
+                - button "⬇" [ref=e362]
+                - button "⟳" [ref=e363]
+                - button "📌" [ref=e364]
+                - button "✕" [ref=e365]
+            - row "9a04d2d4-5c09-4eee-be91-3ce14c688179 GPU ACTIVE 8 B 3h 0 ↓ ⬇ ⟳ 📌 ✕" [ref=e366] [cursor=pointer]:
+              - cell "9a04d2d4-5c09-4eee-be91-3ce14c688179" [ref=e367]
+              - cell "GPU" [ref=e368]:
+                - generic [ref=e369]: GPU
+              - cell "ACTIVE" [ref=e370]:
+                - generic [ref=e371]: ACTIVE
+              - cell "8 B" [ref=e372]
+              - cell "3h" [ref=e373]
+              - cell "0" [ref=e374]
+              - cell "↓ ⬇ ⟳ 📌 ✕" [ref=e375]:
+                - link "↓" [ref=e376]:
+                  - /url: /v1/payloads/mgTS1FwJTu6-kTzhTGiBeQ==/download
+                - button "⬇" [ref=e377]
+                - button "⟳" [ref=e378]
+                - button "📌" [ref=e379]
+                - button "✕" [ref=e380]
+            - row "6f3f9884-382f-4208-b9eb-24d046053045 GPU ACTIVE 8 B 3h 0 ↓ ⬇ ⟳ 📌 ✕" [ref=e381] [cursor=pointer]:
+              - cell "6f3f9884-382f-4208-b9eb-24d046053045" [ref=e382]
+              - cell "GPU" [ref=e383]:
+                - generic [ref=e384]: GPU
+              - cell "ACTIVE" [ref=e385]:
+                - generic [ref=e386]: ACTIVE
+              - cell "8 B" [ref=e387]
+              - cell "3h" [ref=e388]
+              - cell "0" [ref=e389]
+              - cell "↓ ⬇ ⟳ 📌 ✕" [ref=e390]:
+                - link "↓" [ref=e391]:
+                  - /url: /v1/payloads/bz-YhDgvQgi56yTQRgUwRQ==/download
+                - button "⬇" [ref=e392]
+                - button "⟳" [ref=e393]
+                - button "📌" [ref=e394]
+                - button "✕" [ref=e395]
+            - row "b9d83736-ba69-4730-883f-6ce37d212ba9 GPU ACTIVE 8 B 5m 0 ↓ ⬇ ⟳ 📌 ✕" [ref=e396] [cursor=pointer]:
+              - cell "b9d83736-ba69-4730-883f-6ce37d212ba9" [ref=e397]
+              - cell "GPU" [ref=e398]:
+                - generic [ref=e399]: GPU
+              - cell "ACTIVE" [ref=e400]:
+                - generic [ref=e401]: ACTIVE
+              - cell "8 B" [ref=e402]
+              - cell "5m" [ref=e403]
+              - cell "0" [ref=e404]
+              - cell "↓ ⬇ ⟳ 📌 ✕" [ref=e405]:
+                - link "↓" [ref=e406]:
+                  - /url: /v1/payloads/udg3NrppRzCIP2zjfSErqQ==/download
+                - button "⬇" [ref=e407]
+                - button "⟳" [ref=e408]
+                - button "📌" [ref=e409]
+                - button "✕" [ref=e410]
+            - row "ab3786ab-8545-4b83-a45c-ff1df6e74f57 GPU ACTIVE 8 B 5m 0 ↓ ⬇ ⟳ 📌 ✕" [ref=e411] [cursor=pointer]:
+              - cell "ab3786ab-8545-4b83-a45c-ff1df6e74f57" [ref=e412]
+              - cell "GPU" [ref=e413]:
+                - generic [ref=e414]: GPU
+              - cell "ACTIVE" [ref=e415]:
+                - generic [ref=e416]: ACTIVE
+              - cell "8 B" [ref=e417]
+              - cell "5m" [ref=e418]
+              - cell "0" [ref=e419]
+              - cell "↓ ⬇ ⟳ 📌 ✕" [ref=e420]:
+                - link "↓" [ref=e421]:
+                  - /url: /v1/payloads/qzeGq4VFS4OkXP8d9udPVw==/download
+                - button "⬇" [ref=e422]
+                - button "⟳" [ref=e423]
+                - button "📌" [ref=e424]
+                - button "✕" [ref=e425]
+            - row "4cb97bc8-7142-4d96-8ce5-d45a076f2605 GPU ACTIVE 8 B 0s 0 ↓ ⬇ ⟳ 📌 ✕" [ref=e426] [cursor=pointer]:
+              - cell "4cb97bc8-7142-4d96-8ce5-d45a076f2605" [ref=e427]
+              - cell "GPU" [ref=e428]:
+                - generic [ref=e429]: GPU
+              - cell "ACTIVE" [ref=e430]:
+                - generic [ref=e431]: ACTIVE
+              - cell "8 B" [ref=e432]
+              - cell "0s" [ref=e433]
+              - cell "0" [ref=e434]
+              - cell "↓ ⬇ ⟳ 📌 ✕" [ref=e435]:
+                - link "↓" [ref=e436]:
+                  - /url: /v1/payloads/TLl7yHFCTZaM5dRaB28mBQ==/download
+                - button "⬇" [ref=e437]
+                - button "⟳" [ref=e438]
+                - button "📌" [ref=e439]
+                - button "✕" [ref=e440]
+        - paragraph [ref=e441]: 27 payloads
+    - complementary [ref=e442]:
+      - navigation [ref=e443]:
+        - button "▦ Payloads" [ref=e444] [cursor=pointer]:
+          - generic [ref=e445]: ▦
+          - generic [ref=e446]: Payloads
+        - button "⇌ Streams" [ref=e447] [cursor=pointer]:
+          - generic [ref=e448]: ⇌
+          - generic [ref=e449]: Streams
+        - button "◈ Admin" [ref=e450] [cursor=pointer]:
+          - generic [ref=e451]: ◈
+          - generic [ref=e452]: Admin
+```

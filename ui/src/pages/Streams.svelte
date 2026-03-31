@@ -14,7 +14,9 @@
   // Selected stream for viewing
   let selected = null;
   let entries = null;
+  let entriesLoading = false;
   let entriesError = '';
+  let consumerError = '';
   let startOffset = 0;
   let maxEntries = 50;
   let consumerGroup = 'ui';
@@ -54,24 +56,31 @@
     selected = s;
     entries = null;
     entriesError = '';
+    consumerError = '';
     committedOffset = null;
     await loadEntries();
   }
 
   async function loadEntries() {
     if (!selected) return;
+    entriesLoading = true;
     entriesError = '';
+    consumerError = '';
     try {
       const res = await api.readStream(selected.namespace, selected.name, startOffset, maxEntries);
       entries = res?.entries || [];
     } catch (e) {
       entriesError = e.message;
       entries = [];
+    } finally {
+      entriesLoading = false;
     }
     try {
       const r = await api.getCommitted(selected.namespace, selected.name, consumerGroup);
       committedOffset = r?.offset ?? null;
-    } catch {}
+    } catch (e) {
+      consumerError = e.message;
+    }
   }
 
   async function appendEntry() {
@@ -160,7 +169,9 @@
 
         {#if entriesError}<p class="error-msg">{entriesError}</p>{/if}
 
-        {#if entries !== null}
+        {#if entriesLoading}
+          <p class="muted">Loading…</p>
+        {:else if entries !== null}
           {#if entries.length === 0}
             <p class="muted" style="margin: 1rem 0">No entries in range.</p>
           {:else}
@@ -189,9 +200,8 @@
             {#if committedOffset !== null}
               <span class="muted">Committed: {committedOffset}</span>
             {/if}
+            {#if consumerError}<span class="error-msg">{consumerError}</span>{/if}
           </div>
-        {:else}
-          <p class="muted">Loading…</p>
         {/if}
 
         <!-- Append -->
