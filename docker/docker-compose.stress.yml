@@ -11,9 +11,9 @@
 services:
   # Override payload-manager to use the reduced-capacity stress config.
   payload-manager:
-    command: ["./payload-manager", "--config", "/app/conf/runtime-docker-gpu-sqlite-stress.yaml"]
+    command: ["./payload-manager", "--config", "/app/conf/runtime-docker-gpu-otel-sqlite-stress.yaml"]
     volumes:
-      - ../config/runtime-docker-gpu-sqlite-stress.yaml:/app/conf/runtime-docker-gpu-sqlite-stress.yaml:ro
+      - ../config/runtime-docker-gpu-otel-sqlite-stress.yaml:/app/conf/runtime-docker-gpu-otel-sqlite-stress.yaml:ro
 
   tier-spill-stress:
     build:

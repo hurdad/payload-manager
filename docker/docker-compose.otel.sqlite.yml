@@ -5,7 +5,7 @@ services:
       dockerfile: docker/Dockerfile.otel
     restart: unless-stopped
     hostname: payload-manager
-    command: ["./payload-manager", "--config", "/app/conf/runtime-docker-sqlite.yaml"]
+    command: ["./payload-manager", "--config", "/app/conf/runtime-docker-otel-sqlite.yaml"]
     healthcheck:
       test: ["CMD-SHELL", "bash -c '</dev/tcp/localhost/50051'"]
       interval: 5s
@@ -16,7 +16,7 @@ services:
     ports:
       - "50054:50051"
     volumes:
-      - ../config/runtime-docker-sqlite.yaml:/app/conf/runtime-docker-sqlite.yaml:ro
+      - ../config/runtime-docker-otel-sqlite.yaml:/app/conf/runtime-docker-otel-sqlite.yaml:ro
       - payload-otel-sqlite-data:/var/lib/payload-manager
 
 volumes:

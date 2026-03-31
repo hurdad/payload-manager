@@ -15,6 +15,6 @@
 services:
   payload-manager:
     command:
-      ["./payload-manager", "--config", "/app/conf/runtime-docker-gpu-sqlite-minio.yaml"]
+      ["./payload-manager", "--config", "/app/conf/runtime-docker-gpu-otel-sqlite-minio.yaml"]
     volumes:
-      - ../config/runtime-docker-gpu-sqlite-minio.yaml:/app/conf/runtime-docker-gpu-sqlite-minio.yaml:ro
+      - ../config/runtime-docker-gpu-otel-sqlite-minio.yaml:/app/conf/runtime-docker-gpu-otel-sqlite-minio.yaml:ro

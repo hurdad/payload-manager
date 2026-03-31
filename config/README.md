@@ -12,13 +12,20 @@ GPU usage, database backend, and deployment type.
 
 ## Docker / container
 
-- `runtime-docker-gpu-sqlite.yaml` - Docker, GPU-enabled + SQLite backend.
-- `runtime-docker-gpu-postgres.yaml` - Docker, GPU-enabled + PostgreSQL backend.
-- `runtime-docker-gpu-sqlite-stress.yaml` - Docker, GPU-enabled + SQLite backend (high-load / stress-test settings).
-- `runtime-docker-sqlite.yaml` - Docker, no GPU + SQLite backend.
-- `runtime-docker-postgres.yaml` - Docker, no GPU + PostgreSQL backend.
-- `runtime-docker-no-otel-sqlite.yaml` - Docker, no GPU + SQLite backend, OpenTelemetry disabled.
-- `runtime-docker-no-otel-postgres.yaml` - Docker, no GPU + PostgreSQL backend, OpenTelemetry disabled.
+### Without OpenTelemetry
+
+- `runtime-docker-sqlite.yaml` - no GPU + SQLite backend.
+- `runtime-docker-postgres.yaml` - no GPU + PostgreSQL backend.
+- `runtime-docker-sqlite-minio.yaml` - no GPU + SQLite backend + MinIO object store.
+- `runtime-docker-gpu-postgres.yaml` - GPU-enabled + PostgreSQL backend.
+
+### With OpenTelemetry
+
+- `runtime-docker-otel-sqlite.yaml` - no GPU + SQLite backend.
+- `runtime-docker-otel-postgres.yaml` - no GPU + PostgreSQL backend.
+- `runtime-docker-gpu-otel-sqlite.yaml` - GPU-enabled + SQLite backend.
+- `runtime-docker-gpu-otel-sqlite-minio.yaml` - GPU-enabled + SQLite backend + MinIO object store.
+- `runtime-docker-gpu-otel-sqlite-stress.yaml` - GPU-enabled + SQLite backend, high-load / stress-test settings.
 
 Use any variant as a starting point, then update paths, credentials, and
 capacity limits for your deployment.

@@ -23,7 +23,7 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-    command: ["./payload-manager", "--config", "/app/conf/runtime-docker-no-otel-postgres.yaml"]
+    command: ["./payload-manager", "--config", "/app/conf/runtime-docker-postgres.yaml"]
     healthcheck:
       test: ["CMD-SHELL", "bash -c '</dev/tcp/localhost/50051'"]
       interval: 5s
@@ -34,7 +34,7 @@ services:
     ports:
       - "50051:50051"
     volumes:
-      - ../config/runtime-docker-no-otel-postgres.yaml:/app/conf/runtime-docker-no-otel-postgres.yaml:ro
+      - ../config/runtime-docker-postgres.yaml:/app/conf/runtime-docker-postgres.yaml:ro
       - payload-data:/var/lib/payload-manager
 
 volumes:

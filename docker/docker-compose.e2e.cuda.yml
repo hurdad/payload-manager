@@ -5,7 +5,7 @@ services:
       dockerfile: docker/Dockerfile.cuda
     restart: unless-stopped
     hostname: payload-manager
-    command: ["./payload-manager", "--config", "/app/conf/runtime-docker-gpu-sqlite.yaml"]
+    command: ["./payload-manager", "--config", "/app/conf/runtime-docker-gpu-otel-sqlite.yaml"]
     healthcheck:
       test: ["CMD-SHELL", "bash -c '</dev/tcp/localhost/50051'"]
       interval: 5s
@@ -18,7 +18,7 @@ services:
     # driver returns CUDA_ERROR_INVALID_CONTEXT even when ipc: host is set.
     pid: host
     volumes:
-      - ../config/runtime-docker-gpu-sqlite.yaml:/app/conf/runtime-docker-gpu-sqlite.yaml:ro
+      - ../config/runtime-docker-gpu-otel-sqlite.yaml:/app/conf/runtime-docker-gpu-otel-sqlite.yaml:ro
       - e2e-cuda-data:/var/lib/payload-manager
     deploy:
       resources:
