@@ -868,53 +868,43 @@ void PayloadManager::HydrateCaches() {
 void PayloadManager::ExecuteSpill(const PayloadID& id, Tier target, bool fsync) {
   std::unique_lock<std::shared_mutex> payload_lock(*PayloadMutex(id));
 
-  // --- Phase 0: read record and validate ---
-  {
-    auto tx     = repository_->Begin();
-    auto record = repository_->GetPayload(*tx, payload::util::FromProto(id));
-    tx->Commit();
-    if (!record.has_value()) throw payload::util::NotFound("spill payload: payload not found; verify payload id");
-    if (record->state == PAYLOAD_STATE_DELETED) {
-      throw payload::util::InvalidState("spill payload: payload is deleted and cannot be spilled");
-    }
+  // Read record and validate inside Phase 1 transaction.
+  auto tx1    = repository_->Begin();
+  auto record = repository_->GetPayload(*tx1, payload::util::FromProto(id));
+  if (!record.has_value()) throw payload::util::NotFound("spill payload: payload not found; verify payload id");
+  if (record->state == PAYLOAD_STATE_DELETED) {
+    throw payload::util::InvalidState("spill payload: payload is deleted and cannot be spilled");
+  }
 
-    const Tier source_tier = record->tier;
+  const Tier source_tier = record->tier;
 
-    // Enforce require_durable: if set, only allow spill to a durable tier.
-    if (record->require_durable && !IsDurableTier(target)) {
-      throw payload::util::InvalidState("spill payload: eviction policy requires durable target tier");
-    }
+  // Enforce require_durable: if set, only allow spill to a durable tier.
+  if (record->require_durable && !IsDurableTier(target)) {
+    throw payload::util::InvalidState("spill payload: eviction policy requires durable target tier");
+  }
 
-    // Enforce min_residency_tier: target must not be below (slower than) minimum.
-    if (record->min_residency_tier != 0) {
-      const Tier min_tier = static_cast<Tier>(record->min_residency_tier);
-      // IsHigherTier(a, b) returns true if a is faster; "below minimum" means target is slower.
-      if (PlacementEngine::IsHigherTier(min_tier, target)) {
-        throw payload::util::InvalidState("spill payload: target tier is below the payload's min_residency_tier");
-      }
-    }
-
-    {
-      std::lock_guard<std::mutex> pins_lock(pins_guard_);
-      if (source_tier != target && IsPinnedLocked(Key(id), payload::util::ToUnixMillis(payload::util::Now()))) {
-        throw payload::util::LeaseConflict("spill payload: payload is pinned; unpin or wait for pin expiry before spilling");
-      }
-    }
-
-    // Respect active read leases: spilling moves bytes to a new location, which
-    // invalidates any descriptor held by a leaseholder.  This mirrors the check
-    // in PromoteUnlocked and prevents silent data-location races.
-    if (source_tier != target && lease_mgr_->HasActiveLeases(id)) {
-      throw payload::util::LeaseConflict("spill payload: active lease present; release leases before spilling");
+  // Enforce min_residency_tier: target must not be below (slower than) minimum.
+  if (record->min_residency_tier != 0) {
+    const Tier min_tier = static_cast<Tier>(record->min_residency_tier);
+    // IsHigherTier(a, b) returns true if a is faster; "below minimum" means target is slower.
+    if (PlacementEngine::IsHigherTier(min_tier, target)) {
+      throw payload::util::InvalidState("spill payload: target tier is below the payload's min_residency_tier");
     }
   }
 
-  // Re-read inside write transaction for Phase 1.
-  auto tx1    = repository_->Begin();
-  auto record = repository_->GetPayload(*tx1, payload::util::FromProto(id));
-  if (!record.has_value()) throw payload::util::NotFound("spill payload: payload not found after re-read");
+  {
+    std::lock_guard<std::mutex> pins_lock(pins_guard_);
+    if (source_tier != target && IsPinnedLocked(Key(id), payload::util::ToUnixMillis(payload::util::Now()))) {
+      throw payload::util::LeaseConflict("spill payload: payload is pinned; unpin or wait for pin expiry before spilling");
+    }
+  }
 
-  const Tier source_tier = record->tier;
+  // Respect active read leases: spilling moves bytes to a new location, which
+  // invalidates any descriptor held by a leaseholder.  This mirrors the check
+  // in PromoteUnlocked and prevents silent data-location races.
+  if (source_tier != target && lease_mgr_->HasActiveLeases(id)) {
+    throw payload::util::LeaseConflict("spill payload: active lease present; release leases before spilling");
+  }
 
   if (source_tier != target) {
     auto src_it = storage_.find(source_tier);
@@ -943,8 +933,8 @@ void PayloadManager::ExecuteSpill(const PayloadID& id, Tier target, bool fsync) 
       dst_it->second->Write(id, buffer, fsync);
     } catch (...) {
       try {
-        auto tx_revert    = repository_->Begin();
-        auto revert_rec   = repository_->GetPayload(*tx_revert, payload::util::FromProto(id));
+        auto tx_revert  = repository_->Begin();
+        auto revert_rec = repository_->GetPayload(*tx_revert, payload::util::FromProto(id));
         if (revert_rec.has_value()) {
           revert_rec->state = IsDurableTier(static_cast<Tier>(revert_rec->tier)) ? PAYLOAD_STATE_DURABLE : PAYLOAD_STATE_ACTIVE;
           revert_rec->version++;
@@ -963,15 +953,13 @@ void PayloadManager::ExecuteSpill(const PayloadID& id, Tier target, bool fsync) 
     }
 
     // --- Phase 2: commit new tier + DURABLE/ACTIVE state ---
-    auto tx2       = repository_->Begin();
-    auto record2   = repository_->GetPayload(*tx2, payload::util::FromProto(id));
-    if (!record2.has_value()) throw payload::util::NotFound("spill payload: payload not found for phase 2 commit");
-    record2->tier  = target;
-    record2->state = IsDurableTier(target) ? PAYLOAD_STATE_DURABLE : PAYLOAD_STATE_ACTIVE;
-    record2->version++;
-    ThrowIfDbError(repository_->UpdatePayload(*tx2, *record2), "spill payload: phase 2");
+    // Re-use the in-memory record; no re-read needed since payload_lock is held throughout.
+    auto tx2      = repository_->Begin();
+    record->tier  = target;
+    record->state = IsDurableTier(target) ? PAYLOAD_STATE_DURABLE : PAYLOAD_STATE_ACTIVE;
+    record->version++;
+    ThrowIfDbError(repository_->UpdatePayload(*tx2, *record), "spill payload: phase 2");
     tx2->Commit();
-    record = record2;
   } else {
     // No-op tier change: just commit without altering state.
     tx1->Commit();

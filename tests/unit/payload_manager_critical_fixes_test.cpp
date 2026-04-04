@@ -294,7 +294,8 @@ TEST(PayloadManagerCriticalFixes, PromoteCommitsDbBeforeSourceRemoval) {
 }
 
 // ---------------------------------------------------------------------------
-// Test: ExecuteSpill commits DB before removing source data
+// Test: ExecuteSpill uses two-phase commit: SPILLING before bytes move, then
+//       tier change committed before source removal.
 // ---------------------------------------------------------------------------
 TEST(PayloadManagerCriticalFixes, SpillCommitsDbBeforeSourceRemoval) {
   auto log          = std::make_shared<std::vector<std::string>>();
@@ -317,15 +318,21 @@ TEST(PayloadManagerCriticalFixes, SpillCommitsDbBeforeSourceRemoval) {
 
   manager.ExecuteSpill(desc.payload_id(), TIER_DISK, /*fsync=*/false);
 
-  int disk_write_idx = FindLog(*log, "disk:write");
-  int db_commit_idx  = FindLog(*log, "db:commit");
-  int ram_remove_idx = FindLog(*log, "ram:remove");
+  int disk_write_idx    = FindLog(*log, "disk:write");
+  int phase1_commit_idx = FindLog(*log, "db:commit");
+  int phase2_commit_idx = FindLog(*log, "db:commit", phase1_commit_idx + 1);
+  int ram_remove_idx    = FindLog(*log, "ram:remove");
 
   EXPECT_GE(disk_write_idx, 0) << "disk write must occur";
-  EXPECT_GE(db_commit_idx, 0) << "db commit must occur";
+  EXPECT_GE(phase1_commit_idx, 0) << "phase 1 db commit (SPILLING) must occur";
+  EXPECT_GE(phase2_commit_idx, 0) << "phase 2 db commit (tier change) must occur";
   EXPECT_GE(ram_remove_idx, 0) << "ram remove must occur";
-  EXPECT_LT(disk_write_idx, db_commit_idx) << "disk write must happen before db commit";
-  EXPECT_LT(db_commit_idx, ram_remove_idx) << "db commit must happen before ram remove";
+  // Phase 1 commits SPILLING intent before bytes move.
+  EXPECT_LT(phase1_commit_idx, disk_write_idx) << "phase 1 commit must happen before disk write";
+  // Bytes must land before Phase 2 commits the new tier.
+  EXPECT_LT(disk_write_idx, phase2_commit_idx) << "disk write must happen before phase 2 commit";
+  // Source removed only after the authoritative tier change is durable.
+  EXPECT_LT(phase2_commit_idx, ram_remove_idx) << "phase 2 commit must happen before ram remove";
 }
 
 // ---------------------------------------------------------------------------
