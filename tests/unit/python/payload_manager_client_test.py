@@ -61,6 +61,16 @@ def _make_ram_descriptor(
     return desc
 
 
+def _make_object_descriptor(
+    path: str = "s3://bucket/payloads/test.bin",
+    length_bytes: int = 64,
+) -> placement_pb2.PayloadDescriptor:
+    desc = placement_pb2.PayloadDescriptor(tier=types_pb2.TIER_OBJECT)
+    desc.disk.path = path
+    desc.disk.length_bytes = length_bytes
+    return desc
+
+
 def _make_disk_descriptor(
     path: str,
     length_bytes: int = 64,
@@ -380,6 +390,72 @@ class TestDiskBuffer(unittest.TestCase):
             client._OpenMutableBuffer(desc)
         with self.assertRaises(NotImplementedError):
             client._OpenReadableBuffer(desc)
+
+
+# ---------------------------------------------------------------------------
+# Object buffer reads
+# ---------------------------------------------------------------------------
+
+class TestObjectBuffer(unittest.TestCase):
+    def _make_mock_fs(self):
+        mock_file = MagicMock()
+        mock_file.__enter__ = MagicMock(return_value=mock_file)
+        mock_file.__exit__ = MagicMock(return_value=False)
+        mock_file.read_buffer.return_value = MagicMock(spec=pa.Buffer)
+        mock_fs = MagicMock()
+        mock_fs.open_input_file.return_value = mock_file
+        return mock_fs, mock_file
+
+    def test_open_readable_object_buffer_returns_none_mmap(self):
+        client, _ = _make_client()
+        desc = _make_object_descriptor(path="s3://bucket/payloads/test.bin", length_bytes=64)
+        mock_fs, mock_file = self._make_mock_fs()
+
+        with patch("pyarrow.fs.FileSystem.from_uri", return_value=(mock_fs, "bucket/payloads/test.bin")):
+            mmap_obj, buf = client._OpenReadableBuffer(desc)
+
+        self.assertIsNone(mmap_obj)
+        mock_fs.open_input_file.assert_called_once_with("bucket/payloads/test.bin")
+        mock_file.read_buffer.assert_called_once_with(64)
+
+    def test_object_read_zero_length_passes_none(self):
+        client, _ = _make_client()
+        desc = _make_object_descriptor(path="s3://bucket/payloads/test.bin", length_bytes=0)
+        mock_fs, mock_file = self._make_mock_fs()
+
+        with patch("pyarrow.fs.FileSystem.from_uri", return_value=(mock_fs, "bucket/payloads/test.bin")):
+            client._OpenReadableBuffer(desc)
+
+        mock_file.read_buffer.assert_called_once_with(None)
+
+    def test_mutable_object_buffer_raises(self):
+        client, _ = _make_client()
+        desc = _make_object_descriptor()
+        with self.assertRaises(NotImplementedError):
+            client._OpenMutableBuffer(desc)
+
+    def test_validate_has_location_passes_for_object(self):
+        desc = _make_object_descriptor()
+        PayloadClient._ValidateHasLocation(desc)
+
+    def test_acquire_readable_buffer_object_tier(self):
+        client, _ = _make_client()
+        pid = _make_payload_id()
+        desc = _make_object_descriptor(path="s3://bucket/payloads/test.bin", length_bytes=32)
+        desc.payload_id.CopyFrom(pid)
+        lease_id_bytes = uuid.uuid4().bytes
+        client._data_stub.AcquireReadLease.return_value = lease_pb2.AcquireReadLeaseResponse(
+            payload_descriptor=desc,
+            lease_id=id_pb2.LeaseID(value=lease_id_bytes),
+        )
+
+        mock_fs, mock_file = self._make_mock_fs()
+        with patch("pyarrow.fs.FileSystem.from_uri", return_value=(mock_fs, "bucket/payloads/test.bin")):
+            result = client.AcquireReadableBuffer(pid, min_tier=types_pb2.TIER_OBJECT)
+
+        self.assertIsInstance(result, ReadablePayload)
+        self.assertIsNone(result.mmap_obj)
+        self.assertEqual(result.lease_id, lease_id_bytes)
 
 
 # ---------------------------------------------------------------------------

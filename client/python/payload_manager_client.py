@@ -42,7 +42,7 @@ class WritablePayload:
 class ReadablePayload:
     descriptor: placement_pb2.PayloadDescriptor
     lease_id: bytes
-    mmap_obj: Optional[mmap.mmap]  # None for GPU-tier payloads
+    mmap_obj: Optional[mmap.mmap]  # None for GPU-tier and object-tier payloads
     buffer: Any  # pa.Buffer for CPU tiers; cupy.ndarray for GPU tier
 
 
@@ -280,6 +280,8 @@ class PayloadClient:
             return mapped, pa.py_buffer(mapped)
 
         if descriptor.HasField("disk"):
+            if descriptor.tier == types_pb2.TIER_OBJECT:
+                return None, _ReadObjectBuffer(descriptor)
             fd = os.open(descriptor.disk.path, os.O_RDONLY)
             try:
                 mapped = mmap.mmap(
@@ -391,6 +393,33 @@ def _OpenReadableGpuBuffer(descriptor: placement_pb2.PayloadDescriptor):
     Raises ``NotImplementedError`` when ``pyarrow.cuda`` is not available.
     """
     return _OpenMutableGpuBuffer(descriptor)
+
+
+def _ReadObjectBuffer(descriptor: placement_pb2.PayloadDescriptor) -> pa.Buffer:
+    """Download an object-tier payload using the pyarrow filesystem abstraction.
+
+    The descriptor's ``disk.path`` is a fully-qualified URI such as
+    ``s3://bucket/prefix/<uuid>.bin``.  ``pyarrow.fs.FileSystem.from_uri``
+    resolves the appropriate backend (S3, GCS, Azure, local) automatically.
+
+    Returns a ``pa.Buffer`` containing the full payload bytes.
+    ``mmap_obj`` is ``None`` for callers that need to track it separately.
+
+    Requires pyarrow to be built with the relevant filesystem support
+    (e.g. ``pyarrow[s3]`` for S3/MinIO, ``pyarrow[gcs]`` for GCS).
+    """
+    try:
+        import pyarrow.fs as pafs
+    except ImportError:
+        raise NotImplementedError(
+            "Object tier requires pyarrow with filesystem support (pyarrow.fs). "
+            "Install pyarrow with S3/GCS/Azure support, e.g. pip install 'pyarrow[s3]'."
+        )
+    path = descriptor.disk.path
+    fs, path_in_fs = pafs.FileSystem.from_uri(path)
+    length = descriptor.disk.length_bytes if descriptor.disk.length_bytes > 0 else None
+    with fs.open_input_file(path_in_fs) as f:
+        return f.read_buffer(length)
 
 
 def _trace_metadata() -> list[tuple[str, str]]:
