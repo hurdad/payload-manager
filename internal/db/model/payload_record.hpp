@@ -43,6 +43,12 @@ struct PayloadRecord {
 
   // Preferred tier to spill into when evicted (Tier enum; 0 = UNSPECIFIED → TIER_DISK).
   int spill_target = 0;
+
+  // Minimum tier below which this payload must not be spilled (Tier enum; 0 = no constraint).
+  int min_residency_tier = 0;
+
+  // If true, spill target must be a durable tier (DISK or OBJECT).
+  bool require_durable = false;
 };
 
 } // namespace payload::db::model

@@ -438,6 +438,17 @@ class TestObjectBuffer(unittest.TestCase):
         desc = _make_object_descriptor()
         PayloadClient._ValidateHasLocation(desc)
 
+    def test_open_readable_object_buffer_uses_length_from_descriptor(self):
+        """read_buffer receives the descriptor's length_bytes when nonzero."""
+        client, _ = _make_client()
+        desc = _make_object_descriptor(path="s3://bucket/payloads/test.bin", length_bytes=128)
+        mock_fs, mock_file = self._make_mock_fs()
+
+        with patch("pyarrow.fs.FileSystem.from_uri", return_value=(mock_fs, "bucket/payloads/test.bin")):
+            client._OpenReadableBuffer(desc)
+
+        mock_file.read_buffer.assert_called_once_with(128)
+
     def test_acquire_readable_buffer_object_tier(self):
         client, _ = _make_client()
         pid = _make_payload_id()
@@ -456,6 +467,62 @@ class TestObjectBuffer(unittest.TestCase):
         self.assertIsInstance(result, ReadablePayload)
         self.assertIsNone(result.mmap_obj)
         self.assertEqual(result.lease_id, lease_id_bytes)
+
+
+# ---------------------------------------------------------------------------
+# Lease cleanup on read error
+# ---------------------------------------------------------------------------
+
+class TestLeaseCleanupOnError(unittest.TestCase):
+    """AcquireReadableBuffer must release the lease if _OpenReadableBuffer raises."""
+
+    def test_lease_released_when_open_readable_buffer_raises(self):
+        client, _ = _make_client()
+        pid = _make_payload_id()
+        desc = _make_ram_descriptor(shm_name="/fail_shm", length_bytes=64, payload_id=pid)
+        lease_id_bytes = uuid.uuid4().bytes
+        client._data_stub.AcquireReadLease.return_value = lease_pb2.AcquireReadLeaseResponse(
+            payload_descriptor=desc,
+            lease_id=id_pb2.LeaseID(value=lease_id_bytes),
+        )
+        client._data_stub.ReleaseLease.return_value = MagicMock()
+
+        with patch.object(client, "_OpenReadableBuffer", side_effect=OSError("permission denied")):
+            with self.assertRaises(OSError):
+                client.AcquireReadableBuffer(pid)
+
+        client._data_stub.ReleaseLease.assert_called_once()
+        req = client._data_stub.ReleaseLease.call_args[0][0]
+        self.assertEqual(req.lease_id.value, lease_id_bytes)
+
+    def test_exception_propagates_after_lease_release(self):
+        client, _ = _make_client()
+        pid = _make_payload_id()
+        desc = _make_ram_descriptor(payload_id=pid)
+        client._data_stub.AcquireReadLease.return_value = lease_pb2.AcquireReadLeaseResponse(
+            payload_descriptor=desc,
+            lease_id=id_pb2.LeaseID(value=uuid.uuid4().bytes),
+        )
+        client._data_stub.ReleaseLease.return_value = MagicMock()
+
+        with patch.object(client, "_OpenReadableBuffer", side_effect=ValueError("bad descriptor")):
+            with self.assertRaises(ValueError, msg="bad descriptor"):
+                client.AcquireReadableBuffer(pid)
+
+    def test_lease_release_failure_does_not_suppress_original_error(self):
+        """If ReleaseLease also raises, the original error is still propagated."""
+        client, _ = _make_client()
+        pid = _make_payload_id()
+        desc = _make_ram_descriptor(payload_id=pid)
+        client._data_stub.AcquireReadLease.return_value = lease_pb2.AcquireReadLeaseResponse(
+            payload_descriptor=desc,
+            lease_id=id_pb2.LeaseID(value=uuid.uuid4().bytes),
+        )
+        client._data_stub.ReleaseLease.side_effect = RuntimeError("release failed")
+
+        with patch.object(client, "_OpenReadableBuffer", side_effect=OSError("open failed")):
+            with self.assertRaises(OSError):
+                client.AcquireReadableBuffer(pid)
 
 
 # ---------------------------------------------------------------------------

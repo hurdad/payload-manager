@@ -65,7 +65,8 @@ void BootstrapSqliteSchema(const std::shared_ptr<db::sqlite::SqliteDB>& sqlite_d
   static const std::vector<std::string> kBootstrapSql = {
       "CREATE TABLE IF NOT EXISTS payload (id BLOB PRIMARY KEY, tier INTEGER NOT NULL, state INTEGER NOT NULL, size_bytes INTEGER NOT NULL, version "
       "INTEGER NOT NULL, expires_at_ms INTEGER, no_evict INTEGER NOT NULL DEFAULT 0, eviction_priority INTEGER NOT NULL DEFAULT 0, spill_target "
-      "INTEGER NOT NULL DEFAULT 0, created_at_ms INTEGER NOT NULL DEFAULT (unixepoch() * 1000));",
+      "INTEGER NOT NULL DEFAULT 0, created_at_ms INTEGER NOT NULL DEFAULT (unixepoch() * 1000), "
+      "min_residency_tier INTEGER NOT NULL DEFAULT 0, require_durable INTEGER NOT NULL DEFAULT 0);",
       "CREATE TABLE IF NOT EXISTS payload_metadata (id BLOB PRIMARY KEY, json TEXT NOT NULL, schema TEXT, updated_at_ms INTEGER NOT NULL, FOREIGN "
       "KEY(id) REFERENCES payload(id) ON DELETE CASCADE);",
       "CREATE TABLE IF NOT EXISTS payload_lineage (parent_id BLOB NOT NULL, child_id BLOB NOT NULL, operation TEXT, role TEXT, parameters TEXT, "
@@ -95,6 +96,9 @@ void BootstrapSqliteSchema(const std::shared_ptr<db::sqlite::SqliteDB>& sqlite_d
   TryExecSqlite(sqlite_db, "ALTER TABLE payload ADD COLUMN created_at_ms INTEGER NOT NULL DEFAULT (unixepoch() * 1000);");
   // Rename persist → no_evict for databases created before the field was renamed.
   TryExecSqlite(sqlite_db, "ALTER TABLE payload RENAME COLUMN persist TO no_evict;");
+  // Eviction policy extension: min residency tier and durability requirement.
+  TryExecSqlite(sqlite_db, "ALTER TABLE payload ADD COLUMN min_residency_tier INTEGER NOT NULL DEFAULT 0;");
+  TryExecSqlite(sqlite_db, "ALTER TABLE payload ADD COLUMN require_durable INTEGER NOT NULL DEFAULT 0;");
 
   sqlite_db->Exec("SELECT id,tier,state,size_bytes,version FROM payload LIMIT 1;");
   sqlite_db->Exec("SELECT id,json,schema,updated_at_ms FROM payload_metadata LIMIT 1;");
@@ -112,12 +116,16 @@ void BootstrapPostgresSchema(const std::string& conninfo) {
   tx.exec(
       "CREATE TABLE IF NOT EXISTS payload (id UUID PRIMARY KEY, tier SMALLINT NOT NULL, state SMALLINT NOT NULL, size_bytes BIGINT NOT NULL, version "
       "BIGINT NOT NULL, expires_at_ms BIGINT, no_evict SMALLINT NOT NULL DEFAULT 0, eviction_priority SMALLINT NOT NULL DEFAULT 0, spill_target "
-      "SMALLINT NOT NULL DEFAULT 0, created_at_ms BIGINT NOT NULL DEFAULT 0);");
+      "SMALLINT NOT NULL DEFAULT 0, created_at_ms BIGINT NOT NULL DEFAULT 0, "
+      "min_residency_tier SMALLINT NOT NULL DEFAULT 0, require_durable SMALLINT NOT NULL DEFAULT 0);");
   // Migrate existing databases that predate the eviction policy columns.
   tx.exec("ALTER TABLE payload ADD COLUMN IF NOT EXISTS no_evict SMALLINT NOT NULL DEFAULT 0;");
   tx.exec("ALTER TABLE payload ADD COLUMN IF NOT EXISTS eviction_priority SMALLINT NOT NULL DEFAULT 0;");
   tx.exec("ALTER TABLE payload ADD COLUMN IF NOT EXISTS spill_target SMALLINT NOT NULL DEFAULT 0;");
   tx.exec("ALTER TABLE payload ADD COLUMN IF NOT EXISTS created_at_ms BIGINT NOT NULL DEFAULT 0;");
+  // Eviction policy extension: min residency tier and durability requirement.
+  tx.exec("ALTER TABLE payload ADD COLUMN IF NOT EXISTS min_residency_tier SMALLINT NOT NULL DEFAULT 0;");
+  tx.exec("ALTER TABLE payload ADD COLUMN IF NOT EXISTS require_durable SMALLINT NOT NULL DEFAULT 0;");
   // Rename persist → no_evict for databases created before the field was renamed.
   tx.exec(
       "DO $$ BEGIN "

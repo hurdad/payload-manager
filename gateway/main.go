@@ -114,7 +114,10 @@ func withPayloadDownload(next http.Handler, diskRoot string) http.Handler {
 		if snap, _, snapErr := resolveSnapshot(next, payloadID); snapErr == nil {
 			t := snap.PayloadDescriptor.Tier
 			if t != "" && t != "TIER_DISK" && t != "TIER_OBJECT" {
-				if spillErr := spillPayload(next, payloadID); spillErr != nil {
+				spillCtx, spillCancel := context.WithTimeout(r.Context(), 5*time.Minute)
+				spillErr := spillPayload(next, payloadID, spillCtx)
+				spillCancel()
+				if spillErr != nil {
 					http.Error(w, "failed to spill payload to disk: "+spillErr.Error(), http.StatusInternalServerError)
 					return
 				}
@@ -186,7 +189,7 @@ func resolveSnapshot(next http.Handler, payloadID string) (*resolveSnapshotRespo
 	return &resp, http.StatusOK, nil
 }
 
-func spillPayload(next http.Handler, payloadID string) error {
+func spillPayload(next http.Handler, payloadID string, ctx context.Context) error {
 	reqBody := map[string]any{
 		"ids":           []map[string]any{{"value": payloadID}},
 		"policy":        "SPILL_POLICY_BLOCKING",
@@ -195,7 +198,7 @@ func spillPayload(next http.Handler, payloadID string) error {
 	}
 	body, _ := json.Marshal(reqBody)
 	rr := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/v1/payloads/spill", bytes.NewReader(body))
+	req := httptest.NewRequest(http.MethodPost, "/v1/payloads/spill", bytes.NewReader(body)).WithContext(ctx)
 	req.Header.Set("Content-Type", "application/json")
 	next.ServeHTTP(rr, req)
 	if rr.Code >= 400 {

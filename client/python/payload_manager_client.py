@@ -212,7 +212,15 @@ class PayloadClient:
         response = self.AcquireReadLease(request)
         self._ValidateHasLocation(response.payload_descriptor)
 
-        mmap_obj, buffer = self._OpenReadableBuffer(response.payload_descriptor)
+        try:
+            mmap_obj, buffer = self._OpenReadableBuffer(response.payload_descriptor)
+        except Exception:
+            if response.lease_id.value:
+                try:
+                    self.Release(response.lease_id.value)
+                except Exception:
+                    pass
+            raise
         return ReadablePayload(
             descriptor=response.payload_descriptor,
             lease_id=response.lease_id.value,

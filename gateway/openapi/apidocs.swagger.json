@@ -71,6 +71,21 @@
               "TIER_OBJECT"
             ],
             "default": "TIER_UNSPECIFIED"
+          },
+          {
+            "name": "pageSize",
+            "description": "Maximum number of payloads to return. 0 = server default (50); max 500.",
+            "in": "query",
+            "required": false,
+            "type": "integer",
+            "format": "int32"
+          },
+          {
+            "name": "pageToken",
+            "description": "Opaque cursor from a previous ListPayloadsResponse.next_page_token.\nOmit or leave empty to start from the beginning.",
+            "in": "query",
+            "required": false,
+            "type": "string"
           }
         ],
         "tags": [
@@ -1406,6 +1421,15 @@
             "type": "object",
             "$ref": "#/definitions/v1PayloadSummary"
           }
+        },
+        "nextPageToken": {
+          "type": "string",
+          "description": "Opaque cursor for the next page. Empty when this is the last page."
+        },
+        "totalCount": {
+          "type": "integer",
+          "format": "int32",
+          "description": "Total number of payloads matching the filter (ignoring pagination)."
         }
       }
     },
@@ -1600,6 +1624,10 @@
         },
         "fsync": {
           "type": "boolean"
+        },
+        "targetTier": {
+          "$ref": "#/definitions/v1Tier",
+          "description": "Optional override: spill to this tier instead of the per-payload default.\nMust be a tier below the payload's current tier."
         }
       }
     },
