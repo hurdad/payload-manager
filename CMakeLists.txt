@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(payload_manager LANGUAGES CXX)
+project(payload_manager VERSION 0.1.0 LANGUAGES CXX)
 
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake")
 list(APPEND CMAKE_PREFIX_PATH "${CMAKE_SOURCE_DIR}/cmake")
@@ -191,7 +191,7 @@ else()
 
   set(ARROW_SIMD_LEVEL     "NONE" CACHE STRING "" FORCE)
   set(ARROW_BUILD_STATIC   ON  CACHE BOOL "" FORCE)
-  set(ARROW_BUILD_SHARED   OFF CACHE BOOL "" FORCE)
+  set(ARROW_BUILD_SHARED   ON  CACHE BOOL "" FORCE)
   set(ARROW_BUILD_TESTS    OFF CACHE BOOL "" FORCE)
   set(ARROW_BUILD_BENCHMARKS OFF CACHE BOOL "" FORCE)
   set(ARROW_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
@@ -262,17 +262,26 @@ else()
   unset(_arrow_azure)
   unset(_arrow_hdfs)
 
-  # Arrow built via add_subdirectory does not populate INTERFACE_INCLUDE_DIRECTORIES
-  # on arrow_static.  Set them explicitly so downstream targets get the headers.
-  if(TARGET arrow_static)
-    set_target_properties(arrow_static PROPERTIES
-      INTERFACE_INCLUDE_DIRECTORIES
-        "$<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/third_party/arrow/cpp/src>;$<BUILD_INTERFACE:${CMAKE_BINARY_DIR}/arrow_build/src>")
-  endif()
+  # Arrow built via add_subdirectory does not populate INTERFACE_INCLUDE_DIRECTORIES.
+  # Set them explicitly so downstream targets get the headers.
+  set(_arrow_include_dirs
+    "$<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/third_party/arrow/cpp/src>"
+    "$<BUILD_INTERFACE:${CMAKE_BINARY_DIR}/arrow_build/src>")
+  foreach(_arrow_tgt IN ITEMS arrow_static arrow_shared)
+    if(TARGET ${_arrow_tgt})
+      set_target_properties(${_arrow_tgt} PROPERTIES
+        INTERFACE_INCLUDE_DIRECTORIES "${_arrow_include_dirs}")
+    endif()
+  endforeach()
+  unset(_arrow_include_dirs)
+  unset(_arrow_tgt)
 
   # Create Arrow namespace aliases for in-source (add_subdirectory) builds
   if(TARGET arrow_static AND NOT TARGET Arrow::arrow_static)
     add_library(Arrow::arrow_static ALIAS arrow_static)
+  endif()
+  if(TARGET arrow_shared AND NOT TARGET Arrow::arrow_shared)
+    add_library(Arrow::arrow_shared ALIAS arrow_shared)
   endif()
   if(PAYLOAD_MANAGER_ENABLE_ARROW_CUDA AND TARGET arrow_cuda_static AND NOT TARGET ArrowCUDA::arrow_cuda_static)
     add_library(ArrowCUDA::arrow_cuda_static ALIAS arrow_cuda_static)

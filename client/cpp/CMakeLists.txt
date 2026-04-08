@@ -1,4 +1,6 @@
 find_package(gRPC REQUIRED)
+include(GNUInstallDirs)
+include(CMakePackageConfigHelpers)
 
 option(PAYLOAD_MANAGER_CLIENT_ENABLE_CUDA
         "Enable Arrow CUDA support in the C++ client"
@@ -30,14 +32,26 @@ if(PAYLOAD_MANAGER_CLIENT_ENABLE_CUDA)
     endif()
 endif()
 
-add_library(payload_manager_client STATIC
+# Prefer Arrow shared library so the installed client does not bake Arrow in.
+# Falls back to the static target if only a static build is available.
+if(TARGET Arrow::arrow_shared)
+    set(_arrow_link_target Arrow::arrow_shared)
+elseif(TARGET arrow_shared)
+    set(_arrow_link_target arrow_shared)
+else()
+    set(_arrow_link_target Arrow::arrow_static)
+endif()
+
+# Respects BUILD_SHARED_LIBS (default OFF = static archive).
+add_library(payload_manager_client
         payload_manager_client.cc
 )
 add_library(payload_manager::client ALIAS payload_manager_client)
 
 target_include_directories(payload_manager_client
         PUBLIC
-        ${PROJECT_SOURCE_DIR}
+        $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}>
+        $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
 )
 
 target_compile_definitions(payload_manager_client
@@ -55,10 +69,61 @@ endif()
 target_link_libraries(payload_manager_client
         PUBLIC
         payload_manager::proto
-        Arrow::arrow_static
         payload_manager::grpc
         gRPC::grpc++
+        ${_arrow_link_target}
         ${_payload_manager_client_arrow_cuda_targets}
 )
 
 unset(_payload_manager_client_arrow_cuda_targets)
+unset(_arrow_link_target)
+
+# ---------------------------------------------------------------------------
+# Install rules
+# ---------------------------------------------------------------------------
+
+install(TARGETS payload_manager_client
+        EXPORT PayloadManagerClientTargets
+        LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+        ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
+        RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+        INCLUDES DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
+)
+
+# Public header — installed under client/cpp/ to match the #include path
+# used in-tree: #include "client/cpp/payload_manager_client.h"
+install(FILES payload_manager_client.h
+        DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/client/cpp
+)
+
+# ---------------------------------------------------------------------------
+# CMake package config (find_package(PayloadManagerClientCpp))
+# ---------------------------------------------------------------------------
+
+set(_cmake_dest ${CMAKE_INSTALL_LIBDIR}/cmake/PayloadManagerClientCpp)
+
+install(EXPORT PayloadManagerClientTargets
+        FILE PayloadManagerClientTargets.cmake
+        NAMESPACE payload_manager::
+        DESTINATION ${_cmake_dest}
+)
+
+configure_package_config_file(
+        ${CMAKE_CURRENT_SOURCE_DIR}/PayloadManagerClientCppConfig.cmake.in
+        ${CMAKE_CURRENT_BINARY_DIR}/PayloadManagerClientCppConfig.cmake
+        INSTALL_DESTINATION ${_cmake_dest}
+)
+
+write_basic_package_version_file(
+        ${CMAKE_CURRENT_BINARY_DIR}/PayloadManagerClientCppConfigVersion.cmake
+        VERSION ${CMAKE_PROJECT_VERSION}
+        COMPATIBILITY SameMajorVersion
+)
+
+install(FILES
+        ${CMAKE_CURRENT_BINARY_DIR}/PayloadManagerClientCppConfig.cmake
+        ${CMAKE_CURRENT_BINARY_DIR}/PayloadManagerClientCppConfigVersion.cmake
+        DESTINATION ${_cmake_dest}
+)
+
+unset(_cmake_dest)

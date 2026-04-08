@@ -2,6 +2,8 @@ cmake_minimum_required(VERSION 3.20)
 
 project(payload_manager_api LANGUAGES CXX)
 
+include(GNUInstallDirs)
+
 # ------------------------------------------------------------------------------
 # Dependencies
 # ------------------------------------------------------------------------------
@@ -378,8 +380,9 @@ add_library(payload_manager::proto ALIAS payload_manager_proto)
 
 target_include_directories(payload_manager_proto
         PUBLIC
-        ${GENERATED_DIR}
-        ${PROTO_ROOT}
+        $<BUILD_INTERFACE:${GENERATED_DIR}>
+        $<BUILD_INTERFACE:${PROTO_ROOT}>
+        $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
 )
 
 target_link_libraries(payload_manager_proto
@@ -399,8 +402,9 @@ add_library(payload_manager::grpc ALIAS payload_manager_grpc)
 
 target_include_directories(payload_manager_grpc
         PUBLIC
-        ${GENERATED_DIR}
-        ${PROTO_ROOT}
+        $<BUILD_INTERFACE:${GENERATED_DIR}>
+        $<BUILD_INTERFACE:${PROTO_ROOT}>
+        $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
 )
 
 target_link_libraries(payload_manager_grpc
@@ -410,6 +414,27 @@ target_link_libraries(payload_manager_grpc
 )
 
 add_dependencies(payload_manager_grpc generate_protos)
+
+# ------------------------------------------------------------------------------
+# Install rules
+# ------------------------------------------------------------------------------
+
+# Proto and gRPC static libs (part of the public client interface)
+install(TARGETS payload_manager_proto payload_manager_grpc
+        EXPORT PayloadManagerClientTargets
+        ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
+)
+
+# Generated protobuf/gRPC C++ headers
+install(DIRECTORY ${GENERATED_DIR}/
+        DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
+        FILES_MATCHING PATTERN "*.h"
+)
+
+# Hand-written umbrella header
+install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/payload/manager/v1.hpp
+        DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/payload/manager
+)
 
 # ------------------------------------------------------------------------------
 # Python convenience target

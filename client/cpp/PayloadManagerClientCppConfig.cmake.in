@@ -1,0 +1,11 @@
+@PACKAGE_INIT@
+
+include(CMakeFindDependencyMacro)
+
+find_dependency(Arrow REQUIRED)
+find_dependency(gRPC REQUIRED)
+find_dependency(Protobuf REQUIRED)
+
+include("${CMAKE_CURRENT_LIST_DIR}/PayloadManagerClientTargets.cmake")
+
+check_required_components(PayloadManagerClientCpp)
