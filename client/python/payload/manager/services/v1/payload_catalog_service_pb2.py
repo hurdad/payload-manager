@@ -13,6 +13,7 @@ from google.protobuf import descriptor_pb2
 _sym_db = _symbol_database.Default()
 
 
+from google.api import annotations_pb2 as google_dot_api_dot_annotations__pb2
 from google.protobuf import empty_pb2 as google_dot_protobuf_dot_empty__pb2
 from payload.manager.runtime.v1 import lifecycle_pb2 as payload_dot_manager_dot_runtime_dot_v1_dot_lifecycle__pb2
 from payload.manager.runtime.v1 import tiering_pb2 as payload_dot_manager_dot_runtime_dot_v1_dot_tiering__pb2
@@ -24,9 +25,9 @@ DESCRIPTOR = _descriptor.FileDescriptor(
   name='payload/manager/services/v1/payload_catalog_service.proto',
   package='payload.manager.services.v1',
   syntax='proto3',
-  serialized_pb=_b('\n9payload/manager/services/v1/payload_catalog_service.proto\x12\x1bpayload.manager.services.v1\x1a\x1bgoogle/protobuf/empty.proto\x1a*payload/manager/runtime/v1/lifecycle.proto\x1a(payload/manager/runtime/v1/tiering.proto\x1a(payload/manager/catalog/v1/catalog.proto\x1a(payload/manager/catalog/v1/lineage.proto2\xdd\n\n\x15PayloadCatalogService\x12z\n\x0f\x41llocatePayload\x12\x32.payload.manager.runtime.v1.AllocatePayloadRequest\x1a\x33.payload.manager.runtime.v1.AllocatePayloadResponse\x12t\n\rCommitPayload\x12\x30.payload.manager.runtime.v1.CommitPayloadRequest\x1a\x31.payload.manager.runtime.v1.CommitPayloadResponse\x12K\n\x06\x44\x65lete\x12).payload.manager.runtime.v1.DeleteRequest\x1a\x16.google.protobuf.Empty\x12\x62\n\x07Promote\x12*.payload.manager.runtime.v1.PromoteRequest\x1a+.payload.manager.runtime.v1.PromoteResponse\x12\\\n\x05Spill\x12(.payload.manager.runtime.v1.SpillRequest\x1a).payload.manager.runtime.v1.SpillResponse\x12O\n\x08Prefetch\x12+.payload.manager.runtime.v1.PrefetchRequest\x1a\x16.google.protobuf.Empty\x12\x45\n\x03Pin\x12&.payload.manager.runtime.v1.PinRequest\x1a\x16.google.protobuf.Empty\x12I\n\x05Unpin\x12(.payload.manager.runtime.v1.UnpinRequest\x1a\x16.google.protobuf.Empty\x12S\n\nAddLineage\x12-.payload.manager.catalog.v1.AddLineageRequest\x1a\x16.google.protobuf.Empty\x12k\n\nGetLineage\x12-.payload.manager.catalog.v1.GetLineageRequest\x1a..payload.manager.catalog.v1.GetLineageResponse\x12\x8c\x01\n\x15UpdatePayloadMetadata\x12\x38.payload.manager.catalog.v1.UpdatePayloadMetadataRequest\x1a\x39.payload.manager.catalog.v1.UpdatePayloadMetadataResponse\x12\x9b\x01\n\x1a\x41ppendPayloadMetadataEvent\x12=.payload.manager.catalog.v1.AppendPayloadMetadataEventRequest\x1a>.payload.manager.catalog.v1.AppendPayloadMetadataEventResponse\x12q\n\x0cListPayloads\x12/.payload.manager.runtime.v1.ListPayloadsRequest\x1a\x30.payload.manager.runtime.v1.ListPayloadsResponseb\x06proto3')
+  serialized_pb=_b('\n9payload/manager/services/v1/payload_catalog_service.proto\x12\x1bpayload.manager.services.v1\x1a\x1cgoogle/api/annotations.proto\x1a\x1bgoogle/protobuf/empty.proto\x1a*payload/manager/runtime/v1/lifecycle.proto\x1a(payload/manager/runtime/v1/tiering.proto\x1a(payload/manager/catalog/v1/catalog.proto\x1a(payload/manager/catalog/v1/lineage.proto2\xfe\x0f\n\x15PayloadCatalogService\x12\x93\x01\n\x0f\x41llocatePayload\x12\x32.payload.manager.runtime.v1.AllocatePayloadRequest\x1a\x33.payload.manager.runtime.v1.AllocatePayloadResponse\"\x17\x82\xd3\xe4\x93\x02\x11\"\x0c/v1/payloads:\x01*\x12\x9f\x01\n\rCommitPayload\x12\x30.payload.manager.runtime.v1.CommitPayloadRequest\x1a\x31.payload.manager.runtime.v1.CommitPayloadResponse\")\x82\xd3\xe4\x93\x02#\"\x1e/v1/payloads/{id.value}/commit:\x01*\x12l\n\x06\x44\x65lete\x12).payload.manager.runtime.v1.DeleteRequest\x1a\x16.google.protobuf.Empty\"\x1f\x82\xd3\xe4\x93\x02\x19*\x17/v1/payloads/{id.value}\x12\x8e\x01\n\x07Promote\x12*.payload.manager.runtime.v1.PromoteRequest\x1a+.payload.manager.runtime.v1.PromoteResponse\"*\x82\xd3\xe4\x93\x02$\"\x1f/v1/payloads/{id.value}/promote:\x01*\x12{\n\x05Spill\x12(.payload.manager.runtime.v1.SpillRequest\x1a).payload.manager.runtime.v1.SpillResponse\"\x1d\x82\xd3\xe4\x93\x02\x17\"\x12/v1/payloads/spill:\x01*\x12|\n\x08Prefetch\x12+.payload.manager.runtime.v1.PrefetchRequest\x1a\x16.google.protobuf.Empty\"+\x82\xd3\xe4\x93\x02%\" /v1/payloads/{id.value}/prefetch:\x01*\x12m\n\x03Pin\x12&.payload.manager.runtime.v1.PinRequest\x1a\x16.google.protobuf.Empty\"&\x82\xd3\xe4\x93\x02 \"\x1b/v1/payloads/{id.value}/pin:\x01*\x12n\n\x05Unpin\x12(.payload.manager.runtime.v1.UnpinRequest\x1a\x16.google.protobuf.Empty\"#\x82\xd3\xe4\x93\x02\x1d*\x1b/v1/payloads/{id.value}/pin\x12\x82\x01\n\nAddLineage\x12-.payload.manager.catalog.v1.AddLineageRequest\x1a\x16.google.protobuf.Empty\"-\x82\xd3\xe4\x93\x02\'\"\"/v1/payloads/{child.value}/lineage:\x01*\x12\x94\x01\n\nGetLineage\x12-.payload.manager.catalog.v1.GetLineageRequest\x1a..payload.manager.catalog.v1.GetLineageResponse\"\'\x82\xd3\xe4\x93\x02!\x12\x1f/v1/payloads/{id.value}/lineage\x12\xb9\x01\n\x15UpdatePayloadMetadata\x12\x38.payload.manager.catalog.v1.UpdatePayloadMetadataRequest\x1a\x39.payload.manager.catalog.v1.UpdatePayloadMetadataResponse\"+\x82\xd3\xe4\x93\x02%\x1a /v1/payloads/{id.value}/metadata:\x01*\x12\xcf\x01\n\x1a\x41ppendPayloadMetadataEvent\x12=.payload.manager.catalog.v1.AppendPayloadMetadataEventRequest\x1a>.payload.manager.catalog.v1.AppendPayloadMetadataEventResponse\"2\x82\xd3\xe4\x93\x02,\"\'/v1/payloads/{id.value}/metadata/events:\x01*\x12\x87\x01\n\x0cListPayloads\x12/.payload.manager.runtime.v1.ListPayloadsRequest\x1a\x30.payload.manager.runtime.v1.ListPayloadsResponse\"\x14\x82\xd3\xe4\x93\x02\x0e\x12\x0c/v1/payloads\x12\x9f\x01\n\rImportPayload\x12\x30.payload.manager.runtime.v1.ImportPayloadRequest\x1a\x31.payload.manager.runtime.v1.ImportPayloadResponse\")\x82\xd3\xe4\x93\x02#\"\x1e/v1/payloads/{id.value}/import:\x01*b\x06proto3')
   ,
-  dependencies=[google_dot_protobuf_dot_empty__pb2.DESCRIPTOR,payload_dot_manager_dot_runtime_dot_v1_dot_lifecycle__pb2.DESCRIPTOR,payload_dot_manager_dot_runtime_dot_v1_dot_tiering__pb2.DESCRIPTOR,payload_dot_manager_dot_catalog_dot_v1_dot_catalog__pb2.DESCRIPTOR,payload_dot_manager_dot_catalog_dot_v1_dot_lineage__pb2.DESCRIPTOR,])
+  dependencies=[google_dot_api_dot_annotations__pb2.DESCRIPTOR,google_dot_protobuf_dot_empty__pb2.DESCRIPTOR,payload_dot_manager_dot_runtime_dot_v1_dot_lifecycle__pb2.DESCRIPTOR,payload_dot_manager_dot_runtime_dot_v1_dot_tiering__pb2.DESCRIPTOR,payload_dot_manager_dot_catalog_dot_v1_dot_catalog__pb2.DESCRIPTOR,payload_dot_manager_dot_catalog_dot_v1_dot_lineage__pb2.DESCRIPTOR,])
 
 
 
@@ -40,8 +41,8 @@ _PAYLOADCATALOGSERVICE = _descriptor.ServiceDescriptor(
   file=DESCRIPTOR,
   index=0,
   options=None,
-  serialized_start=290,
-  serialized_end=1663,
+  serialized_start=320,
+  serialized_end=2366,
   methods=[
   _descriptor.MethodDescriptor(
     name='AllocatePayload',
@@ -50,7 +51,7 @@ _PAYLOADCATALOGSERVICE = _descriptor.ServiceDescriptor(
     containing_service=None,
     input_type=payload_dot_manager_dot_runtime_dot_v1_dot_lifecycle__pb2._ALLOCATEPAYLOADREQUEST,
     output_type=payload_dot_manager_dot_runtime_dot_v1_dot_lifecycle__pb2._ALLOCATEPAYLOADRESPONSE,
-    options=None,
+    options=_descriptor._ParseOptions(descriptor_pb2.MethodOptions(), _b('\202\323\344\223\002\021\"\014/v1/payloads:\001*')),
   ),
   _descriptor.MethodDescriptor(
     name='CommitPayload',
@@ -59,7 +60,7 @@ _PAYLOADCATALOGSERVICE = _descriptor.ServiceDescriptor(
     containing_service=None,
     input_type=payload_dot_manager_dot_runtime_dot_v1_dot_lifecycle__pb2._COMMITPAYLOADREQUEST,
     output_type=payload_dot_manager_dot_runtime_dot_v1_dot_lifecycle__pb2._COMMITPAYLOADRESPONSE,
-    options=None,
+    options=_descriptor._ParseOptions(descriptor_pb2.MethodOptions(), _b('\202\323\344\223\002#\"\036/v1/payloads/{id.value}/commit:\001*')),
   ),
   _descriptor.MethodDescriptor(
     name='Delete',
@@ -68,7 +69,7 @@ _PAYLOADCATALOGSERVICE = _descriptor.ServiceDescriptor(
     containing_service=None,
     input_type=payload_dot_manager_dot_runtime_dot_v1_dot_lifecycle__pb2._DELETEREQUEST,
     output_type=google_dot_protobuf_dot_empty__pb2._EMPTY,
-    options=None,
+    options=_descriptor._ParseOptions(descriptor_pb2.MethodOptions(), _b('\202\323\344\223\002\031*\027/v1/payloads/{id.value}')),
   ),
   _descriptor.MethodDescriptor(
     name='Promote',
@@ -77,7 +78,7 @@ _PAYLOADCATALOGSERVICE = _descriptor.ServiceDescriptor(
     containing_service=None,
     input_type=payload_dot_manager_dot_runtime_dot_v1_dot_tiering__pb2._PROMOTEREQUEST,
     output_type=payload_dot_manager_dot_runtime_dot_v1_dot_tiering__pb2._PROMOTERESPONSE,
-    options=None,
+    options=_descriptor._ParseOptions(descriptor_pb2.MethodOptions(), _b('\202\323\344\223\002$\"\037/v1/payloads/{id.value}/promote:\001*')),
   ),
   _descriptor.MethodDescriptor(
     name='Spill',
@@ -86,7 +87,7 @@ _PAYLOADCATALOGSERVICE = _descriptor.ServiceDescriptor(
     containing_service=None,
     input_type=payload_dot_manager_dot_runtime_dot_v1_dot_tiering__pb2._SPILLREQUEST,
     output_type=payload_dot_manager_dot_runtime_dot_v1_dot_tiering__pb2._SPILLRESPONSE,
-    options=None,
+    options=_descriptor._ParseOptions(descriptor_pb2.MethodOptions(), _b('\202\323\344\223\002\027\"\022/v1/payloads/spill:\001*')),
   ),
   _descriptor.MethodDescriptor(
     name='Prefetch',
@@ -95,7 +96,7 @@ _PAYLOADCATALOGSERVICE = _descriptor.ServiceDescriptor(
     containing_service=None,
     input_type=payload_dot_manager_dot_runtime_dot_v1_dot_tiering__pb2._PREFETCHREQUEST,
     output_type=google_dot_protobuf_dot_empty__pb2._EMPTY,
-    options=None,
+    options=_descriptor._ParseOptions(descriptor_pb2.MethodOptions(), _b('\202\323\344\223\002%\" /v1/payloads/{id.value}/prefetch:\001*')),
   ),
   _descriptor.MethodDescriptor(
     name='Pin',
@@ -104,7 +105,7 @@ _PAYLOADCATALOGSERVICE = _descriptor.ServiceDescriptor(
     containing_service=None,
     input_type=payload_dot_manager_dot_runtime_dot_v1_dot_tiering__pb2._PINREQUEST,
     output_type=google_dot_protobuf_dot_empty__pb2._EMPTY,
-    options=None,
+    options=_descriptor._ParseOptions(descriptor_pb2.MethodOptions(), _b('\202\323\344\223\002 \"\033/v1/payloads/{id.value}/pin:\001*')),
   ),
   _descriptor.MethodDescriptor(
     name='Unpin',
@@ -113,7 +114,7 @@ _PAYLOADCATALOGSERVICE = _descriptor.ServiceDescriptor(
     containing_service=None,
     input_type=payload_dot_manager_dot_runtime_dot_v1_dot_tiering__pb2._UNPINREQUEST,
     output_type=google_dot_protobuf_dot_empty__pb2._EMPTY,
-    options=None,
+    options=_descriptor._ParseOptions(descriptor_pb2.MethodOptions(), _b('\202\323\344\223\002\035*\033/v1/payloads/{id.value}/pin')),
   ),
   _descriptor.MethodDescriptor(
     name='AddLineage',
@@ -122,7 +123,7 @@ _PAYLOADCATALOGSERVICE = _descriptor.ServiceDescriptor(
     containing_service=None,
     input_type=payload_dot_manager_dot_catalog_dot_v1_dot_lineage__pb2._ADDLINEAGEREQUEST,
     output_type=google_dot_protobuf_dot_empty__pb2._EMPTY,
-    options=None,
+    options=_descriptor._ParseOptions(descriptor_pb2.MethodOptions(), _b('\202\323\344\223\002\'\"\"/v1/payloads/{child.value}/lineage:\001*')),
   ),
   _descriptor.MethodDescriptor(
     name='GetLineage',
@@ -131,7 +132,7 @@ _PAYLOADCATALOGSERVICE = _descriptor.ServiceDescriptor(
     containing_service=None,
     input_type=payload_dot_manager_dot_catalog_dot_v1_dot_lineage__pb2._GETLINEAGEREQUEST,
     output_type=payload_dot_manager_dot_catalog_dot_v1_dot_lineage__pb2._GETLINEAGERESPONSE,
-    options=None,
+    options=_descriptor._ParseOptions(descriptor_pb2.MethodOptions(), _b('\202\323\344\223\002!\022\037/v1/payloads/{id.value}/lineage')),
   ),
   _descriptor.MethodDescriptor(
     name='UpdatePayloadMetadata',
@@ -140,7 +141,7 @@ _PAYLOADCATALOGSERVICE = _descriptor.ServiceDescriptor(
     containing_service=None,
     input_type=payload_dot_manager_dot_catalog_dot_v1_dot_catalog__pb2._UPDATEPAYLOADMETADATAREQUEST,
     output_type=payload_dot_manager_dot_catalog_dot_v1_dot_catalog__pb2._UPDATEPAYLOADMETADATARESPONSE,
-    options=None,
+    options=_descriptor._ParseOptions(descriptor_pb2.MethodOptions(), _b('\202\323\344\223\002%\032 /v1/payloads/{id.value}/metadata:\001*')),
   ),
   _descriptor.MethodDescriptor(
     name='AppendPayloadMetadataEvent',
@@ -149,7 +150,7 @@ _PAYLOADCATALOGSERVICE = _descriptor.ServiceDescriptor(
     containing_service=None,
     input_type=payload_dot_manager_dot_catalog_dot_v1_dot_catalog__pb2._APPENDPAYLOADMETADATAEVENTREQUEST,
     output_type=payload_dot_manager_dot_catalog_dot_v1_dot_catalog__pb2._APPENDPAYLOADMETADATAEVENTRESPONSE,
-    options=None,
+    options=_descriptor._ParseOptions(descriptor_pb2.MethodOptions(), _b('\202\323\344\223\002,\"\'/v1/payloads/{id.value}/metadata/events:\001*')),
   ),
   _descriptor.MethodDescriptor(
     name='ListPayloads',
@@ -158,7 +159,16 @@ _PAYLOADCATALOGSERVICE = _descriptor.ServiceDescriptor(
     containing_service=None,
     input_type=payload_dot_manager_dot_runtime_dot_v1_dot_lifecycle__pb2._LISTPAYLOADSREQUEST,
     output_type=payload_dot_manager_dot_runtime_dot_v1_dot_lifecycle__pb2._LISTPAYLOADSRESPONSE,
-    options=None,
+    options=_descriptor._ParseOptions(descriptor_pb2.MethodOptions(), _b('\202\323\344\223\002\016\022\014/v1/payloads')),
+  ),
+  _descriptor.MethodDescriptor(
+    name='ImportPayload',
+    full_name='payload.manager.services.v1.PayloadCatalogService.ImportPayload',
+    index=13,
+    containing_service=None,
+    input_type=payload_dot_manager_dot_runtime_dot_v1_dot_lifecycle__pb2._IMPORTPAYLOADREQUEST,
+    output_type=payload_dot_manager_dot_runtime_dot_v1_dot_lifecycle__pb2._IMPORTPAYLOADRESPONSE,
+    options=_descriptor._ParseOptions(descriptor_pb2.MethodOptions(), _b('\202\323\344\223\002#\"\036/v1/payloads/{id.value}/import:\001*')),
   ),
 ])
 _sym_db.RegisterServiceDescriptor(_PAYLOADCATALOGSERVICE)

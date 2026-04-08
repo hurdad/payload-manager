@@ -46,6 +46,9 @@ class CatalogServer final : public payload::manager::v1::PayloadCatalogService::
   ::grpc::Status ListPayloads(::grpc::ServerContext*, const payload::manager::v1::ListPayloadsRequest*,
                               payload::manager::v1::ListPayloadsResponse*) override;
 
+  ::grpc::Status ImportPayload(::grpc::ServerContext*, const payload::manager::v1::ImportPayloadRequest*,
+                               payload::manager::v1::ImportPayloadResponse*) override;
+
  private:
   std::shared_ptr<payload::service::CatalogService> service_;
 };

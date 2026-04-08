@@ -7,6 +7,7 @@
 #include "internal/db/api/result.hpp"
 #include "internal/db/model/payload_record.hpp"
 #include "internal/lease/lease_manager.hpp"
+#include "internal/storage/object/object_arrow_store.hpp"
 #include "internal/storage/ram/ram_arrow_store.hpp"
 #include "internal/storage/storage_backend.hpp"
 #include "payload/manager/catalog/v1/archive_metadata.pb.h"
@@ -342,7 +343,10 @@ PayloadDescriptor PayloadManager::Allocate(uint64_t size_bytes, Tier preferred, 
   *desc.mutable_created_at() = payload::util::ToProto(payload::util::Now());
 
   const auto storage_it = storage_.find(preferred);
-  if (storage_it != storage_.end() && storage_it->second) {
+  if (preferred == TIER_OBJECT) {
+    // Client uploads bytes directly to object storage via GetObjectUploadPath().
+    // No server-side allocation; no location set in the descriptor.
+  } else if (storage_it != storage_.end() && storage_it->second) {
     try {
       storage_it->second->Allocate(desc.payload_id(), size_bytes);
     } catch (...) {
@@ -358,8 +362,7 @@ PayloadDescriptor PayloadManager::Allocate(uint64_t size_bytes, Tier preferred, 
         gpu->set_length_bytes(size_bytes);
         break;
       }
-      case TIER_DISK:
-      case TIER_OBJECT: {
+      case TIER_DISK: {
         auto* disk = desc.mutable_disk();
         disk->set_path(payload::util::ToString(Key(desc.payload_id())) + ".bin");
         disk->set_offset_bytes(0);
@@ -509,6 +512,86 @@ PayloadDescriptor PayloadManager::Commit(const PayloadID& id) {
     metadata_cache_->Put(id, minimal);
   }
   return hydrated;
+}
+
+std::string PayloadManager::GetObjectUploadPath(const PayloadID& id) const {
+  const auto storage_it = storage_.find(TIER_OBJECT);
+  if (storage_it == storage_.end() || !storage_it->second) {
+    return {};
+  }
+  const auto* obj = dynamic_cast<const payload::storage::ObjectArrowStore*>(storage_it->second.get());
+  if (!obj) {
+    return {};
+  }
+  return obj->GetUploadUri(id);
+}
+
+void PayloadManager::Import(const PayloadID& id, uint64_t size_bytes) {
+  const auto key = Key(id);
+
+  auto tx     = repository_->Begin();
+  auto record = repository_->GetPayload(*tx, key);
+  if (!record.has_value()) {
+    throw payload::util::NotFound("import payload: payload not found");
+  }
+  if (record->state != PAYLOAD_STATE_ALLOCATED) {
+    throw payload::util::InvalidState("import payload: payload must be in allocated state before import");
+  }
+  if (static_cast<Tier>(record->tier) != TIER_OBJECT) {
+    throw payload::util::InvalidState("import payload: only TIER_OBJECT payloads can be imported via ImportPayload");
+  }
+
+  // Reconcile size: adjust accounting if actual upload size differs from allocated.
+  const int64_t size_delta = static_cast<int64_t>(size_bytes) - static_cast<int64_t>(record->size_bytes);
+  if (size_bytes > 0 && size_delta != 0) {
+    record->size_bytes = size_bytes;
+  }
+
+  record->state = PAYLOAD_STATE_DURABLE;
+  record->version++;
+  ThrowIfDbError(repository_->UpdatePayload(*tx, *record), "import payload");
+  const auto parents = repository_->GetParents(*tx, payload::util::ToString(key));
+  tx->Commit();
+
+  const auto descriptor = ToPayloadDescriptor(*record, shm_prefix_);
+  auto       hydrated   = descriptor;
+  PopulateLocation(&hydrated);
+  CacheSnapshot(hydrated);
+
+  const auto storage_it = storage_.find(TIER_OBJECT);
+  if (storage_it != storage_.end() && storage_it->second) {
+    try {
+      auto sidecar = BuildSidecar(hydrated);
+      for (const auto& p : parents) {
+        auto* edge = sidecar.add_lineage();
+        try {
+          *edge->mutable_parent() = payload::util::ToProto(payload::util::FromString(p.parent_id));
+        } catch (...) {
+          edge->mutable_parent()->set_value(p.parent_id);
+        }
+        edge->set_operation(p.operation);
+        edge->set_role(p.role);
+        if (!p.parameters.empty()) {
+          edge->set_parameters(p.parameters);
+        }
+      }
+      storage_it->second->WriteSidecar(id, sidecar);
+    } catch (const std::exception& e) {
+      PAYLOAD_LOG_WARN("import: sidecar write failed (non-fatal)",
+                       {payload::observability::StringField("payload_id", payload::util::ToString(key)),
+                        payload::observability::StringField("error", e.what())});
+    }
+  }
+
+  if (metadata_cache_) {
+    payload::manager::v1::PayloadMetadata minimal;
+    *minimal.mutable_id() = id;
+    metadata_cache_->Put(id, minimal);
+  }
+
+  if (size_bytes > 0 && size_delta != 0) {
+    UpdateTierBytes(TIER_OBJECT, size_delta);
+  }
 }
 
 void PayloadManager::Delete(const PayloadID& id, bool force) {

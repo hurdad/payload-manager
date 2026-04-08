@@ -36,6 +36,8 @@ class CatalogService {
 
   payload::manager::v1::ListPayloadsResponse ListPayloads(const payload::manager::v1::ListPayloadsRequest& req);
 
+  void Import(const payload::manager::v1::ImportPayloadRequest& req);
+
  private:
   ServiceContext ctx_;
 };

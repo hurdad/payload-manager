@@ -204,4 +204,29 @@ service PayloadCatalogService {
       get: "/v1/payloads"
     };
   }
+
+  // ---------------------------------------------------------------------------
+  // Object-tier client upload
+  // ---------------------------------------------------------------------------
+
+  /*
+    Register an externally-uploaded object-tier payload as DURABLE.
+
+    The client:
+      1. Calls AllocatePayload with preferred_tier=TIER_OBJECT and receives
+         object_upload_path in the response.
+      2. Uploads payload bytes directly to object_upload_path via Arrow
+         filesystem (no bytes transit gRPC).
+      3. Calls ImportPayload to hand ownership to the manager.
+
+    The manager writes the sidecar metadata and transitions the payload
+    to PAYLOAD_STATE_DURABLE.
+  */
+  rpc ImportPayload(payload.manager.runtime.v1.ImportPayloadRequest)
+      returns (payload.manager.runtime.v1.ImportPayloadResponse) {
+    option (google.api.http) = {
+      post: "/v1/payloads/{id.value}/import"
+      body: "*"
+    };
+  }
 }

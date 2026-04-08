@@ -97,6 +97,11 @@ class PayloadCatalogServiceStub(object):
         request_serializer=payload_dot_manager_dot_runtime_dot_v1_dot_lifecycle__pb2.ListPayloadsRequest.SerializeToString,
         response_deserializer=payload_dot_manager_dot_runtime_dot_v1_dot_lifecycle__pb2.ListPayloadsResponse.FromString,
         )
+    self.ImportPayload = channel.unary_unary(
+        '/payload.manager.services.v1.PayloadCatalogService/ImportPayload',
+        request_serializer=payload_dot_manager_dot_runtime_dot_v1_dot_lifecycle__pb2.ImportPayloadRequest.SerializeToString,
+        response_deserializer=payload_dot_manager_dot_runtime_dot_v1_dot_lifecycle__pb2.ImportPayloadResponse.FromString,
+        )
 
 
 class PayloadCatalogServiceServicer(object):
@@ -257,6 +262,28 @@ class PayloadCatalogServiceServicer(object):
     context.set_details('Method not implemented!')
     raise NotImplementedError('Method not implemented!')
 
+  def ImportPayload(self, request, context):
+    """---------------------------------------------------------------------------
+    Object-tier client upload
+    ---------------------------------------------------------------------------
+
+
+    Register an externally-uploaded object-tier payload as DURABLE.
+
+    The client:
+    1. Calls AllocatePayload with preferred_tier=TIER_OBJECT and receives
+    object_upload_path in the response.
+    2. Uploads payload bytes directly to object_upload_path via Arrow
+    filesystem (no bytes transit gRPC).
+    3. Calls ImportPayload to hand ownership to the manager.
+
+    The manager writes the sidecar metadata and transitions the payload
+    to PAYLOAD_STATE_DURABLE.
+    """
+    context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+    context.set_details('Method not implemented!')
+    raise NotImplementedError('Method not implemented!')
+
 
 def add_PayloadCatalogServiceServicer_to_server(servicer, server):
   rpc_method_handlers = {
@@ -324,6 +351,11 @@ def add_PayloadCatalogServiceServicer_to_server(servicer, server):
           servicer.ListPayloads,
           request_deserializer=payload_dot_manager_dot_runtime_dot_v1_dot_lifecycle__pb2.ListPayloadsRequest.FromString,
           response_serializer=payload_dot_manager_dot_runtime_dot_v1_dot_lifecycle__pb2.ListPayloadsResponse.SerializeToString,
+      ),
+      'ImportPayload': grpc.unary_unary_rpc_method_handler(
+          servicer.ImportPayload,
+          request_deserializer=payload_dot_manager_dot_runtime_dot_v1_dot_lifecycle__pb2.ImportPayloadRequest.FromString,
+          response_serializer=payload_dot_manager_dot_runtime_dot_v1_dot_lifecycle__pb2.ImportPayloadResponse.SerializeToString,
       ),
   }
   generic_handler = grpc.method_handlers_generic_handler(

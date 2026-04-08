@@ -66,6 +66,18 @@ std::string ObjectArrowStore::SidecarObjectPath(const PayloadID& id) const {
   return root_path_ + "/" + key + ".meta.json";
 }
 
+std::string ObjectArrowStore::GetUploadUri(const PayloadID& id) const {
+  const auto key = Key(id);
+  common::ValidatePayloadId(key);
+  std::string path;
+  if (!root_path_.empty() && root_path_.back() == '/') {
+    path = root_path_ + key + ".bin";
+  } else {
+    path = root_path_ + "/" + key + ".bin";
+  }
+  return is_s3_ ? ("s3://" + path) : path;
+}
+
 /*
   Object store cannot allocate writable buffers.
 */

@@ -31,6 +31,7 @@ from payload_manager_client import (
     payload_id_from_uuid,
 )
 
+import pyarrow as pa
 from payload.manager.core.v1 import id_pb2, placement_pb2, policy_pb2, types_pb2
 from payload.manager.runtime.v1 import lease_pb2, lifecycle_pb2
 
@@ -244,7 +245,7 @@ class TestAllocateWritableBuffer(unittest.TestCase):
         self.assertEqual(req.size_bytes, 64)
         self.assertEqual(req.preferred_tier, types_pb2.TIER_RAM)
 
-    def test_passes_ttl_and_persist(self):
+    def test_passes_ttl_and_no_evict(self):
         client, _ = _make_client()
 
         pid = _make_payload_id()
@@ -258,11 +259,11 @@ class TestAllocateWritableBuffer(unittest.TestCase):
              patch("os.close"), \
              patch("payload_manager_client.mmap.mmap", return_value=MagicMock()), \
              patch("payload_manager_client.pa.py_buffer", return_value=MagicMock()):
-            client.AllocateWritableBuffer(32, ttl_ms=5000, persist=True)
+            client.AllocateWritableBuffer(32, ttl_ms=5000, no_evict=True)
 
         req = client._catalog_stub.AllocatePayload.call_args[0][0]
         self.assertEqual(req.ttl_ms, 5000)
-        self.assertTrue(req.persist)
+        self.assertTrue(req.no_evict)
 
     def test_raises_when_no_location(self):
         client, _ = _make_client()
@@ -411,7 +412,7 @@ class TestObjectBuffer(unittest.TestCase):
         desc = _make_object_descriptor(path="s3://bucket/payloads/test.bin", length_bytes=64)
         mock_fs, mock_file = self._make_mock_fs()
 
-        with patch("pyarrow.fs.FileSystem.from_uri", return_value=(mock_fs, "bucket/payloads/test.bin")):
+        with patch("payload_manager_client._fs_from_uri", return_value=(mock_fs, "bucket/payloads/test.bin")):
             mmap_obj, buf = client._OpenReadableBuffer(desc)
 
         self.assertIsNone(mmap_obj)
@@ -423,7 +424,7 @@ class TestObjectBuffer(unittest.TestCase):
         desc = _make_object_descriptor(path="s3://bucket/payloads/test.bin", length_bytes=0)
         mock_fs, mock_file = self._make_mock_fs()
 
-        with patch("pyarrow.fs.FileSystem.from_uri", return_value=(mock_fs, "bucket/payloads/test.bin")):
+        with patch("payload_manager_client._fs_from_uri", return_value=(mock_fs, "bucket/payloads/test.bin")):
             client._OpenReadableBuffer(desc)
 
         mock_file.read_buffer.assert_called_once_with(None)
@@ -444,7 +445,7 @@ class TestObjectBuffer(unittest.TestCase):
         desc = _make_object_descriptor(path="s3://bucket/payloads/test.bin", length_bytes=128)
         mock_fs, mock_file = self._make_mock_fs()
 
-        with patch("pyarrow.fs.FileSystem.from_uri", return_value=(mock_fs, "bucket/payloads/test.bin")):
+        with patch("payload_manager_client._fs_from_uri", return_value=(mock_fs, "bucket/payloads/test.bin")):
             client._OpenReadableBuffer(desc)
 
         mock_file.read_buffer.assert_called_once_with(128)
@@ -461,7 +462,7 @@ class TestObjectBuffer(unittest.TestCase):
         )
 
         mock_fs, mock_file = self._make_mock_fs()
-        with patch("pyarrow.fs.FileSystem.from_uri", return_value=(mock_fs, "bucket/payloads/test.bin")):
+        with patch("payload_manager_client._fs_from_uri", return_value=(mock_fs, "bucket/payloads/test.bin")):
             result = client.AcquireReadableBuffer(pid, min_tier=types_pb2.TIER_OBJECT)
 
         self.assertIsInstance(result, ReadablePayload)
@@ -566,6 +567,243 @@ class TestTraceMetadataForwarding(unittest.TestCase):
             lease_pb2.AcquireReadLeaseRequest(),
             lambda c, r: c.AcquireReadLease(r),
         )
+
+
+# ---------------------------------------------------------------------------
+# Object-tier write: AllocateWritableBuffer with TIER_OBJECT
+# ---------------------------------------------------------------------------
+
+class TestObjectTierAllocate(unittest.TestCase):
+    def _make_object_alloc_response(self, size_bytes: int = 128) -> lifecycle_pb2.AllocatePayloadResponse:
+        """Response with object_upload_path set — no location in descriptor."""
+        pid = _make_payload_id()
+        desc = placement_pb2.PayloadDescriptor(
+            tier=types_pb2.TIER_OBJECT,
+            payload_id=pid,
+        )
+        return lifecycle_pb2.AllocatePayloadResponse(
+            payload_descriptor=desc,
+            object_upload_path=f"s3://bucket/payloads/{pid.value.hex()}.bin",
+        )
+
+    def test_returns_writable_payload_with_bytearray_buffer(self):
+        client, _ = _make_client()
+        resp = self._make_object_alloc_response(128)
+        client._catalog_stub.AllocatePayload.return_value = resp
+
+        result = client.AllocateWritableBuffer(128, preferred_tier=types_pb2.TIER_OBJECT)
+
+        self.assertIsInstance(result, WritablePayload)
+        self.assertIsInstance(result.buffer, bytearray)
+        self.assertEqual(len(result.buffer), 128)
+
+    def test_buffer_is_writable(self):
+        client, _ = _make_client()
+        resp = self._make_object_alloc_response(64)
+        client._catalog_stub.AllocatePayload.return_value = resp
+
+        result = client.AllocateWritableBuffer(64, preferred_tier=types_pb2.TIER_OBJECT)
+
+        result.buffer[0] = 0xDE
+        result.buffer[1] = 0xAD
+        self.assertEqual(result.buffer[0], 0xDE)
+        self.assertEqual(result.buffer[1], 0xAD)
+
+    def test_mmap_obj_is_none(self):
+        client, _ = _make_client()
+        resp = self._make_object_alloc_response(32)
+        client._catalog_stub.AllocatePayload.return_value = resp
+
+        result = client.AllocateWritableBuffer(32, preferred_tier=types_pb2.TIER_OBJECT)
+
+        self.assertIsNone(result.mmap_obj)
+
+    def test_descriptor_is_preserved(self):
+        client, _ = _make_client()
+        resp = self._make_object_alloc_response(64)
+        expected_id = resp.payload_descriptor.payload_id.value
+        client._catalog_stub.AllocatePayload.return_value = resp
+
+        result = client.AllocateWritableBuffer(64, preferred_tier=types_pb2.TIER_OBJECT)
+
+        self.assertEqual(result.descriptor.payload_id.value, expected_id)
+
+    def test_upload_path_registered_for_commit(self):
+        """The upload path must be stored so CommitPayload can use it."""
+        client, _ = _make_client()
+        resp = self._make_object_alloc_response(64)
+        uuid_hex = resp.payload_descriptor.payload_id.value.hex()
+        client._catalog_stub.AllocatePayload.return_value = resp
+
+        client.AllocateWritableBuffer(64, preferred_tier=types_pb2.TIER_OBJECT)
+
+        with client._pending_uploads_lock:
+            self.assertIn(uuid_hex, client._pending_object_uploads)
+            entry = client._pending_object_uploads[uuid_hex]
+        self.assertEqual(entry.upload_path, resp.object_upload_path)
+
+    def test_no_validate_has_location_called(self):
+        """_ValidateHasLocation must NOT be called for object-tier responses."""
+        client, _ = _make_client()
+        resp = self._make_object_alloc_response(64)
+        client._catalog_stub.AllocatePayload.return_value = resp
+
+        with patch.object(PayloadClient, "_ValidateHasLocation") as mock_validate:
+            client.AllocateWritableBuffer(64, preferred_tier=types_pb2.TIER_OBJECT)
+        mock_validate.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# Object-tier write: CommitPayload for TIER_OBJECT
+# ---------------------------------------------------------------------------
+
+class TestObjectTierCommit(unittest.TestCase):
+    def _setup_pending_upload(self, client: PayloadClient, size: int = 64):
+        """Register a fake pending upload and return (payload_id, upload_path, buffer)."""
+        import uuid as uuidlib
+        raw = uuidlib.uuid4().bytes
+        pid = id_pb2.PayloadID(value=raw)
+        buf = bytearray(size)
+        upload_path = f"s3://bucket/payloads/{raw.hex()}.bin"
+        from payload_manager_client import _PendingObjectUpload
+        with client._pending_uploads_lock:
+            client._pending_object_uploads[raw.hex()] = _PendingObjectUpload(
+                upload_path=upload_path, buffer=buf
+            )
+        return pid, upload_path, buf
+
+    def test_calls_import_payload_rpc_not_commit_payload(self):
+        client, _ = _make_client()
+        pid, upload_path, buf = self._setup_pending_upload(client)
+        client._catalog_stub.ImportPayload.return_value = MagicMock()
+
+        mock_fs = MagicMock()
+        mock_stream = MagicMock()
+        mock_stream.__enter__ = MagicMock(return_value=mock_stream)
+        mock_stream.__exit__ = MagicMock(return_value=False)
+        mock_fs.open_output_stream.return_value = mock_stream
+
+        with patch("payload_manager_client._fs_from_uri", return_value=(mock_fs, "bucket/payloads/x.bin")):
+            client.CommitPayload(pid)
+
+        client._catalog_stub.ImportPayload.assert_called_once()
+        client._catalog_stub.CommitPayload.assert_not_called()
+
+    def test_import_request_contains_correct_payload_id_and_size(self):
+        client, _ = _make_client()
+        pid, upload_path, buf = self._setup_pending_upload(client, size=128)
+        client._catalog_stub.ImportPayload.return_value = MagicMock()
+
+        mock_fs = MagicMock()
+        mock_stream = MagicMock()
+        mock_stream.__enter__ = MagicMock(return_value=mock_stream)
+        mock_stream.__exit__ = MagicMock(return_value=False)
+        mock_fs.open_output_stream.return_value = mock_stream
+
+        with patch("payload_manager_client._fs_from_uri", return_value=(mock_fs, "bucket/payloads/x.bin")):
+            client.CommitPayload(pid)
+
+        req = client._catalog_stub.ImportPayload.call_args[0][0]
+        self.assertEqual(req.id.value, pid.value)
+        self.assertEqual(req.size_bytes, 128)
+
+    def test_bytes_written_to_object_path(self):
+        client, _ = _make_client()
+        pid, upload_path, buf = self._setup_pending_upload(client, size=64)
+        for i in range(64):
+            buf[i] = i & 0xFF
+        client._catalog_stub.ImportPayload.return_value = MagicMock()
+
+        written = bytearray()
+
+        mock_stream = MagicMock()
+        mock_stream.__enter__ = MagicMock(return_value=mock_stream)
+        mock_stream.__exit__ = MagicMock(return_value=False)
+        mock_stream.write.side_effect = lambda data: written.extend(data)
+
+        mock_fs = MagicMock()
+        mock_fs.open_output_stream.return_value = mock_stream
+
+        with patch("payload_manager_client._fs_from_uri", return_value=(mock_fs, "bucket/payloads/x.bin")):
+            client.CommitPayload(pid)
+
+        self.assertEqual(written, bytes(buf))
+
+    def test_pending_entry_removed_after_successful_commit(self):
+        client, _ = _make_client()
+        pid, upload_path, buf = self._setup_pending_upload(client)
+        client._catalog_stub.ImportPayload.return_value = MagicMock()
+
+        mock_fs = MagicMock()
+        mock_stream = MagicMock()
+        mock_stream.__enter__ = MagicMock(return_value=mock_stream)
+        mock_stream.__exit__ = MagicMock(return_value=False)
+        mock_fs.open_output_stream.return_value = mock_stream
+
+        with patch("payload_manager_client._fs_from_uri", return_value=(mock_fs, "bucket/payloads/x.bin")):
+            client.CommitPayload(pid)
+
+        with client._pending_uploads_lock:
+            self.assertNotIn(pid.value.hex(), client._pending_object_uploads)
+
+    def test_best_effort_delete_called_when_import_rpc_fails(self):
+        client, _ = _make_client()
+        pid, upload_path, buf = self._setup_pending_upload(client)
+        client._catalog_stub.ImportPayload.side_effect = Exception("rpc failed")
+
+        mock_fs = MagicMock()
+        mock_stream = MagicMock()
+        mock_stream.__enter__ = MagicMock(return_value=mock_stream)
+        mock_stream.__exit__ = MagicMock(return_value=False)
+        mock_fs.open_output_stream.return_value = mock_stream
+        # delete_file used for best-effort cleanup
+        mock_fs.delete_file = MagicMock()
+
+        with patch("payload_manager_client._fs_from_uri", return_value=(mock_fs, "bucket/payloads/x.bin")):
+            with self.assertRaises(Exception):
+                client.CommitPayload(pid)
+
+        mock_fs.delete_file.assert_called_once()
+
+    def test_non_object_tier_falls_through_to_commit_rpc(self):
+        """CommitPayload with no pending entry must call CommitPayload RPC."""
+        client, _ = _make_client()
+        pid = _make_payload_id()
+        client._catalog_stub.CommitPayload.return_value = lifecycle_pb2.CommitPayloadResponse()
+
+        client.CommitPayload(pid)
+
+        client._catalog_stub.CommitPayload.assert_called_once()
+        client._catalog_stub.ImportPayload.assert_not_called()
+
+    def test_uses_preconfigured_object_fs_instead_of_from_uri(self):
+        """When object_fs is set, from_uri must not be called."""
+        mock_fs = MagicMock()
+        mock_stream = MagicMock()
+        mock_stream.__enter__ = MagicMock(return_value=mock_stream)
+        mock_stream.__exit__ = MagicMock(return_value=False)
+        mock_fs.open_output_stream.return_value = mock_stream
+
+        channel = MagicMock()
+        client = PayloadClient(channel, object_fs=mock_fs)
+        client._catalog_stub = MagicMock()
+        client._data_stub = MagicMock()
+
+        pid, upload_path, buf = self._setup_pending_upload(client)
+        client._catalog_stub.ImportPayload.return_value = MagicMock()
+
+        with patch("payload_manager_client._fs_from_uri") as mock_from_uri:
+            client.CommitPayload(pid)
+
+        mock_from_uri.assert_not_called()
+        mock_fs.open_output_stream.assert_called_once()
+
+    def test_object_fs_stored_on_client(self):
+        """Constructor overload with object_fs must store the filesystem."""
+        mock_fs = MagicMock()
+        channel = MagicMock()
+        client = PayloadClient(channel, object_fs=mock_fs)
+        self.assertIs(client._object_fs, mock_fs)
 
 
 if __name__ == "__main__":

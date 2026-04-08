@@ -20,7 +20,21 @@ message AllocatePayloadRequest {
 
 message AllocatePayloadResponse {
   payload.manager.core.v1.PayloadDescriptor payload_descriptor = 1;
+  // Only set when preferred_tier == TIER_OBJECT.
+  // Clients must upload payload bytes to this URI before calling ImportPayload.
+  // No bytes are transmitted via gRPC.
+  string object_upload_path = 2;
 }
+
+// Register an externally-uploaded object-tier payload with the manager.
+// The client uploads bytes to object_upload_path (from AllocatePayloadResponse)
+// then calls this RPC to transfer ownership. No bytes transit gRPC.
+message ImportPayloadRequest {
+  payload.manager.core.v1.PayloadID id = 1;
+  uint64 size_bytes = 2;
+}
+
+message ImportPayloadResponse {}
 
 message CommitPayloadRequest {
   payload.manager.core.v1.PayloadID id = 1;

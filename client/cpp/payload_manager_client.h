@@ -1,6 +1,7 @@
 #pragma once
 
 #include <arrow/buffer.h>
+#include <arrow/filesystem/filesystem.h>
 #include <arrow/result.h>
 #include <grpcpp/channel.h>
 #include <grpcpp/support/sync_stream.h>
@@ -45,6 +46,12 @@ class PayloadClient {
 
   /// Construct a client from a shared gRPC channel.
   explicit PayloadClient(std::shared_ptr<grpc::Channel> channel);
+
+  /// Construct a client with a pre-configured Arrow filesystem for object-tier uploads.
+  /// Use this overload to supply custom S3/GCS credentials, endpoint overrides (e.g. MinIO),
+  /// or any other Arrow-supported filesystem built from FileSystemOptions proto config.
+  /// When object_fs is null the default credential chain (env vars / AWS profile) is used.
+  PayloadClient(std::shared_ptr<grpc::Channel> channel, std::shared_ptr<arrow::fs::FileSystem> object_fs);
 
   /// Allocate a payload and open a writable Arrow buffer for it.
   arrow::Result<WritablePayload> AllocateWritableBuffer(uint64_t                   size_bytes,
@@ -153,6 +160,8 @@ class PayloadClient {
   std::unique_ptr<payload::manager::v1::PayloadAdminService::Stub> admin_stub_;
   /// Stream service RPC stub.
   std::unique_ptr<payload::manager::v1::PayloadStreamService::Stub> stream_stub_;
+  /// Arrow filesystem for object-tier uploads. Null = use FileSystemFromUri default chain.
+  std::shared_ptr<arrow::fs::FileSystem> object_fs_;
 };
 
 } // namespace payload::manager::client

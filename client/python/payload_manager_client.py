@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 import mmap
 import os
+import threading
 from typing import Any, Iterator, Optional, Union
 import uuid as uuidlib
 
@@ -31,6 +32,13 @@ from payload.manager.services.v1 import payload_stream_service_pb2_grpc
 PayloadIdLike = Union[id_pb2.PayloadID, bytes, bytearray, memoryview, str, uuidlib.UUID]
 
 
+@dataclass
+class _PendingObjectUpload:
+    """Tracks a TIER_OBJECT payload that has been allocated but not yet uploaded."""
+    upload_path: str   # URI returned by AllocatePayload (e.g. "s3://bucket/prefix/<uuid>.bin")
+    buffer: bytearray  # Local buffer the caller writes into
+
+
 @dataclass(frozen=True)
 class WritablePayload:
     descriptor: placement_pb2.PayloadDescriptor
@@ -49,11 +57,26 @@ class ReadablePayload:
 class PayloadClient:
     """Thin Python mirror of the C++ client behavior."""
 
-    def __init__(self, channel: grpc.Channel):
+    def __init__(self, channel: grpc.Channel, object_fs=None):
+        """Construct a client.
+
+        Args:
+            channel: gRPC channel connected to the payload manager.
+            object_fs: Optional pre-configured ``pyarrow.fs.FileSystem`` for
+                object-tier uploads.  Supply this to use custom S3/GCS credentials,
+                endpoint overrides (e.g. MinIO), or any Arrow-supported filesystem
+                built from ``FileSystemOptions`` proto config via
+                ``pyarrow.fs.S3FileSystem``.  When ``None`` the default AWS
+                credential chain (env vars / profile) is used via
+                ``pyarrow.fs.FileSystem.from_uri``.
+        """
         self._catalog_stub = payload_catalog_service_pb2_grpc.PayloadCatalogServiceStub(channel)
         self._data_stub = payload_data_service_pb2_grpc.PayloadDataServiceStub(channel)
         self._admin_stub = payload_admin_service_pb2_grpc.PayloadAdminServiceStub(channel)
         self._stream_stub = payload_stream_service_pb2_grpc.PayloadStreamServiceStub(channel)
+        self._object_fs = object_fs  # Optional pyarrow.fs.FileSystem for object-tier uploads
+        self._pending_object_uploads: dict[str, _PendingObjectUpload] = {}
+        self._pending_uploads_lock = threading.Lock()
 
     # Catalog service -----------------------------------------------------
     def AllocatePayload(
@@ -168,26 +191,59 @@ class PayloadClient:
         size_bytes: int,
         preferred_tier: int = types_pb2.TIER_RAM,
         ttl_ms: int = 0,
-        persist: bool = False,
+        no_evict: bool = False,
         eviction_policy: policy_pb2.EvictionPolicy | None = None,
     ) -> WritablePayload:
         request = lifecycle_pb2.AllocatePayloadRequest(
             size_bytes=size_bytes,
             preferred_tier=preferred_tier,
             ttl_ms=ttl_ms,
-            persist=persist,
+            no_evict=no_evict,
         )
         if eviction_policy is not None:
             request.eviction_policy.CopyFrom(eviction_policy)
 
         response = self.AllocatePayload(request)
+
+        if response.object_upload_path:
+            # Object-tier: allocate a local bytearray; the caller writes into it.
+            # CommitPayload uploads bytes to object_upload_path then calls ImportPayload.
+            buf = bytearray(size_bytes)
+            uuid_hex = response.payload_descriptor.payload_id.value.hex()
+            with self._pending_uploads_lock:
+                self._pending_object_uploads[uuid_hex] = _PendingObjectUpload(
+                    upload_path=response.object_upload_path,
+                    buffer=buf,
+                )
+            return WritablePayload(descriptor=response.payload_descriptor, mmap_obj=None, buffer=buf)
+
         self._ValidateHasLocation(response.payload_descriptor)
         mmap_obj, buffer = self._OpenMutableBuffer(response.payload_descriptor)
         return WritablePayload(descriptor=response.payload_descriptor, mmap_obj=mmap_obj, buffer=buffer)
 
     def CommitPayload(self, payload_id: id_pb2.PayloadID) -> lifecycle_pb2.CommitPayloadResponse:
+        validated_id = validate_payload_id(payload_id)
+        uuid_hex = validated_id.value.hex()
+
+        with self._pending_uploads_lock:
+            entry = self._pending_object_uploads.pop(uuid_hex, None)
+
+        if entry is not None:
+            # Phase 1: upload bytes directly to object storage — no bytes via gRPC.
+            self._upload_to_object_path(entry.upload_path, bytes(entry.buffer))
+
+            # Phase 2: transfer ownership to the manager.
+            req = lifecycle_pb2.ImportPayloadRequest(size_bytes=len(entry.buffer))
+            req.id.CopyFrom(validated_id)
+            try:
+                self._catalog_stub.ImportPayload(req, metadata=_trace_metadata())
+            except Exception:
+                self._best_effort_delete_object(entry.upload_path)
+                raise
+            return lifecycle_pb2.CommitPayloadResponse()
+
         request = lifecycle_pb2.CommitPayloadRequest()
-        request.id.CopyFrom(validate_payload_id(payload_id))
+        request.id.CopyFrom(validated_id)
         return self.CommitPayloadRpc(request)
 
     def Resolve(self, payload_id: id_pb2.PayloadID) -> lease_pb2.ResolveSnapshotResponse:
@@ -233,6 +289,37 @@ class PayloadClient:
         request.lease_id.value = _uuid_bytes(lease_id)
         self.ReleaseLease(request)
 
+    def _upload_to_object_path(self, upload_uri: str, data: bytes) -> None:
+        """Upload bytes to the given URI via Arrow filesystem.
+
+        Uses ``self._object_fs`` when configured (allows custom credentials /
+        endpoint override for MinIO or non-default S3 regions), otherwise falls
+        back to ``_fs_from_uri`` which picks up the default AWS credential chain.
+        """
+        if self._object_fs is not None:
+            # Strip scheme prefix to get the path component for the pre-built fs.
+            scheme_end = upload_uri.find("://")
+            path = upload_uri[scheme_end + 3:] if scheme_end != -1 else upload_uri
+            fs = self._object_fs
+        else:
+            fs, path = _fs_from_uri(upload_uri)
+
+        with fs.open_output_stream(path) as f:
+            f.write(data)
+
+    def _best_effort_delete_object(self, upload_uri: str) -> None:
+        """Best-effort delete of an already-uploaded object after an ImportPayload failure."""
+        try:
+            if self._object_fs is not None:
+                scheme_end = upload_uri.find("://")
+                path = upload_uri[scheme_end + 3:] if scheme_end != -1 else upload_uri
+                fs = self._object_fs
+            else:
+                fs, path = _fs_from_uri(upload_uri)
+            fs.delete_file(path)
+        except Exception:
+            pass
+
     def _OpenMutableBuffer(self, descriptor: placement_pb2.PayloadDescriptor) -> tuple[mmap.mmap, pa.Buffer]:
         length = _descriptor_length_bytes(descriptor)
 
@@ -250,6 +337,9 @@ class PayloadClient:
             finally:
                 os.close(fd)
             return mapped, pa.py_buffer(mapped)
+
+        if descriptor.tier == types_pb2.TIER_OBJECT:
+            raise NotImplementedError("Object-tier payloads are written via AllocateWritableBuffer/CommitPayload, not _OpenMutableBuffer")
 
         if descriptor.HasField("disk"):
             path = descriptor.disk.path
@@ -311,6 +401,12 @@ class PayloadClient:
         if descriptor.HasField("gpu") or descriptor.HasField("ram") or descriptor.HasField("disk"):
             return
         raise ValueError(f"payload descriptor is missing location for tier {types_pb2.Tier.Name(descriptor.tier)}")
+
+
+def _fs_from_uri(uri: str):
+    """Thin wrapper around pyarrow.fs.FileSystem.from_uri; isolated for testability."""
+    import pyarrow.fs as pafs
+    return pafs.FileSystem.from_uri(uri)
 
 
 def _descriptor_length_bytes(descriptor: placement_pb2.PayloadDescriptor) -> int:
@@ -416,15 +512,8 @@ def _ReadObjectBuffer(descriptor: placement_pb2.PayloadDescriptor) -> pa.Buffer:
     Requires pyarrow to be built with the relevant filesystem support
     (e.g. ``pyarrow[s3]`` for S3/MinIO, ``pyarrow[gcs]`` for GCS).
     """
-    try:
-        import pyarrow.fs as pafs
-    except ImportError:
-        raise NotImplementedError(
-            "Object tier requires pyarrow with filesystem support (pyarrow.fs). "
-            "Install pyarrow with S3/GCS/Azure support, e.g. pip install 'pyarrow[s3]'."
-        )
     path = descriptor.disk.path
-    fs, path_in_fs = pafs.FileSystem.from_uri(path)
+    fs, path_in_fs = _fs_from_uri(path)
     length = descriptor.disk.length_bytes if descriptor.disk.length_bytes > 0 else None
     with fs.open_input_file(path_in_fs) as f:
         return f.read_buffer(length)

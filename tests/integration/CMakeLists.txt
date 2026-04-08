@@ -80,4 +80,29 @@ if(TARGET payload_manager::client)
   )
 
   payload_manager_register_test(payload_manager_integration_object_spill "integration;api;live;minio")
+
+  # ---------------------------------------------------------------------------
+  # Object-tier client-upload integration test — exercises the full
+  # AllocateWritableBuffer(TIER_OBJECT) → write bytes → CommitPayload path.
+  # Requires a live payload-manager with MinIO and the same environment
+  # variables as the spill test.
+  # ---------------------------------------------------------------------------
+
+  add_executable(payload_manager_integration_object_client_upload
+    object_client_upload_integration_test.cpp
+  )
+
+  target_compile_features(payload_manager_integration_object_client_upload PRIVATE cxx_std_20)
+
+  target_include_directories(payload_manager_integration_object_client_upload
+    PRIVATE
+    ${PROJECT_SOURCE_DIR}
+  )
+
+  target_link_libraries(payload_manager_integration_object_client_upload
+    PRIVATE
+    payload_manager::client
+  )
+
+  payload_manager_register_test(payload_manager_integration_object_client_upload "integration;api;live;minio;import")
 endif()

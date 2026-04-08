@@ -1,5 +1,7 @@
 #include "client/cpp/payload_manager_client.h"
 
+#include <arrow/filesystem/filesystem.h>
+#include <arrow/filesystem/s3fs.h>
 #include <arrow/status.h>
 #ifdef PAYLOAD_CLIENT_ENABLE_OTEL
 #include <opentelemetry/context/propagation/global_propagator.h>
@@ -21,9 +23,13 @@
 #include <cstdint>
 #include <cstring>
 #include <memory>
+#include <mutex>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <system_error>
+#include <unordered_map>
+#include <vector>
 
 #include "payload/manager/v1.hpp"
 
@@ -248,6 +254,126 @@ arrow::Result<int> OpenShm(std::string_view shm_name, bool writable) {
   return fd;
 }
 
+// ---------------------------------------------------------------------------
+// Object-tier client upload helpers
+// ---------------------------------------------------------------------------
+
+// Hex representation of a 16-byte binary UUID — used as map key.
+std::string UuidBytesToHex(std::string_view bytes) {
+  static constexpr char kHex[] = "0123456789abcdef";
+  std::string           hex;
+  hex.reserve(bytes.size() * 2);
+  for (unsigned char c : bytes) {
+    hex.push_back(kHex[c >> 4]);
+    hex.push_back(kHex[c & 0x0fu]);
+  }
+  return hex;
+}
+
+// Arrow MutableBuffer that owns its heap allocation via a std::vector<uint8_t>.
+// std::move on a vector transfers internal buffer ownership; the heap address
+// does not change, so the pointer stored in the Arrow base class remains valid.
+class VectorOwningMutableBuffer final : public arrow::MutableBuffer {
+ public:
+  explicit VectorOwningMutableBuffer(std::vector<uint8_t> data)
+      : arrow::MutableBuffer(data.data(), static_cast<int64_t>(data.size())), owned_(std::move(data)) {
+  }
+
+ private:
+  std::vector<uint8_t> owned_;
+};
+
+struct PendingObjectUpload {
+  std::string                           upload_path;
+  std::shared_ptr<arrow::MutableBuffer> buffer; // VectorOwningMutableBuffer
+};
+
+// Per-PayloadClient pending object-tier uploads.  Keyed by (client*, uuid_hex).
+// A global singleton avoids modifying the header beyond adding the object_fs_ member.
+class PendingObjectRegistry {
+ public:
+  static PendingObjectRegistry& Instance() {
+    static PendingObjectRegistry inst;
+    return inst;
+  }
+
+  void Insert(const PayloadClient* client, std::string uuid_hex, PendingObjectUpload upload) {
+    std::lock_guard lock(mutex_);
+    registry_[client][std::move(uuid_hex)] = std::move(upload);
+  }
+
+  std::optional<PendingObjectUpload> Pop(const PayloadClient* client, const std::string& uuid_hex) {
+    std::lock_guard lock(mutex_);
+    const auto      client_it = registry_.find(client);
+    if (client_it == registry_.end()) {
+      return std::nullopt;
+    }
+    const auto it = client_it->second.find(uuid_hex);
+    if (it == client_it->second.end()) {
+      return std::nullopt;
+    }
+    auto result = std::move(it->second);
+    client_it->second.erase(it);
+    if (client_it->second.empty()) {
+      registry_.erase(client_it);
+    }
+    return result;
+  }
+
+ private:
+  std::mutex                                                                                     mutex_;
+  std::unordered_map<const PayloadClient*, std::unordered_map<std::string, PendingObjectUpload>> registry_;
+};
+
+// Upload buffer bytes to the given URI using the provided Arrow filesystem.
+// If fs is null, the filesystem is derived from the URI via FileSystemFromUri
+// (picks up default AWS credential chain / env vars).
+arrow::Status UploadToObjectPath(const std::string& upload_uri, const std::shared_ptr<arrow::Buffer>& buffer,
+                                 const std::shared_ptr<arrow::fs::FileSystem>& fs) {
+  std::string                            path;
+  std::shared_ptr<arrow::fs::FileSystem> effective_fs;
+
+  if (fs) {
+    // Use the pre-configured filesystem; strip the scheme prefix to get the path.
+    const auto scheme_end = upload_uri.find("://");
+    path                  = (scheme_end != std::string::npos) ? upload_uri.substr(scheme_end + 3) : upload_uri;
+    effective_fs          = fs;
+  } else {
+    // Initialise S3 SDK lazily before the first URI parse to avoid SDK not initialized error.
+    if (upload_uri.size() > 5 && upload_uri.substr(0, 5) == "s3://") {
+      ARROW_RETURN_NOT_OK(arrow::fs::EnsureS3Initialized());
+    }
+    ARROW_ASSIGN_OR_RAISE(effective_fs, arrow::fs::FileSystemFromUri(upload_uri, &path));
+  }
+
+  ARROW_ASSIGN_OR_RAISE(auto out, effective_fs->OpenOutputStream(path));
+  ARROW_RETURN_NOT_OK(out->Write(buffer->data(), buffer->size()));
+  return out->Close();
+}
+
+// Best-effort delete of an already-uploaded object after an ImportPayload RPC failure.
+void BestEffortDeleteObject(const std::string& upload_uri, const std::shared_ptr<arrow::fs::FileSystem>& fs) {
+  try {
+    std::string                            path;
+    std::shared_ptr<arrow::fs::FileSystem> effective_fs;
+    if (fs) {
+      const auto scheme_end = upload_uri.find("://");
+      path                  = (scheme_end != std::string::npos) ? upload_uri.substr(scheme_end + 3) : upload_uri;
+      effective_fs          = fs;
+    } else {
+      if (arrow::fs::EnsureS3Initialized().ok()) {
+        auto result = arrow::fs::FileSystemFromUri(upload_uri, &path);
+        if (!result.ok()) return;
+        effective_fs = *result;
+      }
+    }
+    if (effective_fs) {
+      (void)effective_fs->DeleteFile(path);
+    }
+  } catch (...) {
+  }
+}
+
 } // namespace
 
 PayloadClient::PayloadClient(std::shared_ptr<grpc::Channel> channel)
@@ -255,6 +381,14 @@ PayloadClient::PayloadClient(std::shared_ptr<grpc::Channel> channel)
       data_stub_(payload::manager::v1::PayloadDataService::NewStub(channel)),
       admin_stub_(payload::manager::v1::PayloadAdminService::NewStub(channel)),
       stream_stub_(payload::manager::v1::PayloadStreamService::NewStub(std::move(channel))) {
+}
+
+PayloadClient::PayloadClient(std::shared_ptr<grpc::Channel> channel, std::shared_ptr<arrow::fs::FileSystem> object_fs)
+    : catalog_stub_(payload::manager::v1::PayloadCatalogService::NewStub(channel)),
+      data_stub_(payload::manager::v1::PayloadDataService::NewStub(channel)),
+      admin_stub_(payload::manager::v1::PayloadAdminService::NewStub(channel)),
+      stream_stub_(payload::manager::v1::PayloadStreamService::NewStub(std::move(channel))),
+      object_fs_(std::move(object_fs)) {
 }
 
 arrow::Result<PayloadClient::WritablePayload> PayloadClient::AllocateWritableBuffer(uint64_t size_bytes, payload::manager::v1::Tier preferred_tier,
@@ -270,8 +404,18 @@ arrow::Result<PayloadClient::WritablePayload> PayloadClient::AllocateWritableBuf
   InjectTraceContext(ctx);
 
   ARROW_RETURN_NOT_OK(GrpcToArrow(catalog_stub_->AllocatePayload(&ctx, req, &resp), "AllocatePayload"));
-  ARROW_RETURN_NOT_OK(ValidateHasLocation(resp.payload_descriptor()));
 
+  if (!resp.object_upload_path().empty()) {
+    // Object-tier: allocate a local heap buffer; the caller writes into it.
+    // CommitPayload will upload bytes to object_upload_path then call ImportPayload.
+    std::vector<uint8_t> data(size_bytes, 0);
+    auto                 owned_buf = std::make_shared<VectorOwningMutableBuffer>(std::move(data));
+    const auto           uuid_hex  = UuidBytesToHex(resp.payload_descriptor().payload_id().value());
+    PendingObjectRegistry::Instance().Insert(this, uuid_hex, PendingObjectUpload{resp.object_upload_path(), owned_buf});
+    return WritablePayload{resp.payload_descriptor(), std::move(owned_buf)};
+  }
+
+  ARROW_RETURN_NOT_OK(ValidateHasLocation(resp.payload_descriptor()));
   ARROW_ASSIGN_OR_RAISE(auto buffer, OpenMutableBuffer(resp.payload_descriptor()));
   return WritablePayload{resp.payload_descriptor(), std::move(buffer)};
 }
@@ -287,8 +431,34 @@ arrow::Status PayloadClient::ValidatePayloadId(const payload::manager::v1::Paylo
 }
 
 arrow::Status PayloadClient::CommitPayload(const payload::manager::v1::PayloadID& payload_id) const {
-  payload::manager::v1::CommitPayloadRequest req;
   ARROW_RETURN_NOT_OK(ValidatePayloadIdValue(payload_id));
+
+  const auto uuid_hex = UuidBytesToHex(payload_id.value());
+  auto       pending  = PendingObjectRegistry::Instance().Pop(this, uuid_hex);
+
+  if (pending.has_value()) {
+    // Phase 1: upload bytes directly to object storage — no bytes via gRPC.
+    ARROW_RETURN_NOT_OK(UploadToObjectPath(pending->upload_path, pending->buffer, object_fs_));
+
+    // Phase 2: transfer ownership to the manager.
+    payload::manager::v1::ImportPayloadRequest import_req;
+    *import_req.mutable_id() = payload_id;
+    import_req.set_size_bytes(static_cast<uint64_t>(pending->buffer->size()));
+
+    payload::manager::v1::ImportPayloadResponse import_resp;
+    grpc::ClientContext                         import_ctx;
+    InjectTraceContext(import_ctx);
+
+    auto rpc_status = GrpcToArrow(catalog_stub_->ImportPayload(&import_ctx, import_req, &import_resp), "ImportPayload");
+    if (!rpc_status.ok()) {
+      BestEffortDeleteObject(pending->upload_path, object_fs_);
+      return rpc_status;
+    }
+    return arrow::Status::OK();
+  }
+
+  // Normal path for RAM / DISK / GPU payloads.
+  payload::manager::v1::CommitPayloadRequest req;
   *req.mutable_id() = payload_id;
 
   payload::manager::v1::CommitPayloadResponse resp;

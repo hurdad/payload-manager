@@ -67,8 +67,12 @@ AllocatePayloadResponse CatalogService::Allocate(const AllocatePayloadRequest& r
       throw payload::util::InvalidState("allocate: preferred_tier must be specified");
     }
     AllocatePayloadResponse resp;
-    *resp.mutable_payload_descriptor() =
+    const auto descriptor =
         ctx_.manager->Allocate(req.size_bytes(), req.preferred_tier(), req.ttl_ms(), req.no_evict(), req.eviction_policy());
+    *resp.mutable_payload_descriptor() = descriptor;
+    if (req.preferred_tier() == TIER_OBJECT) {
+      resp.set_object_upload_path(ctx_.manager->GetObjectUploadPath(descriptor.payload_id()));
+    }
     return resp;
   });
 }
@@ -286,6 +290,12 @@ AppendPayloadMetadataEventResponse CatalogService::AppendMetadataEvent(const App
     *resp.mutable_id()         = req.id();
     *resp.mutable_event_time() = payload::util::ToProto(now);
     return resp;
+  });
+}
+
+void CatalogService::Import(const ImportPayloadRequest& req) {
+  ObserveRpc("CatalogService.Import", &req.id(), [&] {
+    ctx_.manager->Import(req.id(), req.size_bytes());
   });
 }
 

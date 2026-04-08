@@ -42,6 +42,11 @@ class ObjectArrowStore final : public StorageBackend {
     return payload::manager::v1::TIER_OBJECT;
   }
 
+  // Returns a URI clients can pass to arrow::fs::FileSystemFromUri to upload
+  // payload bytes directly. For S3: "s3://<root_path>/<uuid>.bin".
+  // For non-S3 backends the raw filesystem path is returned unchanged.
+  std::string GetUploadUri(const payload::manager::v1::PayloadID& id) const;
+
  private:
   std::string ObjectPath(const payload::manager::v1::PayloadID& id) const;
   std::string SidecarObjectPath(const payload::manager::v1::PayloadID& id) const;

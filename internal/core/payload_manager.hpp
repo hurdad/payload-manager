@@ -40,6 +40,15 @@ class PayloadManager {
   payload::manager::v1::PayloadDescriptor Commit(const payload::manager::v1::PayloadID& id);
   void                                    Delete(const payload::manager::v1::PayloadID& id, bool force);
 
+  // Returns the upload URI for a TIER_OBJECT payload (e.g. "s3://bucket/prefix/<uuid>.bin").
+  // Empty string when no object store is configured.
+  std::string GetObjectUploadPath(const payload::manager::v1::PayloadID& id) const;
+
+  // Register an externally-uploaded object-tier payload as DURABLE.
+  // Called after the client has uploaded bytes to GetObjectUploadPath(id).
+  // Transitions the payload ALLOCATED→DURABLE and writes the sidecar JSON.
+  void Import(const payload::manager::v1::PayloadID& id, uint64_t size_bytes);
+
   bool                       IsEvictionExempt(const payload::manager::v1::PayloadID& id) const;
   payload::manager::v1::Tier GetSpillTarget(const payload::manager::v1::PayloadID& id) const;
 
