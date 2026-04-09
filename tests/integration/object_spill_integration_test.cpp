@@ -52,7 +52,7 @@
 #include <memory>
 #include <string>
 
-#include "client/cpp/payload_manager_client.h"
+#include "client/cpp/client.h"
 #include "payload/manager/catalog/v1/archive_metadata.pb.h"
 #include "payload/manager/services/v1/payload_catalog_service.grpc.pb.h"
 #include "payload/manager/v1.hpp"
@@ -112,9 +112,9 @@ namespace {
 std::shared_ptr<arrow::fs::S3FileSystem> MakeMinioFs(const std::string& minio_endpoint) {
   ASSERT_OK(arrow::fs::EnsureS3Initialized());
 
-  arrow::fs::S3Options opts = arrow::fs::S3Options::Defaults();
-  opts.endpoint_override      = minio_endpoint;
-  opts.scheme                 = "http";
+  arrow::fs::S3Options opts     = arrow::fs::S3Options::Defaults();
+  opts.endpoint_override        = minio_endpoint;
+  opts.scheme                   = "http";
   opts.force_virtual_addressing = false; // use path-style URLs for MinIO
 
   return DieOnErr(arrow::fs::S3FileSystem::Make(opts), "S3FileSystem::Make");
@@ -122,9 +122,9 @@ std::shared_ptr<arrow::fs::S3FileSystem> MakeMinioFs(const std::string& minio_en
 
 // Read an S3 object into a std::string.
 std::string ReadS3Object(const std::shared_ptr<arrow::fs::FileSystem>& fs, const std::string& path) {
-  auto input  = DieOnErr(fs->OpenInputFile(path), ("OpenInputFile: " + path).c_str());
-  auto size   = DieOnErr(input->GetSize(), "GetSize");
-  auto buf    = DieOnErr(input->Read(size), "Read");
+  auto input = DieOnErr(fs->OpenInputFile(path), ("OpenInputFile: " + path).c_str());
+  auto size  = DieOnErr(input->GetSize(), "GetSize");
+  auto buf   = DieOnErr(input->Read(size), "Read");
   return std::string(reinterpret_cast<const char*>(buf->data()), static_cast<size_t>(buf->size()));
 }
 
@@ -135,8 +135,8 @@ std::string PayloadIdKey(const PayloadID& id) {
   if (v.size() == 16) {
     // Binary UUID → xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
     static constexpr char kHex[] = "0123456789abcdef";
-    const auto* b = reinterpret_cast<const uint8_t*>(v.data());
-    std::string s;
+    const auto*           b      = reinterpret_cast<const uint8_t*>(v.data());
+    std::string           s;
     s.reserve(36);
     for (int i = 0; i < 16; ++i) {
       if (i == 4 || i == 6 || i == 8 || i == 10) s += '-';
@@ -164,10 +164,7 @@ std::string SidecarPath(const std::string& bucket, const PayloadID& id) {
 // Returns the descriptor from AllocatePayload.
 // ---------------------------------------------------------------------------
 
-PayloadDescriptor AllocateAndFillAndCommit(PayloadCatalogService::Stub& catalog,
-                                           const PayloadClient&         client,
-                                           uint64_t                     size_bytes,
-                                           uint8_t                      fill) {
+PayloadDescriptor AllocateAndFillAndCommit(PayloadCatalogService::Stub& catalog, const PayloadClient& client, uint64_t size_bytes, uint8_t fill) {
   // Allocate on RAM, requesting TIER_OBJECT as the spill destination.
   AllocatePayloadRequest alloc_req;
   alloc_req.set_size_bytes(size_bytes);
@@ -216,9 +213,7 @@ PayloadDescriptor AllocateAndFillAndCommit(PayloadCatalogService::Stub& catalog,
 // Test
 // ---------------------------------------------------------------------------
 
-void TestSpillToObject(const std::string& endpoint,
-                       const std::string& minio_endpoint,
-                       const std::string& bucket) {
+void TestSpillToObject(const std::string& endpoint, const std::string& minio_endpoint, const std::string& bucket) {
   std::cout << "  TestSpillToObject: RAM → TIER_OBJECT spill, verify .bin + .meta.json\n";
 
   constexpr uint64_t kSize = 512;
@@ -358,11 +353,11 @@ int main(int argc, char** argv) {
   // already exists.
   {
     ASSERT_OK(arrow::fs::EnsureS3Initialized());
-    arrow::fs::S3Options opts = arrow::fs::S3Options::Defaults();
+    arrow::fs::S3Options opts     = arrow::fs::S3Options::Defaults();
     opts.endpoint_override        = minio_endpoint;
     opts.scheme                   = "http";
     opts.force_virtual_addressing = false;
-    auto s3fs = DieOnErr(arrow::fs::S3FileSystem::Make(opts), "pre-create bucket: S3FileSystem::Make");
+    auto s3fs                     = DieOnErr(arrow::fs::S3FileSystem::Make(opts), "pre-create bucket: S3FileSystem::Make");
     (void)s3fs->CreateDir(bucket, /*recursive=*/false);
   }
 

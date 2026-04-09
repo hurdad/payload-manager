@@ -47,8 +47,7 @@ void LeaseManager::InvalidateAll(const payload::manager::v1::PayloadID& id) {
   table_.RemoveAll(id);
 }
 
-bool LeaseManager::WaitUntilNoLeases(const payload::manager::v1::PayloadID& id,
-                                     std::chrono::steady_clock::time_point  deadline) {
+bool LeaseManager::WaitUntilNoLeases(const payload::manager::v1::PayloadID& id, std::chrono::steady_clock::time_point deadline) {
   return table_.WaitUntilNoLeases(id, deadline);
 }
 

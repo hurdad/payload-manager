@@ -15,8 +15,7 @@ class StreamServer final : public payload::manager::v1::PayloadStreamService::Se
  public:
   static constexpr std::chrono::milliseconds kDefaultPollInterval{50};
 
-  explicit StreamServer(std::shared_ptr<payload::service::StreamService> svc,
-                        std::chrono::milliseconds poll_interval = kDefaultPollInterval);
+  explicit StreamServer(std::shared_ptr<payload::service::StreamService> svc, std::chrono::milliseconds poll_interval = kDefaultPollInterval);
 
   ::grpc::Status CreateStream(::grpc::ServerContext*, const payload::manager::v1::CreateStreamRequest*, google::protobuf::Empty*) override;
 

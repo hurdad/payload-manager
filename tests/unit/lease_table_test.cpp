@@ -97,8 +97,7 @@ TEST(LeaseTable, WaitUntilNoLeasesReturnsTrueWhenLeaseRemoved) {
     table.Remove(lease_key);
   });
 
-  EXPECT_TRUE(table.WaitUntilNoLeases(payload, deadline))
-      << "WaitUntilNoLeases must return true when the lease is released before the deadline";
+  EXPECT_TRUE(table.WaitUntilNoLeases(payload, deadline)) << "WaitUntilNoLeases must return true when the lease is released before the deadline";
 
   remover.join();
 }
@@ -114,8 +113,7 @@ TEST(LeaseTable, WaitUntilNoLeasesReturnsFalseOnTimeout) {
 
   // Deadline already in the past — must return false immediately.
   const auto past_deadline = std::chrono::steady_clock::now() - std::chrono::milliseconds(1);
-  EXPECT_FALSE(table.WaitUntilNoLeases(payload, past_deadline))
-      << "WaitUntilNoLeases must return false when the deadline has already passed";
+  EXPECT_FALSE(table.WaitUntilNoLeases(payload, past_deadline)) << "WaitUntilNoLeases must return false when the deadline has already passed";
 }
 
 // ---------------------------------------------------------------------------
@@ -126,8 +124,7 @@ TEST(LeaseTable, WaitUntilNoLeasesReturnsTrueImmediatelyWhenEmpty) {
   const auto payload  = MakePayloadID("payload-wait-empty");
   const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(100);
 
-  EXPECT_TRUE(table.WaitUntilNoLeases(payload, deadline))
-      << "WaitUntilNoLeases must return true immediately when no leases exist";
+  EXPECT_TRUE(table.WaitUntilNoLeases(payload, deadline)) << "WaitUntilNoLeases must return true immediately when no leases exist";
 }
 
 // ---------------------------------------------------------------------------
@@ -158,8 +155,7 @@ TEST(LeaseTable, WaitUntilNoLeasesWaitsForInvalidatedLeases) {
     table.Remove(lease_key);
   });
 
-  EXPECT_TRUE(table.WaitUntilNoLeases(payload, deadline))
-      << "WaitUntilNoLeases must wait for the invalidated lease to be explicitly removed";
+  EXPECT_TRUE(table.WaitUntilNoLeases(payload, deadline)) << "WaitUntilNoLeases must wait for the invalidated lease to be explicitly removed";
 
   holder.join();
 }

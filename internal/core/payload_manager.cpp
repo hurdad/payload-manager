@@ -52,12 +52,12 @@ void PayloadManager::UpdateTierBytes(Tier tier, int64_t delta) {
     std::lock_guard<std::mutex> lock(tier_bytes_guard_);
     auto&                       val = tier_bytes_[static_cast<int>(tier)];
     if (delta < 0 && static_cast<uint64_t>(-delta) > val) {
-      PAYLOAD_LOG_ERROR("tier byte accounting underflow: programming error — UpdateTierBytes called with "
-                        "delta that exceeds current total; clamping to 0. This indicates a missed Allocate "
-                        "accounting call.",
-                        {payload::observability::StringField("tier", TierName(tier)),
-                         payload::observability::IntField("delta", delta),
-                         payload::observability::IntField("current", static_cast<int64_t>(val))});
+      PAYLOAD_LOG_ERROR(
+          "tier byte accounting underflow: programming error — UpdateTierBytes called with "
+          "delta that exceeds current total; clamping to 0. This indicates a missed Allocate "
+          "accounting call.",
+          {payload::observability::StringField("tier", TierName(tier)), payload::observability::IntField("delta", delta),
+           payload::observability::IntField("current", static_cast<int64_t>(val))});
       val = 0;
     } else {
       val = static_cast<uint64_t>(static_cast<int64_t>(val) + delta);
@@ -73,12 +73,12 @@ void PayloadManager::UpdateTierCount(Tier tier, int64_t delta) {
     std::lock_guard<std::mutex> lock(tier_count_guard_);
     auto&                       val = tier_count_[static_cast<int>(tier)];
     if (delta < 0 && static_cast<uint64_t>(-delta) > val) {
-      PAYLOAD_LOG_ERROR("tier count accounting underflow: programming error — UpdateTierCount called with "
-                        "delta that exceeds current total; clamping to 0. This indicates a missed Allocate "
-                        "accounting call.",
-                        {payload::observability::StringField("tier", TierName(tier)),
-                         payload::observability::IntField("delta", delta),
-                         payload::observability::IntField("current", static_cast<int64_t>(val))});
+      PAYLOAD_LOG_ERROR(
+          "tier count accounting underflow: programming error — UpdateTierCount called with "
+          "delta that exceeds current total; clamping to 0. This indicates a missed Allocate "
+          "accounting call.",
+          {payload::observability::StringField("tier", TierName(tier)), payload::observability::IntField("delta", delta),
+           payload::observability::IntField("current", static_cast<int64_t>(val))});
       val = 0;
     } else {
       val = static_cast<uint64_t>(static_cast<int64_t>(val) + delta);
@@ -96,7 +96,7 @@ bool IsDurableTier(Tier tier) {
 
 payload::manager::catalog::v1::PayloadArchiveMetadata BuildSidecar(const PayloadDescriptor& descriptor) {
   payload::manager::catalog::v1::PayloadArchiveMetadata meta;
-  *meta.mutable_uuid()               = descriptor.payload_id();
+  *meta.mutable_uuid() = descriptor.payload_id();
   meta.set_metadata_version(1);
   *meta.mutable_archived_at()        = payload::util::ToProto(payload::util::Now());
   *meta.mutable_payload_descriptor() = descriptor;
@@ -385,16 +385,16 @@ PayloadDescriptor PayloadManager::Allocate(uint64_t size_bytes, Tier preferred, 
   using payload::manager::core::v1::EVICTION_PRIORITY_NEVER;
   const bool never_evict = no_evict || eviction_policy.priority() == EVICTION_PRIORITY_NEVER;
 
-  auto record              = ToPayloadRecord(desc);
+  auto record = ToPayloadRecord(desc);
   // Always store the requested allocation size, not the backend-reported size.
   // PopulateLocation derives size from backend->Size() which may return 0 for
   // stub or write-only backends; the authoritative accounting size is the
   // caller-supplied size_bytes used in UpdateTierBytes below.
-  record.size_bytes        = size_bytes;
-  record.no_evict             = no_evict;
-  record.eviction_priority    = static_cast<int>(eviction_policy.priority());
-  record.min_residency_tier   = static_cast<int>(eviction_policy.min_residency_tier());
-  record.require_durable      = eviction_policy.require_durable();
+  record.size_bytes         = size_bytes;
+  record.no_evict           = no_evict;
+  record.eviction_priority  = static_cast<int>(eviction_policy.priority());
+  record.min_residency_tier = static_cast<int>(eviction_policy.min_residency_tier());
+  record.require_durable    = eviction_policy.require_durable();
 
   // Determine spill target: use policy hint if set, otherwise fall back to TIER_DISK.
   const Tier spill_tier = (eviction_policy.spill_target() != TIER_UNSPECIFIED) ? eviction_policy.spill_target() : TIER_DISK;
@@ -577,9 +577,8 @@ void PayloadManager::Import(const PayloadID& id, uint64_t size_bytes) {
       }
       storage_it->second->WriteSidecar(id, sidecar);
     } catch (const std::exception& e) {
-      PAYLOAD_LOG_WARN("import: sidecar write failed (non-fatal)",
-                       {payload::observability::StringField("payload_id", payload::util::ToString(key)),
-                        payload::observability::StringField("error", e.what())});
+      PAYLOAD_LOG_WARN("import: sidecar write failed (non-fatal)", {payload::observability::StringField("payload_id", payload::util::ToString(key)),
+                                                                    payload::observability::StringField("error", e.what())});
     }
   }
 
@@ -640,7 +639,8 @@ void PayloadManager::Delete(const PayloadID& id, bool force) {
         storage_it->second->Remove(id);
       } catch (const std::exception& e) {
         PAYLOAD_LOG_WARN("delete payload: storage removal failed after DB commit (orphaned storage bytes)",
-                         {payload::observability::StringField("payload_id", payload::util::ToString(Key(id))), payload::observability::StringField("error", e.what())});
+                         {payload::observability::StringField("payload_id", payload::util::ToString(Key(id))),
+                          payload::observability::StringField("error", e.what())});
       }
     }
 
@@ -914,7 +914,7 @@ void PayloadManager::HydrateCaches() {
   if (metadata_cache_) {
     for (const auto& record : records) {
       if (record.state == PAYLOAD_STATE_ACTIVE || record.state == PAYLOAD_STATE_DURABLE) {
-        payload::manager::v1::PayloadID id = payload::util::ToProto(record.id);
+        payload::manager::v1::PayloadID       id = payload::util::ToProto(record.id);
         payload::manager::v1::PayloadMetadata minimal;
         *minimal.mutable_id() = id;
         metadata_cache_->Put(id, minimal);

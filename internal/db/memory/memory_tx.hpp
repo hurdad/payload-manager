@@ -38,8 +38,8 @@ class MemoryTransaction final : public db::Transaction {
   // Commit can merge only the touched keys rather than replacing the whole state.
   std::unordered_set<payload::util::UUID> modified_payload_ids_;
   std::unordered_set<payload::util::UUID> deleted_payload_ids_;
-  std::unordered_set<std::string> modified_metadata_ids_;
-  std::unordered_set<std::string> deleted_metadata_ids_;
+  std::unordered_set<std::string>         modified_metadata_ids_;
+  std::unordered_set<std::string>         deleted_metadata_ids_;
 
  private:
   MemoryRepository&       repo_;

@@ -67,8 +67,7 @@ AllocatePayloadResponse CatalogService::Allocate(const AllocatePayloadRequest& r
       throw payload::util::InvalidState("allocate: preferred_tier must be specified");
     }
     AllocatePayloadResponse resp;
-    const auto descriptor =
-        ctx_.manager->Allocate(req.size_bytes(), req.preferred_tier(), req.ttl_ms(), req.no_evict(), req.eviction_policy());
+    const auto descriptor = ctx_.manager->Allocate(req.size_bytes(), req.preferred_tier(), req.ttl_ms(), req.no_evict(), req.eviction_policy());
     *resp.mutable_payload_descriptor() = descriptor;
     if (req.preferred_tier() == TIER_OBJECT) {
       resp.set_object_upload_path(ctx_.manager->GetObjectUploadPath(descriptor.payload_id()));
@@ -118,9 +117,7 @@ SpillResponse CatalogService::Spill(const SpillRequest& req) {
         }
 
         // Resolve effective target: caller override takes precedence over per-payload default.
-        const auto effective_target = (req.target_tier() != TIER_UNSPECIFIED)
-                                          ? req.target_tier()
-                                          : ctx_.manager->GetSpillTarget(id);
+        const auto effective_target = (req.target_tier() != TIER_UNSPECIFIED) ? req.target_tier() : ctx_.manager->GetSpillTarget(id);
 
         if (best_effort) {
           // Fire-and-forget: enqueue to the background spill workers.
@@ -294,9 +291,7 @@ AppendPayloadMetadataEventResponse CatalogService::AppendMetadataEvent(const App
 }
 
 void CatalogService::Import(const ImportPayloadRequest& req) {
-  ObserveRpc("CatalogService.Import", &req.id(), [&] {
-    ctx_.manager->Import(req.id(), req.size_bytes());
-  });
+  ObserveRpc("CatalogService.Import", &req.id(), [&] { ctx_.manager->Import(req.id(), req.size_bytes()); });
 }
 
 ListPayloadsResponse CatalogService::ListPayloads(const ListPayloadsRequest& req) {
@@ -307,15 +302,19 @@ ListPayloadsResponse CatalogService::ListPayloads(const ListPayloadsRequest& req
     // Decode opaque offset token (decimal string).
     int32_t offset = 0;
     if (!req.page_token().empty()) {
-      try { offset = std::stoi(req.page_token()); } catch (...) { offset = 0; }
+      try {
+        offset = std::stoi(req.page_token());
+      } catch (...) {
+        offset = 0;
+      }
       if (offset < 0) offset = 0;
     }
 
     ListPayloadsResponse resp;
 
-    auto tx          = ctx_.repository->Begin();
-    const auto total = ctx_.repository->CountPayloads(*tx, req.tier_filter());
-    auto records     = ctx_.repository->ListPayloads(*tx, req.tier_filter(), page_size, offset);
+    auto       tx      = ctx_.repository->Begin();
+    const auto total   = ctx_.repository->CountPayloads(*tx, req.tier_filter());
+    auto       records = ctx_.repository->ListPayloads(*tx, req.tier_filter(), page_size, offset);
     tx->Commit();
 
     resp.set_total_count(total);
@@ -327,7 +326,7 @@ ListPayloadsResponse CatalogService::ListPayloads(const ListPayloadsRequest& req
 
     for (const auto& r : records) {
       const auto proto_id  = payload::util::ToProto(r.id);
-      auto* entry          = resp.add_payloads();
+      auto*      entry     = resp.add_payloads();
       *entry->mutable_id() = proto_id;
 
       entry->set_tier(r.tier);

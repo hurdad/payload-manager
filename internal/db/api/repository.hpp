@@ -6,7 +6,6 @@
 
 #include "internal/db/api/result.hpp"
 #include "internal/db/api/transaction.hpp"
-#include "internal/util/uuid.hpp"
 #include "internal/db/model/lineage_record.hpp"
 #include "internal/db/model/metadata_event_record.hpp"
 #include "internal/db/model/metadata_record.hpp"
@@ -14,6 +13,7 @@
 #include "internal/db/model/stream_consumer_offset_record.hpp"
 #include "internal/db/model/stream_entry_record.hpp"
 #include "internal/db/model/stream_record.hpp"
+#include "internal/util/uuid.hpp"
 
 namespace payload::db {
 
@@ -53,12 +53,10 @@ class Repository {
 
   virtual std::vector<model::PayloadRecord> ListPayloads(Transaction&,
                                                          payload::manager::v1::Tier tier_filter = payload::manager::v1::TIER_UNSPECIFIED,
-                                                         int32_t limit = 0,
-                                                         int32_t offset = 0) = 0;
+                                                         int32_t limit = 0, int32_t offset = 0) = 0;
 
   // Returns total count matching tier_filter (ignores pagination).
-  virtual int32_t CountPayloads(Transaction&,
-                                payload::manager::v1::Tier tier_filter = payload::manager::v1::TIER_UNSPECIFIED) = 0;
+  virtual int32_t CountPayloads(Transaction&, payload::manager::v1::Tier tier_filter = payload::manager::v1::TIER_UNSPECIFIED) = 0;
 
   virtual Result UpdatePayload(Transaction&, const model::PayloadRecord&) = 0;
 

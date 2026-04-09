@@ -160,6 +160,5 @@ TEST(StreamServiceRetention, RetentionMaxAgeSecExactBoundaryIsSafe) {
   *read.mutable_stream() = MakeStream("boundary-test");
   read.set_start_offset(0);
   auto result = service.Read(read);
-  EXPECT_EQ(result.entries_size(), 1)
-      << "entry must survive with retention_max_age_sec at the exact overflow boundary";
+  EXPECT_EQ(result.entries_size(), 1) << "entry must survive with retention_max_age_sec at the exact overflow boundary";
 }

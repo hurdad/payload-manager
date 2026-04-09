@@ -1,4 +1,4 @@
-#include "client/cpp/payload_manager_client.h"
+#include "client/cpp/client.h"
 
 #include <arrow/filesystem/filesystem.h>
 #include <arrow/filesystem/s3fs.h>

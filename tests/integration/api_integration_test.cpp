@@ -48,7 +48,7 @@
 #include <string>
 #include <vector>
 
-#include "client/cpp/payload_manager_client.h"
+#include "client/cpp/client.h"
 #include "otel_tracer.hpp"
 #include "payload/manager/v1.hpp"
 

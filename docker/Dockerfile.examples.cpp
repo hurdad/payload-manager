@@ -1,41 +1,15 @@
-FROM ubuntu:24.04 AS builder
+FROM ubuntu : 24.04 AS builder
 
-ENV DEBIAN_FRONTEND=noninteractive
-WORKDIR /workspace
+    ENV                DEBIAN_FRONTEND =
+        noninteractive WORKDIR / workspace
 
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends \
-        build-essential \
-        cmake \
-        ninja-build \
-        pkg-config \
-        git \
-        protobuf-compiler \
-        libprotobuf-dev \
-        libgrpc++-dev \
-        libgrpc-dev \
-        libyaml-cpp-dev \
-        libpqxx-dev \
-        libsqlite3-dev \
-        libspdlog-dev \
-        libcurl4-openssl-dev \
-        protobuf-compiler-grpc \
-        python3 \
-        python3-pip \
-        python3-grpcio \
-        python3-grpc-tools \
-        libssl-dev \
-        zlib1g-dev \
-        liblz4-dev \
-        libzstd-dev \
-        libsnappy-dev \
-        libbrotli-dev \
-        libbz2-dev \
-        libre2-dev \
-        libutf8proc-dev \
-        libxml2-dev \
-        libgtest-dev \
-    && rm -rf /var/lib/apt/lists/*
+                                     RUN apt -
+            get update &&
+        apt - get install - y-- no - install - recommends build - essential cmake ninja - build pkg - config git protobuf - compiler libprotobuf -
+            dev libgrpc++ - dev libgrpc - dev libyaml - cpp - dev libpqxx - dev libsqlite3 - dev libspdlog - dev libcurl4 - openssl - dev protobuf -
+            compiler - grpc python3 python3 - pip python3 - grpcio python3 - grpc - tools libssl - dev zlib1g - dev liblz4 - dev libzstd -
+            dev libsnappy - dev libbrotli - dev libbz2 - dev libre2 - dev libutf8proc - dev libxml2 - dev libgtest - dev &&
+        rm - rf / var / lib / apt / lists/*
 
 COPY . ./src
 

@@ -9,9 +9,9 @@
 #include <unordered_set>
 
 #include "internal/db/api/repository.hpp"
-#include "internal/util/uuid.hpp"
 #include "internal/metadata/metadata_cache.hpp"
 #include "internal/storage/storage_factory.hpp"
+#include "internal/util/uuid.hpp"
 #include "payload/manager/core/v1/id.pb.h"
 #include "payload/manager/core/v1/placement.pb.h"
 #include "payload/manager/core/v1/policy.pb.h"
@@ -92,28 +92,28 @@ class PayloadManager {
   // - Mutations routed through PayloadManager (Allocate/Commit/Promote/Delete) refresh or invalidate
   //   cache entries synchronously with successful transaction commits.
   // - Out-of-band repository writes can be stale until HydrateCaches() is called.
-  mutable std::shared_mutex                                                          snapshot_cache_mutex_;
+  mutable std::shared_mutex                                                        snapshot_cache_mutex_;
   std::unordered_map<payload::util::UUID, payload::manager::v1::PayloadDescriptor> snapshot_cache_;
 
-  mutable std::mutex                                                                    payload_mutexes_guard_;
+  mutable std::mutex                                                                  payload_mutexes_guard_;
   mutable std::unordered_map<payload::util::UUID, std::shared_ptr<std::shared_mutex>> payload_mutexes_;
 
   struct PinState {
     std::optional<uint64_t> expires_at_ms;
   };
 
-  mutable std::mutex                                  pins_guard_;
+  mutable std::mutex                                pins_guard_;
   std::unordered_map<payload::util::UUID, PinState> pins_;
 
   bool IsPinnedLocked(const payload::util::UUID& key, uint64_t now_ms);
   void SweepExpiredPins();
 
   // IDs that must never be automatically evicted (no_evict=true or EVICTION_PRIORITY_NEVER).
-  mutable std::mutex                   no_evict_guard_;
+  mutable std::mutex                      no_evict_guard_;
   std::unordered_set<payload::util::UUID> no_evict_ids_;
 
   // Preferred spill tier per payload (default TIER_DISK when absent).
-  mutable std::mutex                                                    spill_targets_guard_;
+  mutable std::mutex                                                  spill_targets_guard_;
   std::unordered_map<payload::util::UUID, payload::manager::v1::Tier> spill_targets_;
 
   // Per-tier byte totals and payload counts for occupancy metrics.

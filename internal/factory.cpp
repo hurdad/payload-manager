@@ -54,8 +54,7 @@ void TryExecSqlite(const std::shared_ptr<db::sqlite::SqliteDB>& db, const std::s
     db->Exec(sql);
   } catch (const std::runtime_error& e) {
     const std::string msg = e.what();
-    if (msg.find("duplicate column") == std::string::npos &&
-        msg.find("no such column")   == std::string::npos) {
+    if (msg.find("duplicate column") == std::string::npos && msg.find("no such column") == std::string::npos) {
       throw;
     }
   }
@@ -224,8 +223,8 @@ std::shared_ptr<db::Repository> BuildRepository(const payload::runtime::config::
     // The lock is held until the connection is closed (process exit), so a
     // second instance connecting to the same database will fail here rather
     // than silently diverging the snapshot cache.
-    static constexpr int64_t              kSingleInstanceLockId = 0x5041594C4F414400LL; // "PAYLOAD\0"
-    static std::unique_ptr<pqxx::connection> s_pg_guard; // held for process lifetime
+    static constexpr int64_t                 kSingleInstanceLockId = 0x5041594C4F414400LL; // "PAYLOAD\0"
+    static std::unique_ptr<pqxx::connection> s_pg_guard;                                   // held for process lifetime
     s_pg_guard = std::make_unique<pqxx::connection>(database.postgres().connection_uri());
     {
       pqxx::nontransaction ntx(*s_pg_guard);
@@ -359,9 +358,8 @@ Application Build(const payload::runtime::config::RuntimeConfig& config) {
   app.grpc_services.push_back(std::make_unique<grpc::DataServer>(data_service));
   app.grpc_services.push_back(std::make_unique<grpc::CatalogServer>(catalog_service));
   app.grpc_services.push_back(std::make_unique<grpc::AdminServer>(admin_service));
-  const uint32_t poll_ms = config.stream().subscribe_poll_interval_ms();
-  const auto     poll_interval =
-      poll_ms > 0 ? std::chrono::milliseconds(poll_ms) : grpc::StreamServer::kDefaultPollInterval;
+  const uint32_t poll_ms       = config.stream().subscribe_poll_interval_ms();
+  const auto     poll_interval = poll_ms > 0 ? std::chrono::milliseconds(poll_ms) : grpc::StreamServer::kDefaultPollInterval;
   app.grpc_services.push_back(std::make_unique<grpc::StreamServer>(stream_service, poll_interval));
 
   // Keep ownership of workers so they live for process lifetime.

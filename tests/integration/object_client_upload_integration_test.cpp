@@ -40,7 +40,7 @@
 #include <memory>
 #include <string>
 
-#include "client/cpp/payload_manager_client.h"
+#include "client/cpp/client.h"
 #include "payload/manager/catalog/v1/archive_metadata.pb.h"
 #include "payload/manager/v1.hpp"
 
@@ -52,30 +52,29 @@ using payload::manager::client::PayloadClient;
 // Assertion helpers (same pattern as object_spill_integration_test.cpp)
 // ---------------------------------------------------------------------------
 
-#define ASSERT_OK(expr)                                                                                   \
-  do {                                                                                                    \
-    auto _s = (expr);                                                                                     \
-    if (!_s.ok()) {                                                                                       \
-      std::cerr << "FAIL [" #expr "]: " << _s.ToString() << "\n  at " __FILE__ ":" << __LINE__ << '\n';  \
-      std::exit(1);                                                                                       \
-    }                                                                                                     \
+#define ASSERT_OK(expr)                                                                                 \
+  do {                                                                                                  \
+    auto _s = (expr);                                                                                   \
+    if (!_s.ok()) {                                                                                     \
+      std::cerr << "FAIL [" #expr "]: " << _s.ToString() << "\n  at " __FILE__ ":" << __LINE__ << '\n'; \
+      std::exit(1);                                                                                     \
+    }                                                                                                   \
   } while (0)
 
-#define ASSERT_TRUE(cond)                                                                 \
-  do {                                                                                    \
-    if (!(cond)) {                                                                        \
-      std::cerr << "FAIL assertion: " #cond "\n  at " __FILE__ ":" << __LINE__ << '\n';  \
-      std::exit(1);                                                                       \
-    }                                                                                     \
+#define ASSERT_TRUE(cond)                                                               \
+  do {                                                                                  \
+    if (!(cond)) {                                                                      \
+      std::cerr << "FAIL assertion: " #cond "\n  at " __FILE__ ":" << __LINE__ << '\n'; \
+      std::exit(1);                                                                     \
+    }                                                                                   \
   } while (0)
 
-#define ASSERT_EQ(a, b)                                                                                   \
-  do {                                                                                                    \
-    if ((a) != (b)) {                                                                                     \
-      std::cerr << "FAIL: " #a " (" << (a) << ") != " #b " (" << (b) << ")\n  at " __FILE__ ":"         \
-                << __LINE__ << '\n';                                                                      \
-      std::exit(1);                                                                                       \
-    }                                                                                                     \
+#define ASSERT_EQ(a, b)                                                                                              \
+  do {                                                                                                               \
+    if ((a) != (b)) {                                                                                                \
+      std::cerr << "FAIL: " #a " (" << (a) << ") != " #b " (" << (b) << ")\n  at " __FILE__ ":" << __LINE__ << '\n'; \
+      std::exit(1);                                                                                                  \
+    }                                                                                                                \
   } while (0)
 
 static const char* RequireEnv(const char* name) {
@@ -91,8 +90,7 @@ static const char* RequireEnv(const char* name) {
 // Build an Arrow S3FileSystem pointed at MinIO for result verification.
 // ---------------------------------------------------------------------------
 
-std::pair<std::shared_ptr<arrow::fs::S3FileSystem>, std::string>
-MakeMinioS3Fs(const std::string& endpoint, const std::string& bucket) {
+std::pair<std::shared_ptr<arrow::fs::S3FileSystem>, std::string> MakeMinioS3Fs(const std::string& endpoint, const std::string& bucket) {
   ASSERT_OK(arrow::fs::EnsureS3Initialized());
 
   arrow::fs::S3Options opts;
@@ -142,7 +140,7 @@ int main() {
   std::shared_ptr<arrow::fs::FileSystem> client_fs = *make_result;
 
   // Connect to the payload manager.
-  auto channel = grpc::CreateChannel(pm_endpoint, grpc::InsecureChannelCredentials());
+  auto          channel = grpc::CreateChannel(pm_endpoint, grpc::InsecureChannelCredentials());
   PayloadClient client(channel, client_fs);
 
   // -------------------------------------------------------------------------
@@ -158,9 +156,9 @@ int main() {
   auto alloc_result = client.AllocateWritableBuffer(kPayloadSize, TIER_OBJECT);
   ASSERT_OK(alloc_result.status());
 
-  const auto& writable    = *alloc_result;
-  const auto  payload_id  = writable.descriptor.payload_id();
-  const auto  uuid_hex    = IdToHex(payload_id);
+  const auto& writable   = *alloc_result;
+  const auto  payload_id = writable.descriptor.payload_id();
+  const auto  uuid_hex   = IdToHex(payload_id);
 
   ASSERT_TRUE(!payload_id.value().empty());
   ASSERT_TRUE(writable.buffer != nullptr);
@@ -230,7 +228,7 @@ int main() {
   ASSERT_OK(in_result.status());
   auto read_result = (*in_result)->Read(kPayloadSize);
   ASSERT_OK(read_result.status());
-  const auto& read_buf = *read_result;
+  const auto& read_buf   = *read_result;
   bool        pattern_ok = true;
   for (int64_t i = 0; i < read_buf->size(); ++i) {
     if (static_cast<unsigned char>(read_buf->data()[i]) != 0xBE) {
@@ -245,8 +243,8 @@ int main() {
   // Step 8 — Arrow S3: verify .meta.json exists and parses correctly.
   // -------------------------------------------------------------------------
   std::cout << "[8] Verifying .meta.json sidecar...\n";
-  const std::string meta_key    = minio_bucket + "/" + uuid_hex + ".meta.json";
-  auto              meta_info   = verify_fs->GetFileInfo(meta_key);
+  const std::string meta_key  = minio_bucket + "/" + uuid_hex + ".meta.json";
+  auto              meta_info = verify_fs->GetFileInfo(meta_key);
   ASSERT_OK(meta_info.status());
   ASSERT_TRUE(meta_info->size() > 0);
 
@@ -256,9 +254,8 @@ int main() {
   ASSERT_OK(meta_buf.status());
 
   PayloadArchiveMetadata meta;
-  const std::string      json_str(reinterpret_cast<const char*>((*meta_buf)->data()),
-                                  static_cast<size_t>((*meta_buf)->size()));
-  auto parse_status = google::protobuf::util::JsonStringToMessage(json_str, &meta);
+  const std::string      json_str(reinterpret_cast<const char*>((*meta_buf)->data()), static_cast<size_t>((*meta_buf)->size()));
+  auto                   parse_status = google::protobuf::util::JsonStringToMessage(json_str, &meta);
   ASSERT_TRUE(parse_status.ok());
   ASSERT_EQ(meta.payload_descriptor().tier(), TIER_OBJECT);
   ASSERT_EQ(meta.metadata_version(), 1u);

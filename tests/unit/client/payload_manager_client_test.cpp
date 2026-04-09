@@ -1,4 +1,4 @@
-#include "client/cpp/payload_manager_client.h"
+#include "client/cpp/client.h"
 
 #include <grpcpp/create_channel.h>
 #include <grpcpp/security/credentials.h>

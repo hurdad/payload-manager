@@ -198,11 +198,14 @@ TEST(PayloadManagerSmoke, FullLifecycle) {
   f.catalog.Delete(delete_req);
 
   // Verify deletion is complete
-  EXPECT_THROW({
-    ResolveSnapshotRequest check_req;
-    *check_req.mutable_id() = payload_id;
-    f.data.ResolveSnapshot(check_req);
-  }, std::runtime_error) << "deleted payload must not be resolvable";
+  EXPECT_THROW(
+      {
+        ResolveSnapshotRequest check_req;
+        *check_req.mutable_id() = payload_id;
+        f.data.ResolveSnapshot(check_req);
+      },
+      std::runtime_error)
+      << "deleted payload must not be resolvable";
   EXPECT_FALSE(f.ram->Has(payload_id)) << "storage must be cleaned up after delete";
 }
 
@@ -237,11 +240,14 @@ TEST(PayloadManagerSmoke, ForceDeleteWithActiveLease) {
   EXPECT_NO_THROW(f.catalog.Delete(delete_req)) << "force delete must succeed even with an active lease";
 
   // Payload must be gone.
-  EXPECT_THROW({
-    ResolveSnapshotRequest check_req;
-    *check_req.mutable_id() = payload_id;
-    f.data.ResolveSnapshot(check_req);
-  }, std::runtime_error) << "force-deleted payload must not be resolvable";
+  EXPECT_THROW(
+      {
+        ResolveSnapshotRequest check_req;
+        *check_req.mutable_id() = payload_id;
+        f.data.ResolveSnapshot(check_req);
+      },
+      std::runtime_error)
+      << "force-deleted payload must not be resolvable";
 }
 
 // ---------------------------------------------------------------------------

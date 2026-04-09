@@ -44,7 +44,8 @@ using payload::manager::v1::TIER_RAM;
 
 class SimpleBackend final : public payload::storage::StorageBackend {
  public:
-  explicit SimpleBackend(payload::manager::v1::Tier tier) : tier_(tier) {}
+  explicit SimpleBackend(payload::manager::v1::Tier tier) : tier_(tier) {
+  }
 
   std::shared_ptr<arrow::Buffer> Allocate(const payload::manager::v1::PayloadID& id, uint64_t size) override {
     auto r = arrow::AllocateBuffer(size);
@@ -60,9 +61,15 @@ class SimpleBackend final : public payload::storage::StorageBackend {
   void Write(const payload::manager::v1::PayloadID& id, const std::shared_ptr<arrow::Buffer>& b, bool) override {
     bufs_[id.value()] = b;
   }
-  void Remove(const payload::manager::v1::PayloadID& id) override { bufs_.erase(id.value()); }
-  bool Has(const payload::manager::v1::PayloadID& id) const { return bufs_.count(id.value()) > 0; }
-  payload::manager::v1::Tier TierType() const override { return tier_; }
+  void Remove(const payload::manager::v1::PayloadID& id) override {
+    bufs_.erase(id.value());
+  }
+  bool Has(const payload::manager::v1::PayloadID& id) const {
+    return bufs_.count(id.value()) > 0;
+  }
+  payload::manager::v1::Tier TierType() const override {
+    return tier_;
+  }
 
  private:
   payload::manager::v1::Tier                                      tier_;
@@ -70,33 +77,33 @@ class SimpleBackend final : public payload::storage::StorageBackend {
 };
 
 struct Fixture {
-  std::shared_ptr<payload::lease::LeaseManager>          lease_mgr = std::make_shared<payload::lease::LeaseManager>(
-      /*default_ms=*/200, /*max_ms=*/500);  // short lease for fast tests
-  std::shared_ptr<payload::db::memory::MemoryRepository> repo      = std::make_shared<payload::db::memory::MemoryRepository>();
-  std::shared_ptr<SimpleBackend>                         ram       = std::make_shared<SimpleBackend>(TIER_RAM);
-  std::shared_ptr<SimpleBackend>                         disk      = std::make_shared<SimpleBackend>(TIER_DISK);
+  std::shared_ptr<payload::lease::LeaseManager> lease_mgr = std::make_shared<payload::lease::LeaseManager>(
+      /*default_ms=*/200, /*max_ms=*/500); // short lease for fast tests
+  std::shared_ptr<payload::db::memory::MemoryRepository> repo = std::make_shared<payload::db::memory::MemoryRepository>();
+  std::shared_ptr<SimpleBackend>                         ram  = std::make_shared<SimpleBackend>(TIER_RAM);
+  std::shared_ptr<SimpleBackend>                         disk = std::make_shared<SimpleBackend>(TIER_DISK);
   std::shared_ptr<payload::core::PayloadManager>         manager{[&] {
     payload::storage::StorageFactory::TierMap s;
     s[TIER_RAM]  = ram;
     s[TIER_DISK] = disk;
     return std::make_shared<payload::core::PayloadManager>(s, lease_mgr, repo);
   }()};
-  payload::service::ServiceContext ctx{[&] {
+  payload::service::ServiceContext                       ctx{[&] {
     payload::service::ServiceContext c;
-    c.manager             = manager;
-    c.repository          = repo;
-    c.lease_mgr           = lease_mgr;
-    c.spill_wait_timeout_ms = 150;  // 150 ms timeout
+    c.manager               = manager;
+    c.repository            = repo;
+    c.lease_mgr             = lease_mgr;
+    c.spill_wait_timeout_ms = 150; // 150 ms timeout
     return c;
   }()};
-  payload::service::CatalogService catalog{ctx};
-  payload::service::DataService    data{ctx};
+  payload::service::CatalogService                       catalog{ctx};
+  payload::service::DataService                          data{ctx};
 
   payload::manager::v1::PayloadID Allocate() {
     payload::manager::v1::AllocatePayloadRequest req;
     req.set_size_bytes(64);
     req.set_preferred_tier(TIER_RAM);
-    const auto resp = catalog.Allocate(req);
+    const auto                                 resp = catalog.Allocate(req);
     payload::manager::v1::CommitPayloadRequest commit;
     *commit.mutable_id() = resp.payload_descriptor().payload_id();
     catalog.Commit(commit);
@@ -122,7 +129,7 @@ struct Fixture {
 // wait_for_leases=false with active lease returns LeaseConflict immediately.
 // ---------------------------------------------------------------------------
 TEST(SpillWaitTimeout, WaitFalseWithActiveLeaseFails) {
-  Fixture f;
+  Fixture    f;
   const auto id = f.Allocate();
   f.AcquireLease(id, 30000);
 
@@ -139,7 +146,7 @@ TEST(SpillWaitTimeout, WaitFalseWithActiveLeaseFails) {
 // wait_for_leases=true with a long-lived lease exceeds timeout → LeaseConflict.
 // ---------------------------------------------------------------------------
 TEST(SpillWaitTimeout, WaitTrueTimesOutWhenLeaseDoesNotExpire) {
-  Fixture f;
+  Fixture    f;
   const auto id = f.Allocate();
   // Acquire a 30s lease — will not expire within the 150ms wait timeout.
   f.AcquireLease(id, 30000);
@@ -174,9 +181,9 @@ TEST(SpillWaitTimeout, WaitTrueSucceedsAfterLeaseExpires) {
   auto manager = std::make_shared<payload::core::PayloadManager>(s, lease_mgr, repo);
 
   payload::service::ServiceContext ctx;
-  ctx.manager             = manager;
-  ctx.repository          = repo;
-  ctx.lease_mgr           = lease_mgr;
+  ctx.manager               = manager;
+  ctx.repository            = repo;
+  ctx.lease_mgr             = lease_mgr;
   ctx.spill_wait_timeout_ms = 500;
 
   payload::service::CatalogService catalog(ctx);
@@ -185,15 +192,15 @@ TEST(SpillWaitTimeout, WaitTrueSucceedsAfterLeaseExpires) {
   payload::manager::v1::AllocatePayloadRequest alloc_req;
   alloc_req.set_size_bytes(64);
   alloc_req.set_preferred_tier(TIER_RAM);
-  const auto alloc_resp = catalog.Allocate(alloc_req);
-  const auto id         = alloc_resp.payload_descriptor().payload_id();
+  const auto                                 alloc_resp = catalog.Allocate(alloc_req);
+  const auto                                 id         = alloc_resp.payload_descriptor().payload_id();
   payload::manager::v1::CommitPayloadRequest commit_req;
   *commit_req.mutable_id() = id;
   catalog.Commit(commit_req);
 
   // Acquire a 50ms lease — will expire on its own.
   AcquireReadLeaseRequest lease_req;
-  *lease_req.mutable_id()        = id;
+  *lease_req.mutable_id() = id;
   lease_req.set_min_lease_duration_ms(50);
   lease_req.set_mode(LEASE_MODE_READ);
   data.AcquireReadLease(lease_req);

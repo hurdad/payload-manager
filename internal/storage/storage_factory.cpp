@@ -23,8 +23,7 @@ StorageFactory::TierMap StorageFactory::Build(const payload::runtime::config::St
   stores.emplace(payload::manager::v1::TIER_DISK, std::make_shared<DiskArrowStore>(std::move(disk_root)));
 
   if (!cfg.object().root_path().empty()) {
-    const bool is_s3 = cfg.object().filesystem() == pb::arrow::storage::FILE_SYSTEM_S3 ||
-                       cfg.object().filesystem_options().has_s3();
+    const bool is_s3 = cfg.object().filesystem() == pb::arrow::storage::FILE_SYSTEM_S3 || cfg.object().filesystem_options().has_s3();
     auto [object_fs, object_root] =
         payload::storage::common::Unwrap(payload::storage::common::ResolveFileSystem(cfg.object().root_path(), cfg.object()));
     stores.emplace(payload::manager::v1::TIER_OBJECT, std::make_shared<ObjectArrowStore>(std::move(object_fs), std::move(object_root), is_s3));

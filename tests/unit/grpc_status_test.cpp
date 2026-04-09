@@ -1,5 +1,4 @@
 #include <grpcpp/grpcpp.h>
-
 #include <gtest/gtest.h>
 
 #include <memory>

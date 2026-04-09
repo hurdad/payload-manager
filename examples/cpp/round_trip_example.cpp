@@ -5,7 +5,7 @@
 #include <memory>
 #include <string>
 
-#include "client/cpp/payload_manager_client.h"
+#include "client/cpp/client.h"
 #include "example_util.hpp"
 #include "otel_tracer.hpp"
 #include "payload/manager/v1.hpp"

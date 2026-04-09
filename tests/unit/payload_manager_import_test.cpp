@@ -62,8 +62,7 @@ struct TempDir {
   std::filesystem::path path;
 
   TempDir() {
-    path = std::filesystem::temp_directory_path() /
-           ("import_test_" + std::to_string(std::hash<std::thread::id>{}(std::this_thread::get_id())));
+    path = std::filesystem::temp_directory_path() / ("import_test_" + std::to_string(std::hash<std::thread::id>{}(std::this_thread::get_id())));
     std::filesystem::create_directories(path);
   }
 
@@ -84,7 +83,7 @@ class TrackingStorageBackend final : public payload::storage::StorageBackend {
 
   std::shared_ptr<arrow::Buffer> Allocate(const PayloadID& id, uint64_t size_bytes) override {
     allocate_calls_++;
-    auto buf = *arrow::AllocateBuffer(size_bytes);
+    auto buf             = *arrow::AllocateBuffer(size_bytes);
     buffers_[id.value()] = std::shared_ptr<arrow::Buffer>(std::move(buf));
     return buffers_[id.value()];
   }
@@ -112,7 +111,7 @@ class TrackingStorageBackend final : public payload::storage::StorageBackend {
  private:
   payload::manager::v1::Tier                                      tier_;
   std::unordered_map<std::string, std::shared_ptr<arrow::Buffer>> buffers_;
-  int                                                              allocate_calls_{0};
+  int                                                             allocate_calls_{0};
 };
 
 // ---------------------------------------------------------------------------
@@ -134,20 +133,20 @@ struct ImportFixture {
     storage[TIER_OBJECT] = obj_store;
     return std::make_shared<PayloadManager>(storage, lease_mgr, repo);
   }()};
-  payload::service::ServiceContext ctx{[&] {
+  payload::service::ServiceContext                       ctx{[&] {
     payload::service::ServiceContext c;
     c.manager    = manager;
     c.repository = repo;
     return c;
   }()};
-  payload::service::CatalogService catalog{ctx};
+  payload::service::CatalogService                       catalog{ctx};
 };
 
 // Same but without an object store configured.
 struct ImportFixtureNoObjectStore {
   std::shared_ptr<LeaseManager>                          lease_mgr = std::make_shared<LeaseManager>();
   std::shared_ptr<TrackingStorageBackend>                ram       = std::make_shared<TrackingStorageBackend>(TIER_RAM);
-  std::shared_ptr<payload::db::memory::MemoryRepository> repo = std::make_shared<payload::db::memory::MemoryRepository>();
+  std::shared_ptr<payload::db::memory::MemoryRepository> repo      = std::make_shared<payload::db::memory::MemoryRepository>();
   std::shared_ptr<PayloadManager>                        manager{[&] {
     payload::storage::StorageFactory::TierMap storage;
     storage[TIER_RAM] = ram;
@@ -168,7 +167,7 @@ void WriteObjectBytes(const TempDir& tmp, const PayloadID& id, uint64_t size_byt
     hex.push_back(kHex[c >> 4]);
     hex.push_back(kHex[c & 0x0fu]);
   }
-  const auto path = tmp.path / (hex + ".bin");
+  const auto    path = tmp.path / (hex + ".bin");
   std::ofstream out(path, std::ios::binary);
   std::string   data(size_bytes, '\xBE');
   out.write(data.data(), static_cast<std::streamsize>(data.size()));
@@ -211,7 +210,7 @@ TEST(PayloadManagerImport, AllocateObjectTierPersistsAllocatedRecord) {
   const auto desc = f.manager->Allocate(64, TIER_OBJECT);
   const auto uuid = payload::util::FromProto(desc.payload_id());
 
-  auto tx     = f.repo->Begin();
+  auto       tx     = f.repo->Begin();
   const auto record = f.repo->GetPayload(*tx, uuid);
   tx->Commit();
 
@@ -263,8 +262,8 @@ TEST(PayloadManagerImport, ImportTransitionsToDurable) {
   WriteObjectBytes(f.tmp, id, 64);
   f.manager->Import(id, 64);
 
-  const auto uuid  = payload::util::FromProto(id);
-  auto       tx    = f.repo->Begin();
+  const auto uuid   = payload::util::FromProto(id);
+  auto       tx     = f.repo->Begin();
   const auto record = f.repo->GetPayload(*tx, uuid);
   tx->Commit();
 
@@ -290,8 +289,8 @@ TEST(PayloadManagerImport, ImportWritesSidecarJson) {
   const auto sidecar = f.tmp.path / (uuid + ".meta.json");
   ASSERT_TRUE(std::filesystem::exists(sidecar)) << "sidecar should exist at " << sidecar;
 
-  std::ifstream      in(sidecar);
-  const std::string  json_str((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+  std::ifstream     in(sidecar);
+  const std::string json_str((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
   EXPECT_FALSE(json_str.empty());
 
   PayloadArchiveMetadata meta;
@@ -379,8 +378,7 @@ TEST(PayloadManagerImport, CatalogAllocatePopulatesObjectUploadPath) {
 
   const auto resp = f.catalog.Allocate(req);
 
-  EXPECT_FALSE(resp.object_upload_path().empty())
-      << "object_upload_path should be set for TIER_OBJECT allocations";
+  EXPECT_FALSE(resp.object_upload_path().empty()) << "object_upload_path should be set for TIER_OBJECT allocations";
   // Descriptor should have no location set.
   EXPECT_FALSE(resp.payload_descriptor().has_ram());
   EXPECT_FALSE(resp.payload_descriptor().has_disk());

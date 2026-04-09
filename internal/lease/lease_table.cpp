@@ -148,9 +148,8 @@ bool LeaseTable::HasAnyLocked(const std::string& payload_key) const {
   return by_payload_.count(payload_key) > 0;
 }
 
-bool LeaseTable::WaitUntilNoLeases(const payload::manager::v1::PayloadID& id,
-                                   std::chrono::steady_clock::time_point  deadline) {
-  const auto payload_key = Key(id);
+bool LeaseTable::WaitUntilNoLeases(const payload::manager::v1::PayloadID& id, std::chrono::steady_clock::time_point deadline) {
+  const auto       payload_key = Key(id);
   std::unique_lock lock(mutex_);
 
   // In each iteration:

@@ -44,7 +44,7 @@ endif()
 
 # Respects BUILD_SHARED_LIBS (default OFF = static archive).
 add_library(payload_manager_client
-        payload_manager_client.cc
+        client.cc
 )
 add_library(payload_manager::client ALIAS payload_manager_client)
 
@@ -91,9 +91,8 @@ install(TARGETS payload_manager_client
 )
 
 # Public header — installed as <payload-manager/cpp/client.h>
-install(FILES payload_manager_client.h
+install(FILES client.h
         DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/payload-manager/cpp
-        RENAME client.h
 )
 
 # ---------------------------------------------------------------------------

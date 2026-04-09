@@ -48,10 +48,8 @@ TEST(LeaseManager, ZeroDurationUsesDefault) {
 
   // Expiry must be approximately now + kDefault.  Allow ±500 ms for test jitter.
   const auto expiry_ms = LeaseExpiryMs(lease);
-  EXPECT_GE(expiry_ms, static_cast<int64_t>(kDefault) - 500)
-      << "lease expiry must be at least default_lease_ms from now";
-  EXPECT_LE(expiry_ms, static_cast<int64_t>(kDefault) + 500)
-      << "lease expiry must not exceed default_lease_ms + jitter";
+  EXPECT_GE(expiry_ms, static_cast<int64_t>(kDefault) - 500) << "lease expiry must be at least default_lease_ms from now";
+  EXPECT_LE(expiry_ms, static_cast<int64_t>(kDefault) + 500) << "lease expiry must not exceed default_lease_ms + jitter";
 }
 
 // ---------------------------------------------------------------------------
@@ -65,10 +63,8 @@ TEST(LeaseManager, OverMaxIsClamped) {
   const auto lease = mgr.Acquire(MakeID("p2"), PayloadDescriptor{}, /*min_duration_ms=*/300'000);
 
   const auto expiry_ms = LeaseExpiryMs(lease);
-  EXPECT_GE(expiry_ms, static_cast<int64_t>(kMax) - 500)
-      << "clamped expiry must be at least max_lease_ms from now";
-  EXPECT_LE(expiry_ms, static_cast<int64_t>(kMax) + 500)
-      << "clamped expiry must not exceed max_lease_ms + jitter";
+  EXPECT_GE(expiry_ms, static_cast<int64_t>(kMax) - 500) << "clamped expiry must be at least max_lease_ms from now";
+  EXPECT_LE(expiry_ms, static_cast<int64_t>(kMax) + 500) << "clamped expiry must not exceed max_lease_ms + jitter";
 }
 
 // ---------------------------------------------------------------------------
@@ -90,24 +86,23 @@ TEST(LeaseManager, ExactMaxPassesThrough) {
 // max_lease_ms == 0 disables the cap — a large request is honoured
 // ---------------------------------------------------------------------------
 TEST(LeaseManager, ZeroMaxDisablesCap) {
-  constexpr uint64_t kDefault  = 20'000;
-  constexpr uint64_t kNoCap    = 0;
+  constexpr uint64_t kDefault   = 20'000;
+  constexpr uint64_t kNoCap     = 0;
   constexpr uint64_t kRequested = 600'000; // 10 minutes
   LeaseManager       mgr(kDefault, kNoCap);
 
   const auto lease = mgr.Acquire(MakeID("p4"), PayloadDescriptor{}, /*min_duration_ms=*/kRequested);
 
   const auto expiry_ms = LeaseExpiryMs(lease);
-  EXPECT_GE(expiry_ms, static_cast<int64_t>(kRequested) - 500)
-      << "when max_lease_ms==0, large requests must not be clamped";
+  EXPECT_GE(expiry_ms, static_cast<int64_t>(kRequested) - 500) << "when max_lease_ms==0, large requests must not be clamped";
 }
 
 // ---------------------------------------------------------------------------
 // A non-zero min_duration_ms below the max passes through unchanged
 // ---------------------------------------------------------------------------
 TEST(LeaseManager, BelowMaxPassesThroughUnchanged) {
-  constexpr uint64_t kDefault  = 20'000;
-  constexpr uint64_t kMax      = 120'000;
+  constexpr uint64_t kDefault   = 20'000;
+  constexpr uint64_t kMax       = 120'000;
   constexpr uint64_t kRequested = 45'000;
   LeaseManager       mgr(kDefault, kMax);
 

@@ -19,15 +19,12 @@ class MemoryRepository final : public db::Repository {
 
   Result                              InsertPayload(Transaction&, const model::PayloadRecord&) override;
   std::optional<model::PayloadRecord> GetPayload(Transaction&, const payload::util::UUID&) override;
-  std::vector<model::PayloadRecord>   ListPayloads(Transaction&,
-                                                   payload::manager::v1::Tier tier_filter = payload::manager::v1::TIER_UNSPECIFIED,
-                                                   int32_t limit = 0,
-                                                   int32_t offset = 0) override;
-  int32_t                             CountPayloads(Transaction&,
-                                                    payload::manager::v1::Tier tier_filter = payload::manager::v1::TIER_UNSPECIFIED) override;
-  Result                              UpdatePayload(Transaction&, const model::PayloadRecord&) override;
-  Result                              DeletePayload(Transaction&, const payload::util::UUID&) override;
-  std::vector<model::PayloadRecord>   ListExpiredPayloads(Transaction&, uint64_t now_ms) override;
+  std::vector<model::PayloadRecord>   ListPayloads(Transaction&, payload::manager::v1::Tier tier_filter = payload::manager::v1::TIER_UNSPECIFIED,
+                                                   int32_t limit = 0, int32_t offset = 0) override;
+  int32_t CountPayloads(Transaction&, payload::manager::v1::Tier tier_filter = payload::manager::v1::TIER_UNSPECIFIED) override;
+  Result  UpdatePayload(Transaction&, const model::PayloadRecord&) override;
+  Result  DeletePayload(Transaction&, const payload::util::UUID&) override;
+  std::vector<model::PayloadRecord> ListExpiredPayloads(Transaction&, uint64_t now_ms) override;
 
   Result                               UpsertMetadata(Transaction&, const model::MetadataRecord&) override;
   std::optional<model::MetadataRecord> GetMetadata(Transaction&, const std::string&) override;
@@ -56,10 +53,10 @@ class MemoryRepository final : public db::Repository {
   friend class MemoryTransaction;
 
   struct State {
-    std::unordered_map<payload::util::UUID, model::PayloadRecord>  payloads;
-    std::unordered_map<std::string, model::MetadataRecord> metadata;
-    std::vector<model::MetadataEventRecord>                metadata_events;
-    std::vector<model::LineageRecord>                      lineage;
+    std::unordered_map<payload::util::UUID, model::PayloadRecord> payloads;
+    std::unordered_map<std::string, model::MetadataRecord>        metadata;
+    std::vector<model::MetadataEventRecord>                       metadata_events;
+    std::vector<model::LineageRecord>                             lineage;
 
     std::unordered_map<uint64_t, model::StreamRecord>                   streams;
     std::unordered_map<std::string, uint64_t>                           stream_name_to_id;

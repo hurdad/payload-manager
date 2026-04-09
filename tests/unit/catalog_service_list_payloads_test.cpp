@@ -10,8 +10,6 @@
     - invalid page_token falls back to offset 0
 */
 
-#include "internal/service/catalog_service.hpp"
-
 #include <gtest/gtest.h>
 
 #include <chrono>
@@ -20,6 +18,7 @@
 
 #include "internal/db/memory/memory_repository.hpp"
 #include "internal/db/model/payload_record.hpp"
+#include "internal/service/catalog_service.hpp"
 #include "internal/service/service_context.hpp"
 #include "internal/util/uuid.hpp"
 #include "payload/manager/v1.hpp"
@@ -27,10 +26,10 @@
 namespace {
 
 using payload::manager::v1::ListPayloadsRequest;
+using payload::manager::v1::PAYLOAD_STATE_ACTIVE;
 using payload::manager::v1::TIER_DISK;
 using payload::manager::v1::TIER_RAM;
 using payload::manager::v1::TIER_UNSPECIFIED;
-using payload::manager::v1::PAYLOAD_STATE_ACTIVE;
 
 payload::service::ServiceContext MakeCtx() {
   payload::service::ServiceContext ctx;
@@ -40,22 +39,18 @@ payload::service::ServiceContext MakeCtx() {
 
 // Insert n payload records with the given tier into the repository.
 // created_at_ms is staggered so ORDER BY created_at_ms DESC is deterministic.
-void InsertPayloads(const payload::service::ServiceContext& ctx,
-                    int n,
-                    payload::manager::v1::Tier tier = TIER_RAM) {
-  auto base_ms = static_cast<uint64_t>(
-      std::chrono::duration_cast<std::chrono::milliseconds>(
-          std::chrono::system_clock::now().time_since_epoch())
-          .count());
+void InsertPayloads(const payload::service::ServiceContext& ctx, int n, payload::manager::v1::Tier tier = TIER_RAM) {
+  auto base_ms =
+      static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count());
 
   for (int i = 0; i < n; ++i) {
     payload::db::model::PayloadRecord r;
-    r.id             = payload::util::GenerateUUID();
-    r.tier           = tier;
-    r.state          = PAYLOAD_STATE_ACTIVE;
-    r.size_bytes     = 64;
-    r.version        = 1;
-    r.created_at_ms  = base_ms + static_cast<uint64_t>(i); // ascending so newest last
+    r.id            = payload::util::GenerateUUID();
+    r.tier          = tier;
+    r.state         = PAYLOAD_STATE_ACTIVE;
+    r.size_bytes    = 64;
+    r.version       = 1;
+    r.created_at_ms = base_ms + static_cast<uint64_t>(i); // ascending so newest last
 
     auto tx = ctx.repository->Begin();
     ctx.repository->InsertPayload(*tx, r);
@@ -63,9 +58,7 @@ void InsertPayloads(const payload::service::ServiceContext& ctx,
   }
 }
 
-ListPayloadsRequest MakeReq(int page_size = 0,
-                            const std::string& page_token = "",
-                            payload::manager::v1::Tier tier = TIER_UNSPECIFIED) {
+ListPayloadsRequest MakeReq(int page_size = 0, const std::string& page_token = "", payload::manager::v1::Tier tier = TIER_UNSPECIFIED) {
   ListPayloadsRequest req;
   req.set_page_size(page_size);
   req.set_page_token(page_token);
@@ -84,7 +77,7 @@ TEST(ListPayloads, TotalCountMatchesInserted) {
   InsertPayloads(ctx, 7);
 
   payload::service::CatalogService svc(ctx);
-  const auto resp = svc.ListPayloads(MakeReq(50));
+  const auto                       resp = svc.ListPayloads(MakeReq(50));
 
   EXPECT_EQ(resp.total_count(), 7);
   EXPECT_EQ(resp.payloads_size(), 7);
@@ -92,7 +85,7 @@ TEST(ListPayloads, TotalCountMatchesInserted) {
 }
 
 TEST(ListPayloads, EmptyRepositoryReturnsZeroCount) {
-  auto ctx = MakeCtx();
+  auto                             ctx = MakeCtx();
   payload::service::CatalogService svc(ctx);
 
   const auto resp = svc.ListPayloads(MakeReq(50));
@@ -110,7 +103,7 @@ TEST(ListPayloads, NextPageTokenPresentWhenMorePagesExist) {
   InsertPayloads(ctx, 10);
 
   payload::service::CatalogService svc(ctx);
-  const auto resp = svc.ListPayloads(MakeReq(3)); // page_size=3, 10 total → 4 pages
+  const auto                       resp = svc.ListPayloads(MakeReq(3)); // page_size=3, 10 total → 4 pages
 
   EXPECT_EQ(resp.total_count(), 10);
   EXPECT_EQ(resp.payloads_size(), 3);
@@ -138,7 +131,7 @@ TEST(ListPayloads, ExactlyOnePageHasNoNextToken) {
   InsertPayloads(ctx, 5);
 
   payload::service::CatalogService svc(ctx);
-  const auto resp = svc.ListPayloads(MakeReq(5)); // exactly fits
+  const auto                       resp = svc.ListPayloads(MakeReq(5)); // exactly fits
 
   EXPECT_EQ(resp.total_count(), 5);
   EXPECT_EQ(resp.payloads_size(), 5);
@@ -154,7 +147,7 @@ TEST(ListPayloads, PageTwoContainsCorrectRecords) {
   InsertPayloads(ctx, 9);
 
   payload::service::CatalogService svc(ctx);
-  const auto page1 = svc.ListPayloads(MakeReq(4));
+  const auto                       page1 = svc.ListPayloads(MakeReq(4));
   ASSERT_EQ(page1.payloads_size(), 4);
   ASSERT_FALSE(page1.next_page_token().empty());
 
@@ -179,9 +172,9 @@ TEST(ListPayloads, TotalCountConsistentAcrossPages) {
   InsertPayloads(ctx, 12);
 
   payload::service::CatalogService svc(ctx);
-  const auto page1 = svc.ListPayloads(MakeReq(5));
-  const auto page2 = svc.ListPayloads(MakeReq(5, page1.next_page_token()));
-  const auto page3 = svc.ListPayloads(MakeReq(5, page2.next_page_token()));
+  const auto                       page1 = svc.ListPayloads(MakeReq(5));
+  const auto                       page2 = svc.ListPayloads(MakeReq(5, page1.next_page_token()));
+  const auto                       page3 = svc.ListPayloads(MakeReq(5, page2.next_page_token()));
 
   EXPECT_EQ(page1.total_count(), 12);
   EXPECT_EQ(page2.total_count(), 12);
@@ -254,7 +247,7 @@ TEST(ListPayloads, PageSizeAbove500ClampedTo500) {
   InsertPayloads(ctx, 10);
 
   payload::service::CatalogService svc(ctx);
-  const auto resp = svc.ListPayloads(MakeReq(9999));
+  const auto                       resp = svc.ListPayloads(MakeReq(9999));
   // Clamped to 500, but only 10 records — all returned, no next page
   EXPECT_EQ(resp.payloads_size(), 10);
   EXPECT_TRUE(resp.next_page_token().empty());
@@ -269,7 +262,7 @@ TEST(ListPayloads, InvalidPageTokenFallsBackToFirstPage) {
   InsertPayloads(ctx, 5);
 
   payload::service::CatalogService svc(ctx);
-  const auto resp = svc.ListPayloads(MakeReq(50, "not-a-number"));
+  const auto                       resp = svc.ListPayloads(MakeReq(50, "not-a-number"));
   // Should not throw; treats as offset=0
   EXPECT_EQ(resp.total_count(), 5);
   EXPECT_EQ(resp.payloads_size(), 5);
@@ -280,7 +273,7 @@ TEST(ListPayloads, NegativePageTokenFallsBackToFirstPage) {
   InsertPayloads(ctx, 5);
 
   payload::service::CatalogService svc(ctx);
-  const auto resp = svc.ListPayloads(MakeReq(50, "-10"));
+  const auto                       resp = svc.ListPayloads(MakeReq(50, "-10"));
   EXPECT_EQ(resp.total_count(), 5);
   EXPECT_EQ(resp.payloads_size(), 5);
 }

@@ -29,8 +29,7 @@ class LeaseTable {
   // Block until all leases (active and invalidated) for the given payload have
   // been explicitly released via Remove(), or the deadline is reached.
   // Returns true on success (no leases remain), false on timeout.
-  bool WaitUntilNoLeases(const payload::manager::v1::PayloadID& id,
-                         std::chrono::steady_clock::time_point  deadline);
+  bool WaitUntilNoLeases(const payload::manager::v1::PayloadID& id, std::chrono::steady_clock::time_point deadline);
 
  private:
   using Clock = std::chrono::system_clock;
@@ -41,7 +40,7 @@ class LeaseTable {
   std::unordered_map<std::string, Lease>            leases_;
   std::unordered_multimap<std::string, std::string> by_payload_;
   // Lease IDs that have been invalidated by RemoveAll but not yet Released.
-  std::unordered_set<std::string>                   invalidated_leases_;
+  std::unordered_set<std::string> invalidated_leases_;
 
   static std::string Key(const payload::manager::v1::PayloadID& id);
   static std::string Key(const payload::manager::v1::LeaseID& id);

@@ -1,11 +1,12 @@
+#include <execinfo.h>
+#include <unistd.h>
+
 #include <chrono>
 #include <csignal>
 #include <cstdio>
-#include <execinfo.h>
 #include <iostream>
 #include <string>
 #include <thread>
-#include <unistd.h>
 
 #include "internal/config/config_loader.hpp"
 #include "internal/factory.hpp"

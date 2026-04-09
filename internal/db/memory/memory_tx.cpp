@@ -56,12 +56,12 @@ void MemoryTransaction::Commit() {
   // replacing only keys present in the working_ diff vs. the snapshot.
   // For simplicity, replace the entire stream state (streams are rarely
   // written concurrently in practice).
-  repo_.committed_.streams              = working_.streams;
-  repo_.committed_.stream_name_to_id    = working_.stream_name_to_id;
-  repo_.committed_.stream_entries       = working_.stream_entries;
-  repo_.committed_.consumer_offsets     = working_.consumer_offsets;
-  repo_.committed_.next_stream_offset   = working_.next_stream_offset;
-  repo_.committed_.next_stream_id       = working_.next_stream_id;
+  repo_.committed_.streams            = working_.streams;
+  repo_.committed_.stream_name_to_id  = working_.stream_name_to_id;
+  repo_.committed_.stream_entries     = working_.stream_entries;
+  repo_.committed_.consumer_offsets   = working_.consumer_offsets;
+  repo_.committed_.next_stream_offset = working_.next_stream_offset;
+  repo_.committed_.next_stream_id     = working_.next_stream_id;
 
   repo_.committed_version_++;
   committed_ = true;

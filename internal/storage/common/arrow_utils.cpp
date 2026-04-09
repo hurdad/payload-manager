@@ -7,7 +7,7 @@
 #include <arrow/filesystem/gcsfs.h>
 #endif
 #ifdef PAYLOAD_MANAGER_ARROW_HDFS
-#  include <arrow/filesystem/hdfs.h>
+#include <arrow/filesystem/hdfs.h>
 #endif
 #include <arrow/filesystem/localfs.h>
 #include <arrow/filesystem/s3fs.h>
@@ -79,8 +79,7 @@ arrow::Result<std::pair<std::shared_ptr<arrow::fs::FileSystem>, std::string>> Re
           options.ConfigureAnonymousCredentials();
           break;
         case pb::arrow::fs::s3::S3_CREDENTIALS_KIND_ROLE:
-          options.ConfigureAssumeRoleCredentials(
-              proto_options.role_arn(), proto_options.session_name(), proto_options.external_id());
+          options.ConfigureAssumeRoleCredentials(proto_options.role_arn(), proto_options.session_name(), proto_options.external_id());
           break;
         case pb::arrow::fs::s3::S3_CREDENTIALS_KIND_WEB_IDENTITY:
           options.ConfigureAssumeRoleWithWebIdentityCredentials();
@@ -126,8 +125,7 @@ arrow::Result<std::pair<std::shared_ptr<arrow::fs::FileSystem>, std::string>> Re
       // effects and without creating a disposable S3FileSystem object that
       // could interfere with the AWS SDK global state.
       constexpr std::string_view kS3Scheme = "s3://";
-      if (resolved_path.size() > kS3Scheme.size() &&
-          resolved_path.substr(0, kS3Scheme.size()) == kS3Scheme) {
+      if (resolved_path.size() > kS3Scheme.size() && resolved_path.substr(0, kS3Scheme.size()) == kS3Scheme) {
         resolved_path = resolved_path.substr(kS3Scheme.size());
       }
       ARROW_ASSIGN_OR_RAISE(auto fs, arrow::fs::S3FileSystem::Make(options));

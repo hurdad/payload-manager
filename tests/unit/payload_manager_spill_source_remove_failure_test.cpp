@@ -37,7 +37,8 @@ using payload::manager::v1::TIER_RAM;
 // Normal backend for the destination tier.
 class SimpleBackend final : public payload::storage::StorageBackend {
  public:
-  explicit SimpleBackend(payload::manager::v1::Tier tier) : tier_(tier) {}
+  explicit SimpleBackend(payload::manager::v1::Tier tier) : tier_(tier) {
+  }
 
   std::shared_ptr<arrow::Buffer> Allocate(const payload::manager::v1::PayloadID& id, uint64_t size) override {
     auto r = arrow::AllocateBuffer(size);
@@ -53,9 +54,15 @@ class SimpleBackend final : public payload::storage::StorageBackend {
   void Write(const payload::manager::v1::PayloadID& id, const std::shared_ptr<arrow::Buffer>& b, bool) override {
     bufs_[id.value()] = b;
   }
-  void Remove(const payload::manager::v1::PayloadID& id) override { bufs_.erase(id.value()); }
-  bool Has(const payload::manager::v1::PayloadID& id) const { return bufs_.count(id.value()) > 0; }
-  payload::manager::v1::Tier TierType() const override { return tier_; }
+  void Remove(const payload::manager::v1::PayloadID& id) override {
+    bufs_.erase(id.value());
+  }
+  bool Has(const payload::manager::v1::PayloadID& id) const {
+    return bufs_.count(id.value()) > 0;
+  }
+  payload::manager::v1::Tier TierType() const override {
+    return tier_;
+  }
 
  private:
   payload::manager::v1::Tier                                      tier_;
@@ -65,7 +72,8 @@ class SimpleBackend final : public payload::storage::StorageBackend {
 // Backend whose Remove() always throws — simulates a storage failure.
 class ThrowingRemoveBackend final : public payload::storage::StorageBackend {
  public:
-  explicit ThrowingRemoveBackend(payload::manager::v1::Tier tier) : tier_(tier) {}
+  explicit ThrowingRemoveBackend(payload::manager::v1::Tier tier) : tier_(tier) {
+  }
 
   std::shared_ptr<arrow::Buffer> Allocate(const payload::manager::v1::PayloadID& id, uint64_t size) override {
     auto r = arrow::AllocateBuffer(size);
@@ -84,7 +92,9 @@ class ThrowingRemoveBackend final : public payload::storage::StorageBackend {
   void Remove(const payload::manager::v1::PayloadID&) override {
     throw std::runtime_error("simulated Remove() failure");
   }
-  payload::manager::v1::Tier TierType() const override { return tier_; }
+  payload::manager::v1::Tier TierType() const override {
+    return tier_;
+  }
 
  private:
   payload::manager::v1::Tier                                      tier_;
@@ -103,8 +113,7 @@ TEST(SpillSourceRemoveFailure, SpillDoesNotPropagateRemoveException) {
   storage[TIER_RAM]  = ram_backend;
   storage[TIER_DISK] = disk_backend;
 
-  payload::core::PayloadManager manager(std::move(storage), lease_mgr,
-                                        std::make_shared<payload::db::memory::MemoryRepository>());
+  payload::core::PayloadManager manager(std::move(storage), lease_mgr, std::make_shared<payload::db::memory::MemoryRepository>());
 
   auto desc = manager.Commit(manager.Allocate(128, TIER_RAM).payload_id());
 
@@ -130,8 +139,8 @@ TEST(SpillSourceRemoveFailure, PromoteDoesNotPropagateRemoveException) {
   auto disk2 = std::make_shared<ThrowingRemoveBackend>(TIER_DISK);
 
   // Pre-seed the disk backend manually with a buffer.
-  const auto promote_uuid = payload::util::GenerateUUID();
-  payload::manager::v1::PayloadID id = payload::util::ToProto(promote_uuid);
+  const auto                      promote_uuid = payload::util::GenerateUUID();
+  payload::manager::v1::PayloadID id           = payload::util::ToProto(promote_uuid);
 
   auto buf_result = arrow::AllocateBuffer(64);
   ASSERT_TRUE(buf_result.ok());

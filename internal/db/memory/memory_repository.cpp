@@ -50,7 +50,8 @@ std::optional<model::PayloadRecord> MemoryRepository::GetPayload(Transaction& t,
   return it->second;
 }
 
-std::vector<model::PayloadRecord> MemoryRepository::ListPayloads(Transaction& t, payload::manager::v1::Tier tier_filter, int32_t limit, int32_t offset) {
+std::vector<model::PayloadRecord> MemoryRepository::ListPayloads(Transaction& t, payload::manager::v1::Tier tier_filter, int32_t limit,
+                                                                 int32_t offset) {
   const auto&                       s = TX(t).View();
   std::vector<model::PayloadRecord> records;
   records.reserve(s.payloads.size());
@@ -61,13 +62,10 @@ std::vector<model::PayloadRecord> MemoryRepository::ListPayloads(Transaction& t,
     records.push_back(record);
   }
   // Sort newest first for stable ordering.
-  std::sort(records.begin(), records.end(), [](const auto& a, const auto& b) {
-    return a.created_at_ms > b.created_at_ms;
-  });
+  std::sort(records.begin(), records.end(), [](const auto& a, const auto& b) { return a.created_at_ms > b.created_at_ms; });
   // Apply offset/limit.
   const int32_t start = (offset > 0 && offset < static_cast<int32_t>(records.size())) ? offset : 0;
-  const int32_t end   = (limit > 0) ? std::min(start + limit, static_cast<int32_t>(records.size()))
-                                     : static_cast<int32_t>(records.size());
+  const int32_t end   = (limit > 0) ? std::min(start + limit, static_cast<int32_t>(records.size())) : static_cast<int32_t>(records.size());
   return {records.begin() + start, records.begin() + end};
 }
 
@@ -115,7 +113,7 @@ std::vector<model::PayloadRecord> MemoryRepository::ListExpiredPayloads(Transact
 }
 
 Result MemoryRepository::UpsertMetadata(Transaction& t, const model::MetadataRecord& r) {
-  auto& tx              = TX(t);
+  auto& tx                    = TX(t);
   tx.Mutable().metadata[r.id] = r;
   tx.modified_metadata_ids_.insert(r.id);
   tx.deleted_metadata_ids_.erase(r.id);

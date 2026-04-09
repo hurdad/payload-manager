@@ -5,7 +5,7 @@
 #include <sstream>
 #include <string>
 
-#include "client/cpp/payload_manager_client.h"
+#include "client/cpp/client.h"
 #include "otel_tracer.hpp"
 #include "payload/manager/v1.hpp"
 #include "traced_channel.hpp"

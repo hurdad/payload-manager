@@ -199,8 +199,7 @@ TEST(PayloadManagerDelete, DeleteClearsPinState) {
   // Unpin on a deleted payload must not throw (no-op is correct).
   EXPECT_NO_THROW(manager.Unpin(descriptor.payload_id()));
   // The payload must be gone regardless of the Unpin call.
-  EXPECT_THROW((void)manager.ResolveSnapshot(descriptor.payload_id()), std::runtime_error)
-      << "deleted payload must remain unreachable after Unpin";
+  EXPECT_THROW((void)manager.ResolveSnapshot(descriptor.payload_id()), std::runtime_error) << "deleted payload must remain unreachable after Unpin";
 }
 
 // A pin with a finite duration_ms must expire on its own so that spill
@@ -223,7 +222,6 @@ TEST(PayloadManagerDelete, TimedPinExpiresAndAllowsSpill) {
   std::this_thread::sleep_for(std::chrono::milliseconds(60));
 
   // After expiry the spill must succeed without any manual Unpin.
-  EXPECT_NO_THROW(manager.ExecuteSpill(descriptor.payload_id(), TIER_DISK, /*fsync=*/false))
-      << "spill must succeed after timed pin has expired";
+  EXPECT_NO_THROW(manager.ExecuteSpill(descriptor.payload_id(), TIER_DISK, /*fsync=*/false)) << "spill must succeed after timed pin has expired";
   EXPECT_EQ(manager.ResolveSnapshot(descriptor.payload_id()).tier(), TIER_DISK);
 }

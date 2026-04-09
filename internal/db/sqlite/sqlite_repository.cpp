@@ -18,8 +18,7 @@ namespace {
 template <typename Enum>
 Enum CheckedEnumCast(int raw, int min_valid, int max_valid, const char* field_name) {
   if (raw < min_valid || raw > max_valid) {
-    throw std::runtime_error(std::string("sqlite_repository: out-of-range value for ") + field_name +
-                             ": " + std::to_string(raw));
+    throw std::runtime_error(std::string("sqlite_repository: out-of-range value for ") + field_name + ": " + std::to_string(raw));
   }
   return static_cast<Enum>(raw);
 }
@@ -141,7 +140,9 @@ Result SqliteRepository::InsertPayload(Transaction& t, const model::PayloadRecor
   auto* db = TX(t).Handle();
 
   const char* sql =
-      "INSERT INTO payload(id,tier,state,size_bytes,version,expires_at_ms,no_evict,eviction_priority,spill_target,created_at_ms,min_residency_tier,require_durable)"
+      "INSERT INTO "
+      "payload(id,tier,state,size_bytes,version,expires_at_ms,no_evict,eviction_priority,spill_target,created_at_ms,min_residency_tier,require_"
+      "durable)"
       " VALUES(?,?,?,?,?,?,?,?,?,?,?,?);";
   sqlite3_stmt* st = nullptr;
   if (sqlite3_prepare_v2(db, sql, -1, &st, nullptr) != SQLITE_OK) return Result::Err(ErrorCode::InternalError, sqlite3_errmsg(db));
@@ -173,7 +174,9 @@ std::optional<model::PayloadRecord> SqliteRepository::GetPayload(Transaction& t,
   auto* db = TX(t).Handle();
 
   const char* sql =
-      "SELECT id,tier,state,size_bytes,version,expires_at_ms,no_evict,eviction_priority,spill_target,created_at_ms,min_residency_tier,require_durable FROM payload WHERE id=?";
+      "SELECT "
+      "id,tier,state,size_bytes,version,expires_at_ms,no_evict,eviction_priority,spill_target,created_at_ms,min_residency_tier,require_durable FROM "
+      "payload WHERE id=?";
   sqlite3_stmt* st = nullptr;
   if (sqlite3_prepare_v2(db, sql, -1, &st, nullptr) != SQLITE_OK)
     throw std::runtime_error(std::string("sqlite prepare failed (GetPayload): ") + sqlite3_errmsg(db));
@@ -187,34 +190,38 @@ std::optional<model::PayloadRecord> SqliteRepository::GetPayload(Transaction& t,
   }
 
   model::PayloadRecord r;
-  r.id                = ColUuid(st, 0);
-  r.tier  = CheckedEnumCast<payload::manager::v1::Tier>(ColI32(st, 1), 0, 4, "tier");
-  r.state = CheckedEnumCast<payload::manager::v1::PayloadState>(ColI32(st, 2), 0, 8, "state");
-  r.size_bytes        = ColU64(st, 3);
-  r.version           = ColU64(st, 4);
-  r.expires_at_ms     = sqlite3_column_type(st, 5) != SQLITE_NULL ? ColU64(st, 5) : 0;
-  r.no_evict            = ColI32(st, 6) != 0;
-  r.eviction_priority   = ColI32(st, 7);
-  r.spill_target        = ColI32(st, 8);
-  r.created_at_ms       = sqlite3_column_type(st, 9) != SQLITE_NULL ? ColU64(st, 9) : 0;
-  r.min_residency_tier  = ColI32(st, 10);
-  r.require_durable     = ColI32(st, 11) != 0;
+  r.id                 = ColUuid(st, 0);
+  r.tier               = CheckedEnumCast<payload::manager::v1::Tier>(ColI32(st, 1), 0, 4, "tier");
+  r.state              = CheckedEnumCast<payload::manager::v1::PayloadState>(ColI32(st, 2), 0, 8, "state");
+  r.size_bytes         = ColU64(st, 3);
+  r.version            = ColU64(st, 4);
+  r.expires_at_ms      = sqlite3_column_type(st, 5) != SQLITE_NULL ? ColU64(st, 5) : 0;
+  r.no_evict           = ColI32(st, 6) != 0;
+  r.eviction_priority  = ColI32(st, 7);
+  r.spill_target       = ColI32(st, 8);
+  r.created_at_ms      = sqlite3_column_type(st, 9) != SQLITE_NULL ? ColU64(st, 9) : 0;
+  r.min_residency_tier = ColI32(st, 10);
+  r.require_durable    = ColI32(st, 11) != 0;
 
   sqlite3_finalize(st);
   return r;
 }
 
-std::vector<model::PayloadRecord> SqliteRepository::ListPayloads(Transaction& t, payload::manager::v1::Tier tier_filter, int32_t limit, int32_t offset) {
+std::vector<model::PayloadRecord> SqliteRepository::ListPayloads(Transaction& t, payload::manager::v1::Tier tier_filter, int32_t limit,
+                                                                 int32_t offset) {
   auto* db = TX(t).Handle();
 
   const bool    filter          = (tier_filter != payload::manager::v1::TIER_UNSPECIFIED);
   const int64_t effective_limit = (limit > 0) ? limit : -1; // SQLite treats -1 as no limit
 
-  const char* sql = filter
-      ? "SELECT id,tier,state,size_bytes,version,expires_at_ms,no_evict,eviction_priority,spill_target,created_at_ms,min_residency_tier,require_durable"
-        " FROM payload WHERE tier=? ORDER BY created_at_ms DESC LIMIT ? OFFSET ?;"
-      : "SELECT id,tier,state,size_bytes,version,expires_at_ms,no_evict,eviction_priority,spill_target,created_at_ms,min_residency_tier,require_durable"
-        " FROM payload ORDER BY created_at_ms DESC LIMIT ? OFFSET ?;";
+  const char* sql =
+      filter
+          ? "SELECT "
+            "id,tier,state,size_bytes,version,expires_at_ms,no_evict,eviction_priority,spill_target,created_at_ms,min_residency_tier,require_durable"
+            " FROM payload WHERE tier=? ORDER BY created_at_ms DESC LIMIT ? OFFSET ?;"
+          : "SELECT "
+            "id,tier,state,size_bytes,version,expires_at_ms,no_evict,eviction_priority,spill_target,created_at_ms,min_residency_tier,require_durable"
+            " FROM payload ORDER BY created_at_ms DESC LIMIT ? OFFSET ?;";
 
   sqlite3_stmt* st = nullptr;
   if (sqlite3_prepare_v2(db, sql, -1, &st, nullptr) != SQLITE_OK)
@@ -228,18 +235,18 @@ std::vector<model::PayloadRecord> SqliteRepository::ListPayloads(Transaction& t,
   std::vector<model::PayloadRecord> records;
   while (sqlite3_step(st) == SQLITE_ROW) {
     model::PayloadRecord r;
-    r.id                = ColUuid(st, 0);
-    r.tier  = CheckedEnumCast<payload::manager::v1::Tier>(ColI32(st, 1), 0, 4, "tier");
-    r.state = CheckedEnumCast<payload::manager::v1::PayloadState>(ColI32(st, 2), 0, 8, "state");
-    r.size_bytes        = ColU64(st, 3);
-    r.version           = ColU64(st, 4);
-    r.expires_at_ms     = sqlite3_column_type(st, 5) != SQLITE_NULL ? ColU64(st, 5) : 0;
-    r.no_evict            = ColI32(st, 6) != 0;
-    r.eviction_priority   = ColI32(st, 7);
-    r.spill_target        = ColI32(st, 8);
-    r.created_at_ms       = sqlite3_column_type(st, 9) != SQLITE_NULL ? ColU64(st, 9) : 0;
-    r.min_residency_tier  = ColI32(st, 10);
-    r.require_durable     = ColI32(st, 11) != 0;
+    r.id                 = ColUuid(st, 0);
+    r.tier               = CheckedEnumCast<payload::manager::v1::Tier>(ColI32(st, 1), 0, 4, "tier");
+    r.state              = CheckedEnumCast<payload::manager::v1::PayloadState>(ColI32(st, 2), 0, 8, "state");
+    r.size_bytes         = ColU64(st, 3);
+    r.version            = ColU64(st, 4);
+    r.expires_at_ms      = sqlite3_column_type(st, 5) != SQLITE_NULL ? ColU64(st, 5) : 0;
+    r.no_evict           = ColI32(st, 6) != 0;
+    r.eviction_priority  = ColI32(st, 7);
+    r.spill_target       = ColI32(st, 8);
+    r.created_at_ms      = sqlite3_column_type(st, 9) != SQLITE_NULL ? ColU64(st, 9) : 0;
+    r.min_residency_tier = ColI32(st, 10);
+    r.require_durable    = ColI32(st, 11) != 0;
     records.push_back(std::move(r));
   }
 
@@ -268,7 +275,9 @@ Result SqliteRepository::UpdatePayload(Transaction& t, const model::PayloadRecor
   auto* db = TX(t).Handle();
 
   const char* sql =
-      "UPDATE payload SET tier=?,state=?,size_bytes=?,version=?,expires_at_ms=?,no_evict=?,eviction_priority=?,spill_target=?,min_residency_tier=?,require_durable=? WHERE id=?;";
+      "UPDATE payload SET "
+      "tier=?,state=?,size_bytes=?,version=?,expires_at_ms=?,no_evict=?,eviction_priority=?,spill_target=?,min_residency_tier=?,require_durable=? "
+      "WHERE id=?;";
   sqlite3_stmt* st = nullptr;
   if (sqlite3_prepare_v2(db, sql, -1, &st, nullptr) != SQLITE_OK) return Result::Err(ErrorCode::InternalError, sqlite3_errmsg(db));
 
@@ -309,18 +318,18 @@ std::vector<model::PayloadRecord> SqliteRepository::ListExpiredPayloads(Transact
   std::vector<model::PayloadRecord> records;
   while (sqlite3_step(st) == SQLITE_ROW) {
     model::PayloadRecord r;
-    r.id                = ColUuid(st, 0);
-    r.tier  = CheckedEnumCast<payload::manager::v1::Tier>(ColI32(st, 1), 0, 4, "tier");
-    r.state = CheckedEnumCast<payload::manager::v1::PayloadState>(ColI32(st, 2), 0, 8, "state");
-    r.size_bytes        = ColU64(st, 3);
-    r.version           = ColU64(st, 4);
-    r.expires_at_ms     = ColU64(st, 5);
-    r.no_evict            = ColI32(st, 6) != 0;
-    r.eviction_priority   = ColI32(st, 7);
-    r.spill_target        = ColI32(st, 8);
-    r.created_at_ms       = sqlite3_column_type(st, 9) != SQLITE_NULL ? ColU64(st, 9) : 0;
-    r.min_residency_tier  = ColI32(st, 10);
-    r.require_durable     = ColI32(st, 11) != 0;
+    r.id                 = ColUuid(st, 0);
+    r.tier               = CheckedEnumCast<payload::manager::v1::Tier>(ColI32(st, 1), 0, 4, "tier");
+    r.state              = CheckedEnumCast<payload::manager::v1::PayloadState>(ColI32(st, 2), 0, 8, "state");
+    r.size_bytes         = ColU64(st, 3);
+    r.version            = ColU64(st, 4);
+    r.expires_at_ms      = ColU64(st, 5);
+    r.no_evict           = ColI32(st, 6) != 0;
+    r.eviction_priority  = ColI32(st, 7);
+    r.spill_target       = ColI32(st, 8);
+    r.created_at_ms      = sqlite3_column_type(st, 9) != SQLITE_NULL ? ColU64(st, 9) : 0;
+    r.min_residency_tier = ColI32(st, 10);
+    r.require_durable    = ColI32(st, 11) != 0;
     records.push_back(std::move(r));
   }
 

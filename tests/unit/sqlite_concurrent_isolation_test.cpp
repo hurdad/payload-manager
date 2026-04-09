@@ -31,8 +31,8 @@ std::shared_ptr<SqliteDB> MakeDB() {
 }
 
 int ReadCounter(SqliteDB& db) {
-  int            val = -1;
-  sqlite3_stmt*  st  = nullptr;
+  int           val = -1;
+  sqlite3_stmt* st  = nullptr;
   sqlite3_prepare_v2(db.Handle(), "SELECT n FROM ctr;", -1, &st, nullptr);
   if (sqlite3_step(st) == SQLITE_ROW) {
     val = sqlite3_column_int(st, 0);

@@ -48,13 +48,12 @@ class HookedRepository : public Repository {
     return inner_.GetPayload(tx, id);
   }
 
-  std::vector<payload::db::model::PayloadRecord> ListPayloads(
-      Transaction& tx, payload::manager::v1::Tier tier_filter = payload::manager::v1::TIER_UNSPECIFIED,
-      int32_t limit = 0, int32_t offset = 0) override {
+  std::vector<payload::db::model::PayloadRecord> ListPayloads(Transaction&               tx,
+                                                              payload::manager::v1::Tier tier_filter = payload::manager::v1::TIER_UNSPECIFIED,
+                                                              int32_t limit = 0, int32_t offset = 0) override {
     return inner_.ListPayloads(tx, tier_filter, limit, offset);
   }
-  int32_t CountPayloads(Transaction& tx,
-                        payload::manager::v1::Tier tier_filter = payload::manager::v1::TIER_UNSPECIFIED) override {
+  int32_t CountPayloads(Transaction& tx, payload::manager::v1::Tier tier_filter = payload::manager::v1::TIER_UNSPECIFIED) override {
     return inner_.CountPayloads(tx, tier_filter);
   }
 

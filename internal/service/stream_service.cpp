@@ -8,7 +8,6 @@
 #include <stdexcept>
 
 #include "internal/db/api/repository.hpp"
-#include "internal/util/errors.hpp"
 #include "internal/db/model/stream_consumer_offset_record.hpp"
 #include "internal/db/model/stream_entry_record.hpp"
 #include "internal/db/model/stream_record.hpp"

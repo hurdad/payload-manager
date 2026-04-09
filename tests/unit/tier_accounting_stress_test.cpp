@@ -61,18 +61,16 @@ class NullStorageBackend final : public StorageBackend {
 } // namespace
 
 TEST(TierAccountingStress, BytesAndCountReturnToZeroAfterConcurrentAllocDelete) {
-  constexpr int kThreads       = 8;
-  constexpr int kOpsPerThread  = 100;
-  constexpr int kPayloadBytes  = 256;
+  constexpr int kThreads      = 8;
+  constexpr int kOpsPerThread = 100;
+  constexpr int kPayloadBytes = 256;
 
   auto lease_mgr = std::make_shared<LeaseManager>();
 
   payload::storage::StorageFactory::TierMap storage;
   storage[TIER_RAM] = std::make_shared<NullStorageBackend>(TIER_RAM);
 
-  auto manager = std::make_shared<PayloadManager>(
-      std::move(storage), lease_mgr,
-      std::make_shared<payload::db::memory::MemoryRepository>());
+  auto manager = std::make_shared<PayloadManager>(std::move(storage), lease_mgr, std::make_shared<payload::db::memory::MemoryRepository>());
 
   std::vector<std::thread> threads;
   threads.reserve(kThreads);
@@ -91,11 +89,10 @@ TEST(TierAccountingStress, BytesAndCountReturnToZeroAfterConcurrentAllocDelete) 
 
   for (auto& t : threads) t.join();
 
-  const auto tier_bytes = manager->GetTierBytes();
-  const auto ram_it     = tier_bytes.find(static_cast<int>(TIER_RAM));
-  const uint64_t ram_bytes = (ram_it != tier_bytes.end()) ? ram_it->second : 0u;
+  const auto     tier_bytes = manager->GetTierBytes();
+  const auto     ram_it     = tier_bytes.find(static_cast<int>(TIER_RAM));
+  const uint64_t ram_bytes  = (ram_it != tier_bytes.end()) ? ram_it->second : 0u;
 
-  EXPECT_EQ(ram_bytes, 0u)
-      << "RAM tier byte total must be zero after all Allocate/Delete pairs complete; "
-         "a non-zero value indicates an accounting leak or missed decrement.";
+  EXPECT_EQ(ram_bytes, 0u) << "RAM tier byte total must be zero after all Allocate/Delete pairs complete; "
+                              "a non-zero value indicates an accounting leak or missed decrement.";
 }

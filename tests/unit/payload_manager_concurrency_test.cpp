@@ -39,7 +39,8 @@ using payload::manager::v1::TIER_RAM;
 
 class SimpleBackend final : public payload::storage::StorageBackend {
  public:
-  explicit SimpleBackend(payload::manager::v1::Tier tier) : tier_(tier) {}
+  explicit SimpleBackend(payload::manager::v1::Tier tier) : tier_(tier) {
+  }
 
   std::shared_ptr<arrow::Buffer> Allocate(const payload::manager::v1::PayloadID& id, uint64_t size) override {
     auto r = arrow::AllocateBuffer(size);
@@ -53,7 +54,7 @@ class SimpleBackend final : public payload::storage::StorageBackend {
 
   std::shared_ptr<arrow::Buffer> Read(const payload::manager::v1::PayloadID& id) override {
     std::lock_guard lock(mu_);
-    auto it = bufs_.find(id.value());
+    auto            it = bufs_.find(id.value());
     if (it == bufs_.end()) throw std::runtime_error("not found: " + id.value());
     return it->second;
   }
@@ -68,7 +69,9 @@ class SimpleBackend final : public payload::storage::StorageBackend {
     bufs_.erase(id.value());
   }
 
-  payload::manager::v1::Tier TierType() const override { return tier_; }
+  payload::manager::v1::Tier TierType() const override {
+    return tier_;
+  }
 
  private:
   payload::manager::v1::Tier                                      tier_;
@@ -101,7 +104,7 @@ struct Env {
 // a data race or corrupted state).
 // ---------------------------------------------------------------------------
 TEST(PayloadManagerConcurrency, IndependentLifecyclesDoNotRace) {
-  Env env;
+  Env           env;
   constexpr int kThreads = 8;
 
   std::vector<std::thread> threads;
@@ -120,11 +123,11 @@ TEST(PayloadManagerConcurrency, IndependentLifecyclesDoNotRace) {
       } catch (const payload::util::LeaseConflict&) {
         // Lease rejected during a concurrent operation — acceptable.
       } catch (const payload::util::InvalidState&) {
-        ++unexpected_errors;  // state-machine corruption = definite bug
+        ++unexpected_errors; // state-machine corruption = definite bug
       } catch (const std::runtime_error&) {
         // Plain runtime_error (e.g., storage backend failure) — acceptable.
       } catch (...) {
-        ++unexpected_errors;  // any other exception type is a bug
+        ++unexpected_errors; // any other exception type is a bug
       }
     });
   }
@@ -137,7 +140,7 @@ TEST(PayloadManagerConcurrency, IndependentLifecyclesDoNotRace) {
 // Concurrent ResolveSnapshot on the same payload — all must succeed.
 // ---------------------------------------------------------------------------
 TEST(PayloadManagerConcurrency, ConcurrentResolveSnapshotSamePayload) {
-  Env env;
+  Env  env;
   auto desc = env.manager->Commit(env.manager->Allocate(64, TIER_RAM).payload_id());
 
   constexpr int    kThreads = 16;
@@ -165,7 +168,7 @@ TEST(PayloadManagerConcurrency, ConcurrentResolveSnapshotSamePayload) {
 // The delete must succeed; resolves after delete must throw NotFound.
 // ---------------------------------------------------------------------------
 TEST(PayloadManagerConcurrency, DeleteAndResolveConcurrentlyNoUB) {
-  Env env;
+  Env  env;
   auto desc = env.manager->Commit(env.manager->Allocate(64, TIER_RAM).payload_id());
 
   constexpr int    kReaders = 8;
@@ -194,7 +197,7 @@ TEST(PayloadManagerConcurrency, DeleteAndResolveConcurrentlyNoUB) {
       } catch (const payload::util::NotFound&) {
         ++resolve_notfound;
       } catch (...) {
-        ++crashes;  // unexpected exception type = problem
+        ++crashes; // unexpected exception type = problem
       }
     });
   }
@@ -212,7 +215,7 @@ TEST(PayloadManagerConcurrency, DeleteAndResolveConcurrentlyNoUB) {
 // the uniqueness invariant is checked only among successful allocations.
 // ---------------------------------------------------------------------------
 TEST(PayloadManagerConcurrency, ConcurrentAllocateProducesUniqueIds) {
-  Env env;
+  Env           env;
   constexpr int kThreads = 16;
 
   std::vector<std::string> ids(kThreads);
