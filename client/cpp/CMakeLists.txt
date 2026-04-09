@@ -90,10 +90,10 @@ install(TARGETS payload_manager_client
         INCLUDES DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
 )
 
-# Public header — installed under client/cpp/ to match the #include path
-# used in-tree: #include "client/cpp/payload_manager_client.h"
+# Public header — installed as <payload-manager/cpp/client.h>
 install(FILES payload_manager_client.h
-        DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/client/cpp
+        DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/payload-manager/cpp
+        RENAME client.h
 )
 
 # ---------------------------------------------------------------------------
