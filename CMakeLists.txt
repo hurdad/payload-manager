@@ -310,9 +310,9 @@ else()
 endif()
 
 add_subdirectory(api)
-add_subdirectory(internal/db)
 
 if(PAYLOAD_MANAGER_BUILD_SERVICE)
+  add_subdirectory(internal/db)
   add_subdirectory(internal)
   add_subdirectory(cmd/payload-manager)
 endif()
