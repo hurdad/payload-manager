@@ -1,6 +1,6 @@
 # Payload Manager
 
-Payload Manager is a high-performance control plane for managing opaque binary payloads across multiple storage tiers (GPU, RAM, disk, object storage) without routing payload bytes through the service itself.
+Payload Manager is a high-performance control plane for managing opaque binary payloads across multiple storage tiers (GPU, RAM, disk, object storage, or void) without routing payload bytes through the service itself.
 
 The platform is designed around a strict control-plane/data-plane split:
 
@@ -13,7 +13,7 @@ Modern pipelines often spend more time moving bytes through orchestration servic
 
 ## Core capabilities
 
-- Tier-aware placement across GPU, RAM, disk, and object storage.
+- Tier-aware placement across GPU, RAM, disk, object storage, and void (discard-on-eviction).
 - Lease-based read stability for payload access.
 - Lifecycle orchestration (`allocate -> commit -> active -> expire/delete`).
 - Metadata and lineage tracking.
@@ -47,6 +47,7 @@ Placement + Tiering + Spill
    +--> RAM (shared memory)
    +--> Disk
    +--> Object storage
+   +--> Void (delete on eviction)
 ```
 
 For detailed documentation, see:

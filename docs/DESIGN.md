@@ -49,11 +49,34 @@ A lease provides a temporary stability guarantee:
 
 ### Tiering and spill
 
+The tier chain is ordered from fastest to most durable:
+
+```
+GPU → RAM → DISK → (OBJECT | VOID)
+```
+
 When pressure rises:
 
 - Lower-priority or colder payloads are candidates for spill.
 - Spill scheduler and workers coordinate movement to lower-cost tiers.
 - Metadata must remain authoritative during and after relocation.
+
+Pressure is monitored independently for GPU, RAM, and disk. Each tier has a configurable capacity limit; when occupancy exceeds the limit, the tiering manager picks a least-recently-used victim from that tier and enqueues a spill task.
+
+### TIER_VOID: discard on eviction
+
+`TIER_VOID` is the terminal tier for ephemeral payloads. When a payload spills to void it is deleted — no bytes are written anywhere.
+
+Set `spill_target = TIER_VOID` in `EvictionPolicy` to mark a payload as ephemeral:
+
+- If the payload is evicted from RAM under RAM pressure, it is deleted immediately rather than moved to disk.
+- If the payload is evicted from disk under disk pressure, it is deleted rather than moved to object storage.
+
+The void tier is not durable. Setting `require_durable = true` alongside `spill_target = TIER_VOID` is rejected at spill time.
+
+For payloads without an explicit `spill_target`:
+- RAM eviction target defaults to `TIER_DISK`.
+- Disk eviction target defaults to `TIER_OBJECT`.
 
 ## 5. Repository and transaction design
 

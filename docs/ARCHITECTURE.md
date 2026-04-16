@@ -70,6 +70,8 @@ Migrations are maintained separately for SQLite and PostgreSQL under `internal/d
 
 A common interface allows placement/tiering logic to stay backend-agnostic.
 
+`TIER_VOID` is a sentinel value — not a storage backend. When a payload is spilled to void the tiering layer deletes it rather than moving bytes. See [Design Details](./DESIGN.md#tiervoid-discard-on-eviction).
+
 ## 3. Cross-cutting concerns
 
 - **Configuration:** protobuf-backed config loading in `internal/config`.

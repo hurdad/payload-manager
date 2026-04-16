@@ -23,17 +23,19 @@ class TieringPolicy {
   // Both predicates should additionally check that the payload is on the
   // respective tier so that eviction victims are always on the correct tier.
   TieringPolicy(std::shared_ptr<payload::metadata::MetadataCache>           cache,
-                std::function<bool(const payload::manager::v1::PayloadID&)> is_ram_evictable = {},
-                std::function<bool(const payload::manager::v1::PayloadID&)> is_gpu_evictable = {});
+                std::function<bool(const payload::manager::v1::PayloadID&)> is_ram_evictable  = {},
+                std::function<bool(const payload::manager::v1::PayloadID&)> is_gpu_evictable  = {},
+                std::function<bool(const payload::manager::v1::PayloadID&)> is_disk_evictable = {});
 
   std::optional<payload::manager::v1::PayloadID> ChooseRamEviction(const PressureState& state);
-
   std::optional<payload::manager::v1::PayloadID> ChooseGpuEviction(const PressureState& state);
+  std::optional<payload::manager::v1::PayloadID> ChooseDiskEviction(const PressureState& state);
 
  private:
   std::shared_ptr<payload::metadata::MetadataCache>           cache_;
   std::function<bool(const payload::manager::v1::PayloadID&)> is_ram_evictable_;
   std::function<bool(const payload::manager::v1::PayloadID&)> is_gpu_evictable_;
+  std::function<bool(const payload::manager::v1::PayloadID&)> is_disk_evictable_;
 };
 
 } // namespace payload::tiering

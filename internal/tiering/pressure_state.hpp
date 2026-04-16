@@ -23,6 +23,9 @@ struct PressureState {
   bool GpuPressure() const {
     return gpu_bytes.load() > gpu_limit;
   }
+  bool DiskPressure() const {
+    return disk_bytes.load() > disk_limit;
+  }
 };
 
 } // namespace payload::tiering

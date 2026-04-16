@@ -52,6 +52,7 @@ payload_manager_add_unit_test(payload_manager_unit_delete_lease_race payload_man
 payload_manager_add_unit_test(payload_manager_unit_sqlite_concurrent_isolation sqlite_concurrent_isolation_test.cpp "sqlite;db;concurrency")
 payload_manager_add_unit_test(payload_manager_unit_tier_accounting_stress tier_accounting_stress_test.cpp "payload;tiering;stress")
 payload_manager_add_unit_test(payload_manager_unit_import payload_manager_import_test.cpp "payload;import;object")
+payload_manager_add_unit_test(payload_manager_unit_void_tier void_tier_test.cpp "tiering;void;eviction")
 
 if(TARGET payload_manager::client)
   payload_manager_add_unit_test(payload_manager_unit_client_payload_manager_client client/payload_manager_client_test.cpp "client")

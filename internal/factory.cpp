@@ -308,6 +308,10 @@ Application Build(const payload::runtime::config::RuntimeConfig& config) {
   if (pressure_state->gpu_limit == 0) {
     pressure_state->gpu_limit = std::numeric_limits<uint64_t>::max();
   }
+  pressure_state->disk_limit = config.storage().disk().capacity_bytes();
+  if (pressure_state->disk_limit == 0) {
+    pressure_state->disk_limit = std::numeric_limits<uint64_t>::max();
+  }
 
   auto tiering_policy = std::make_shared<tiering::TieringPolicy>(
       metadata_cache,
@@ -325,6 +329,15 @@ Application Build(const payload::runtime::config::RuntimeConfig& config) {
         if (pm->IsEvictionExempt(id)) return false;
         try {
           return pm->ResolveSnapshot(id).tier() == manager::v1::TIER_GPU;
+        } catch (...) {
+          return false;
+        }
+      },
+      // Disk eviction: only consider payloads currently resident on disk.
+      [pm = payload_manager.get()](const manager::v1::PayloadID& id) {
+        if (pm->IsEvictionExempt(id)) return false;
+        try {
+          return pm->ResolveSnapshot(id).tier() == manager::v1::TIER_DISK;
         } catch (...) {
           return false;
         }

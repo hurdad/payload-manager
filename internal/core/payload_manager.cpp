@@ -39,6 +39,8 @@ std::string_view TierName(Tier tier) {
       return "gpu";
     case TIER_OBJECT:
       return "object";
+    case TIER_VOID:
+      return "void";
     default:
       return "unknown";
   }
@@ -92,6 +94,7 @@ namespace {
 
 bool IsDurableTier(Tier tier) {
   return tier == TIER_DISK || tier == TIER_OBJECT;
+  // TIER_VOID is explicitly not durable: payloads are deleted on eviction.
 }
 
 payload::manager::catalog::v1::PayloadArchiveMetadata BuildSidecar(const PayloadDescriptor& descriptor) {
@@ -990,6 +993,48 @@ void PayloadManager::ExecuteSpill(const PayloadID& id, Tier target, bool fsync) 
   }
 
   if (source_tier != target) {
+    // --- Void path: delete the payload instead of moving it ---
+    if (target == TIER_VOID) {
+      ThrowIfDbError(repository_->DeletePayload(*tx1, payload::util::FromProto(id)), "spill void: delete");
+      tx1->Commit();
+
+      auto src_it = storage_.find(source_tier);
+      if (src_it != storage_.end() && src_it->second) {
+        try {
+          src_it->second->Remove(id);
+        } catch (const std::exception& e) {
+          PAYLOAD_LOG_WARN("spill void: source removal failed after DB commit (orphaned source bytes)",
+                           {payload::observability::StringField("payload_id", payload::util::ToString(Key(id))),
+                            payload::observability::StringField("error", e.what())});
+        }
+      }
+
+      {
+        std::unique_lock lock(snapshot_cache_mutex_);
+        snapshot_cache_.erase(Key(id));
+      }
+      {
+        std::lock_guard<std::mutex> pins_lock(pins_guard_);
+        pins_.erase(Key(id));
+      }
+      {
+        std::lock_guard<std::mutex> lock(no_evict_guard_);
+        no_evict_ids_.erase(Key(id));
+      }
+      {
+        std::lock_guard<std::mutex> lock(spill_targets_guard_);
+        spill_targets_.erase(Key(id));
+      }
+
+      payload::observability::Metrics::Instance().RecordSpillBytes("background", record->size_bytes);
+      UpdateTierBytes(source_tier, -static_cast<int64_t>(record->size_bytes));
+      UpdateTierCount(source_tier, -1);
+      if (metadata_cache_) {
+        metadata_cache_->Remove(id);
+      }
+      return;
+    }
+
     auto src_it = storage_.find(source_tier);
     auto dst_it = storage_.find(target);
     if (src_it == storage_.end() || !src_it->second) {
@@ -1103,6 +1148,17 @@ Tier PayloadManager::GetSpillTarget(const PayloadID& id) const {
   std::lock_guard<std::mutex> lock(spill_targets_guard_);
   const auto                  it = spill_targets_.find(Key(id));
   return (it != spill_targets_.end()) ? it->second : TIER_DISK;
+}
+
+Tier PayloadManager::GetDiskSpillTarget(const PayloadID& id) const {
+  std::lock_guard<std::mutex> lock(spill_targets_guard_);
+  const auto                  it = spill_targets_.find(Key(id));
+  // Honor explicit TIER_VOID overrides; all other cases fall through to TIER_OBJECT
+  // since TIER_OBJECT is the only tier below TIER_DISK in the chain.
+  if (it != spill_targets_.end() && it->second == TIER_VOID) {
+    return TIER_VOID;
+  }
+  return TIER_OBJECT;
 }
 
 } // namespace payload::core

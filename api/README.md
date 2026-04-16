@@ -208,7 +208,7 @@ It is a **runtime memory/storage coordination protocol** for high-performance da
 
 The API is designed to support:
 
-* multi-tier memory (GPU/RAM/Disk/Object)
+* multi-tier memory (GPU/RAM/Disk/Object/Void)
 * distributed execution engines
 * external metadata indexers
 * alternative transports (REST / IPC)

@@ -9,8 +9,10 @@ using namespace payload::manager::v1;
 
 TieringPolicy::TieringPolicy(std::shared_ptr<payload::metadata::MetadataCache>           cache,
                              std::function<bool(const payload::manager::v1::PayloadID&)> is_ram_evictable,
-                             std::function<bool(const payload::manager::v1::PayloadID&)> is_gpu_evictable)
-    : cache_(std::move(cache)), is_ram_evictable_(std::move(is_ram_evictable)), is_gpu_evictable_(std::move(is_gpu_evictable)) {
+                             std::function<bool(const payload::manager::v1::PayloadID&)> is_gpu_evictable,
+                             std::function<bool(const payload::manager::v1::PayloadID&)> is_disk_evictable)
+    : cache_(std::move(cache)), is_ram_evictable_(std::move(is_ram_evictable)), is_gpu_evictable_(std::move(is_gpu_evictable)),
+      is_disk_evictable_(std::move(is_disk_evictable)) {
 }
 
 namespace {
@@ -40,6 +42,12 @@ std::optional<PayloadID> TieringPolicy::ChooseGpuEviction(const PressureState& s
   if (!state.GpuPressure()) return std::nullopt;
 
   return ChooseVictimFromMetadataCache(cache_, is_gpu_evictable_);
+}
+
+std::optional<PayloadID> TieringPolicy::ChooseDiskEviction(const PressureState& state) {
+  if (!state.DiskPressure()) return std::nullopt;
+
+  return ChooseVictimFromMetadataCache(cache_, is_disk_evictable_);
 }
 
 } // namespace payload::tiering

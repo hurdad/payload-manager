@@ -11,6 +11,7 @@ enum Tier {
   TIER_RAM = 2;         // Host DRAM / shared-memory segment.
   TIER_DISK = 3;        // Local NVMe/SSD/HDD (durable, larger, slower than RAM).
   TIER_OBJECT = 4;      // Remote object storage (S3/GCS/Azure; durable, largest).
+  TIER_VOID = 5;        // Discard on eviction: payload is deleted rather than moved.
 }
 
 /*
