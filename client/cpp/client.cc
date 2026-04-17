@@ -3,6 +3,7 @@
 #include <arrow/filesystem/filesystem.h>
 #include <arrow/filesystem/s3fs.h>
 #include <arrow/status.h>
+#include <arrow/util/logging.h>
 #ifdef PAYLOAD_CLIENT_ENABLE_OTEL
 #include <opentelemetry/context/propagation/global_propagator.h>
 #include <opentelemetry/context/propagation/text_map_propagator.h>
