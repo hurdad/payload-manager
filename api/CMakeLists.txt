@@ -375,7 +375,7 @@ add_custom_target(generate_protos ALL
 # Proto-only library
 # ------------------------------------------------------------------------------
 
-add_library(payload_manager_proto STATIC ${GOOGLEAPIS_SRCS} ${PROTO_SRCS})
+add_library(payload_manager_proto ${GOOGLEAPIS_SRCS} ${PROTO_SRCS})
 add_library(payload_manager::proto ALIAS payload_manager_proto)
 
 target_include_directories(payload_manager_proto
@@ -397,7 +397,7 @@ add_dependencies(payload_manager_proto generate_protos)
 # gRPC transport library
 # ------------------------------------------------------------------------------
 
-add_library(payload_manager_grpc STATIC ${GRPC_SRCS})
+add_library(payload_manager_grpc ${GRPC_SRCS})
 add_library(payload_manager::grpc ALIAS payload_manager_grpc)
 
 target_include_directories(payload_manager_grpc
@@ -419,10 +419,12 @@ add_dependencies(payload_manager_grpc generate_protos)
 # Install rules
 # ------------------------------------------------------------------------------
 
-# Proto and gRPC static libs (part of the public client interface)
+# Proto and gRPC libs (part of the public client interface)
 install(TARGETS payload_manager_proto payload_manager_grpc
         EXPORT PayloadManagerClientTargets
+        LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
         ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
+        RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
 )
 
 # Generated protobuf/gRPC C++ headers

@@ -20,10 +20,6 @@ RUN apt-get update \
         libspdlog-dev \
         libcurl4-openssl-dev \
         protobuf-compiler-grpc \
-        python3 \
-        python3-pip \
-        python3-grpcio \
-        python3-grpc-tools \
         libssl-dev \
         zlib1g-dev \
         liblz4-dev \
@@ -47,11 +43,13 @@ RUN cmake -S ./src -B /workspace/build -G Ninja -DCMAKE_BUILD_TYPE=Release \
     -DPAYLOAD_MANAGER_BUILD_EXAMPLES=OFF \
     -DPAYLOAD_MANAGER_BUILD_PAYLOADCTL=OFF \
     && cmake --build /workspace/build \
-    && ctest --test-dir /workspace/build --output-on-failure -E payload_manager_integration_api \
-    && cmake --build /workspace/build --target payload-manager
+    && ctest --test-dir /workspace/build --output-on-failure -E payload_manager_integration_api
 
 
 FROM ubuntu:24.04 AS runtime
+
+LABEL org.opencontainers.image.title="payload-manager" \
+      org.opencontainers.image.description="Payload Manager gRPC service"
 
 ENV DEBIAN_FRONTEND=noninteractive
 WORKDIR /app
@@ -78,9 +76,15 @@ RUN apt-get update \
         libre2-10 \
         libutf8proc3 \
         libxml2 \
-    && rm -rf /var/lib/apt/lists/*
+    && rm -rf /var/lib/apt/lists/* \
+    && useradd --system --no-create-home --shell /sbin/nologin payload
 
-COPY --from=builder /workspace/build/bin/payload-manager ./payload-manager
+COPY --from=builder --chown=payload:payload /workspace/build/bin/payload-manager ./payload-manager
+
+EXPOSE 50051
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
   CMD bash -c 'exec 3<>/dev/tcp/localhost/50051' || exit 1
+
+USER payload
+ENTRYPOINT ["./payload-manager"]

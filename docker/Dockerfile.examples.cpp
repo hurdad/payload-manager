@@ -1,15 +1,38 @@
-FROM ubuntu : 24.04 AS builder
+FROM ubuntu:24.04 AS builder
 
-    ENV                DEBIAN_FRONTEND =
-        noninteractive WORKDIR / workspace
+ENV DEBIAN_FRONTEND=noninteractive
+WORKDIR /workspace
 
-                                     RUN apt -
-            get update &&
-        apt - get install - y-- no - install - recommends build - essential cmake ninja - build pkg - config git protobuf - compiler libprotobuf -
-            dev libgrpc++ - dev libgrpc - dev libyaml - cpp - dev libpqxx - dev libsqlite3 - dev libspdlog - dev libcurl4 - openssl - dev protobuf -
-            compiler - grpc python3 python3 - pip python3 - grpcio python3 - grpc - tools libssl - dev zlib1g - dev liblz4 - dev libzstd -
-            dev libsnappy - dev libbrotli - dev libbz2 - dev libre2 - dev libutf8proc - dev libxml2 - dev libgtest - dev &&
-        rm - rf / var / lib / apt / lists/*
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        build-essential \
+        cmake \
+        ninja-build \
+        pkg-config \
+        git \
+        protobuf-compiler \
+        libprotobuf-dev \
+        libgrpc++-dev \
+        libgrpc-dev \
+        libspdlog-dev \
+        libcurl4-openssl-dev \
+        protobuf-compiler-grpc \
+        python3 \
+        python3-pip \
+        python3-grpcio \
+        python3-grpc-tools \
+        libssl-dev \
+        zlib1g-dev \
+        liblz4-dev \
+        libzstd-dev \
+        libsnappy-dev \
+        libbrotli-dev \
+        libbz2-dev \
+        libre2-dev \
+        libutf8proc-dev \
+        libxml2-dev \
+        libgtest-dev \
+    && rm -rf /var/lib/apt/lists/*
 
 COPY . ./src
 
@@ -20,7 +43,9 @@ RUN cmake -S ./src -B /workspace/build -G Ninja -DCMAKE_BUILD_TYPE=Release \
     -DPAYLOAD_MANAGER_BUILD_CLIENT=ON \
     -DPAYLOAD_MANAGER_BUILD_EXAMPLES=ON \
     -DPAYLOAD_MANAGER_BUILD_PAYLOADCTL=OFF \
-    && cmake --build /workspace/build
+    -DBUILD_SHARED_LIBS=ON \
+    && cmake --build /workspace/build \
+    && cmake --install /workspace/build --prefix /workspace/install
 
 
 FROM ubuntu:24.04 AS runtime
@@ -46,9 +71,10 @@ RUN apt-get update \
         libxml2 \
     && rm -rf /var/lib/apt/lists/*
 
+COPY --from=builder /workspace/install/lib/ /usr/local/lib/
 COPY --from=builder /workspace/build/examples/cpp/payload_manager_example_* ./
 COPY --from=builder /workspace/src/examples/run_examples.sh ./
-RUN chmod +x ./run_examples.sh
+RUN ldconfig && chmod +x ./run_examples.sh
 
 HEALTHCHECK NONE
 
