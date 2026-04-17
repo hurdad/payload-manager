@@ -111,17 +111,16 @@ int main(int argc, char** argv) {
 
   // Subscribe demonstrates the streaming RPC path; we read one item then
   // cancel to keep the sample finite.
-  grpc::ClientContext                    subscribe_context;
   payload::manager::v1::SubscribeRequest subscribe_request;
   *subscribe_request.mutable_stream() = stream;
   subscribe_request.set_offset(append_response->first_offset());
   subscribe_request.set_max_inflight(1);
 
-  auto                                    reader = client.Subscribe(subscribe_request, &subscribe_context);
+  auto                                    subscribe_handle = client.Subscribe(subscribe_request);
   payload::manager::v1::SubscribeResponse subscribe_response;
-  bool                                    got_entry = reader->Read(&subscribe_response);
-  subscribe_context.TryCancel();
-  const grpc::Status subscribe_finish = reader->Finish();
+  bool                                    got_entry = subscribe_handle.reader->Read(&subscribe_response);
+  subscribe_handle.context->TryCancel();
+  const grpc::Status subscribe_finish = subscribe_handle.reader->Finish();
 
   if (!subscribe_finish.ok() && subscribe_finish.error_code() != grpc::StatusCode::CANCELLED) {
     std::cerr << "Subscribe failed: " << subscribe_finish.error_message() << '\n';

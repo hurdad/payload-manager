@@ -4,8 +4,10 @@
 #include <arrow/filesystem/filesystem.h>
 #include <arrow/result.h>
 #include <grpcpp/channel.h>
+#include <grpcpp/client_context.h>
 #include <grpcpp/support/sync_stream.h>
 
+#include <chrono>
 #include <cstdint>
 #include <memory>
 #include <string>
@@ -44,19 +46,40 @@ class PayloadClient {
     std::shared_ptr<arrow::Buffer> buffer;
   };
 
+  /// Handle returned by Subscribe(). Owns both the gRPC context and the reader
+  /// so their lifetimes are tied together. Call context->TryCancel() to cancel
+  /// the stream, then reader->Finish() to retrieve the final gRPC status.
+  struct SubscribeHandle {
+    std::unique_ptr<grpc::ClientContext>                                          context;
+    std::unique_ptr<grpc::ClientReader<payload::manager::v1::SubscribeResponse>> reader;
+  };
+
   /// Construct a client from a shared gRPC channel.
-  explicit PayloadClient(std::shared_ptr<grpc::Channel> channel);
+  /// rpc_timeout of zero (the default) means no per-call deadline is applied.
+  explicit PayloadClient(std::shared_ptr<grpc::Channel> channel,
+                         std::chrono::milliseconds      rpc_timeout = {});
 
   /// Construct a client with a pre-configured Arrow filesystem for object-tier uploads.
   /// Use this overload to supply custom S3/GCS credentials, endpoint overrides (e.g. MinIO),
   /// or any other Arrow-supported filesystem built from FileSystemOptions proto config.
   /// When object_fs is null the default credential chain (env vars / AWS profile) is used.
-  PayloadClient(std::shared_ptr<grpc::Channel> channel, std::shared_ptr<arrow::fs::FileSystem> object_fs);
+  /// rpc_timeout of zero (the default) means no per-call deadline is applied.
+  PayloadClient(std::shared_ptr<grpc::Channel>        channel,
+                std::shared_ptr<arrow::fs::FileSystem> object_fs,
+                std::chrono::milliseconds              rpc_timeout = {});
+
+  ~PayloadClient();
+
+  PayloadClient(const PayloadClient&)            = delete;
+  PayloadClient& operator=(const PayloadClient&) = delete;
+  PayloadClient(PayloadClient&&) noexcept;
+  PayloadClient& operator=(PayloadClient&&) noexcept;
 
   /// Allocate a payload and open a writable Arrow buffer for it.
   arrow::Result<WritablePayload> AllocateWritableBuffer(uint64_t                   size_bytes,
                                                         payload::manager::v1::Tier preferred_tier = payload::manager::v1::TIER_RAM,
-                                                        uint64_t ttl_ms = 0, bool no_evict = false) const;
+                                                        uint64_t                   ttl_ms         = 0,
+                                                        bool                       no_evict       = false) const;
 
   /// Convert a UUID string into a protobuf PayloadID.
   static arrow::Result<payload::manager::v1::PayloadID> PayloadIdFromUuid(std::string_view uuid);
@@ -71,9 +94,10 @@ class PayloadClient {
 
   /// Acquire a read lease and open a readable Arrow buffer.
   arrow::Result<ReadablePayload> AcquireReadableBuffer(
-      const payload::manager::v1::PayloadID& payload_id, payload::manager::v1::Tier min_tier = payload::manager::v1::TIER_RAM,
-      payload::manager::v1::PromotionPolicy promotion_policy      = payload::manager::v1::PROMOTION_POLICY_BEST_EFFORT,
-      uint64_t                              min_lease_duration_ms = 0) const;
+      const payload::manager::v1::PayloadID& payload_id,
+      payload::manager::v1::Tier             min_tier              = payload::manager::v1::TIER_RAM,
+      payload::manager::v1::PromotionPolicy  promotion_policy      = payload::manager::v1::PROMOTION_POLICY_BEST_EFFORT,
+      uint64_t                               min_lease_duration_ms = 0) const;
 
   /// Release a previously acquired read lease.
   arrow::Status Release(const payload::manager::v1::LeaseID& lease_id) const;
@@ -129,8 +153,8 @@ class PayloadClient {
   arrow::Result<payload::manager::v1::ReadResponse> Read(const payload::manager::v1::ReadRequest& request) const;
 
   /// Subscribe to stream events using a server-side streaming RPC.
-  std::unique_ptr<grpc::ClientReader<payload::manager::v1::SubscribeResponse>> Subscribe(const payload::manager::v1::SubscribeRequest& request,
-                                                                                         grpc::ClientContext*                          context) const;
+  /// Returns a SubscribeHandle that owns both the context and the reader.
+  SubscribeHandle Subscribe(const payload::manager::v1::SubscribeRequest& request) const;
 
   /// Commit consumer offset for a stream.
   arrow::Status Commit(const payload::manager::v1::CommitRequest& request) const;
@@ -142,6 +166,9 @@ class PayloadClient {
   arrow::Result<payload::manager::v1::GetRangeResponse> GetRange(const payload::manager::v1::GetRangeRequest& request) const;
 
  private:
+  /// Create a ClientContext with optional deadline and injected trace context.
+  std::unique_ptr<grpc::ClientContext> MakeContext() const;
+
   /// Open a mutable Arrow buffer from a descriptor location.
   arrow::Result<std::shared_ptr<arrow::MutableBuffer>> OpenMutableBuffer(const payload::manager::v1::PayloadDescriptor& descriptor) const;
   /// Open a read-only Arrow buffer from a descriptor location.
@@ -149,19 +176,17 @@ class PayloadClient {
 
   /// Ensure descriptor has a concrete location for its tier.
   static arrow::Status ValidateHasLocation(const payload::manager::v1::PayloadDescriptor& descriptor);
-  /// Return descriptor byte length for whichever location is set.
-  static uint64_t DescriptorLengthBytes(const payload::manager::v1::PayloadDescriptor& descriptor);
+  /// Return descriptor byte length for whichever location is set, or Invalid if none.
+  static arrow::Result<uint64_t> DescriptorLengthBytes(const payload::manager::v1::PayloadDescriptor& descriptor);
 
-  /// Catalog service RPC stub.
   std::unique_ptr<payload::manager::v1::PayloadCatalogService::Stub> catalog_stub_;
-  /// Data service RPC stub.
-  std::unique_ptr<payload::manager::v1::PayloadDataService::Stub> data_stub_;
-  /// Admin service RPC stub.
-  std::unique_ptr<payload::manager::v1::PayloadAdminService::Stub> admin_stub_;
-  /// Stream service RPC stub.
-  std::unique_ptr<payload::manager::v1::PayloadStreamService::Stub> stream_stub_;
+  std::unique_ptr<payload::manager::v1::PayloadDataService::Stub>    data_stub_;
+  std::unique_ptr<payload::manager::v1::PayloadAdminService::Stub>   admin_stub_;
+  std::unique_ptr<payload::manager::v1::PayloadStreamService::Stub>  stream_stub_;
   /// Arrow filesystem for object-tier uploads. Null = use FileSystemFromUri default chain.
   std::shared_ptr<arrow::fs::FileSystem> object_fs_;
+  /// Per-call RPC deadline. Zero means no deadline is applied.
+  std::chrono::milliseconds rpc_timeout_{};
 };
 
 } // namespace payload::manager::client

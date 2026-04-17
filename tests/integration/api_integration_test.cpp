@@ -506,17 +506,16 @@ void TestStream(const PayloadClient& client, const std::string& tp) {
   ASSERT_EQ(read_resp->entries_size(), 2);
   ASSERT_EQ(read_resp->entries(0).offset(), first_offset);
 
-  grpc::ClientContext sub_ctx;
-  SubscribeRequest    sub_req;
+  SubscribeRequest sub_req;
   *sub_req.mutable_stream() = stream;
   sub_req.set_offset(first_offset);
   sub_req.set_max_inflight(1);
-  auto              reader = client.Subscribe(sub_req, &sub_ctx);
+  auto              sub_handle = client.Subscribe(sub_req);
   SubscribeResponse sub_resp;
-  ASSERT_TRUE(reader->Read(&sub_resp));
+  ASSERT_TRUE(sub_handle.reader->Read(&sub_resp));
   ASSERT_EQ(sub_resp.entry().offset(), first_offset);
-  sub_ctx.TryCancel();
-  auto sub_status = reader->Finish();
+  sub_handle.context->TryCancel();
+  auto sub_status = sub_handle.reader->Finish();
   ASSERT_TRUE(sub_status.ok() || sub_status.error_code() == grpc::StatusCode::CANCELLED);
 
   CommitRequest commit_req;
