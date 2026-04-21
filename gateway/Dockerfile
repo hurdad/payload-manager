@@ -1,4 +1,4 @@
-FROM node:20-alpine AS ui-builder
+FROM node:22-alpine AS ui-builder
 WORKDIR /src/ui
 COPY ui/package.json ui/package-lock.json ./
 RUN npm ci
@@ -6,7 +6,7 @@ COPY ui ./
 RUN npm run build
 
 
-FROM golang:1.22-bookworm AS build
+FROM golang:1.25-bookworm AS build
 WORKDIR /src
 COPY gateway/go.mod gateway/go.sum* ./gateway/
 WORKDIR /src/gateway
