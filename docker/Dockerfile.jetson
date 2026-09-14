@@ -3,12 +3,13 @@
 # Builds payload-manager for NVIDIA Jetson Orin (aarch64 / L4T R36 / JetPack 6)
 # with both CUDA and OpenTelemetry enabled.
 #
-# Uses pre-built base images from ghcr.io/hurdad/docker-jetpack6-{dev,runtime}
-# which already provide Arrow and OpenTelemetry as installed packages, which is
-# what the project now expects everywhere (no vendored submodules).
+# Uses pre-built base images from ghcr.io/hurdad/docker-jetpack6-{dev,runtime},
 # which provide Arrow 23.0.1 (CUDA+S3), gRPC v1.66.2, Protobuf v27.3,
 # OpenTelemetry v1.26.0, spdlog, jemalloc, Abseil, FlatBuffers, nats.c —
 # all pre-compiled for JetPack 6 / L4T R36 / CUDA 12.2 / aarch64.
+#
+# Those are installed packages, which is what the project now expects
+# everywhere; there are no vendored submodules any more.
 #
 # Build:
 #   docker build \

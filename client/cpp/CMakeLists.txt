@@ -65,6 +65,7 @@ endif()
 # Respects BUILD_SHARED_LIBS (default OFF = static archive).
 add_library(payload_manager_client
         client.cc
+        ring.cc
 )
 add_library(payload_manager::client ALIAS payload_manager_client)
 

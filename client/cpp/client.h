@@ -16,6 +16,7 @@
 #include "payload/manager/services/v1/payload_admin_service.grpc.pb.h"
 #include "payload/manager/services/v1/payload_catalog_service.grpc.pb.h"
 #include "payload/manager/services/v1/payload_data_service.grpc.pb.h"
+#include "payload/manager/services/v1/payload_ring_service.grpc.pb.h"
 #include "payload/manager/services/v1/payload_stream_service.grpc.pb.h"
 #include "payload/manager/v1.hpp"
 
@@ -50,7 +51,7 @@ class PayloadClient {
   /// so their lifetimes are tied together. Call context->TryCancel() to cancel
   /// the stream, then reader->Finish() to retrieve the final gRPC status.
   struct SubscribeHandle {
-    std::unique_ptr<grpc::ClientContext>                                         context;
+    std::unique_ptr<grpc::ClientContext> context;
     std::unique_ptr<grpc::ClientReader<payload::manager::v1::SubscribeResponse>> reader;
   };
 
@@ -63,22 +64,27 @@ class PayloadClient {
   /// or any other Arrow-supported filesystem built from FileSystemOptions proto config.
   /// When object_fs is null the default credential chain (env vars / AWS profile) is used.
   /// rpc_timeout of zero (the default) means no per-call deadline is applied.
-  PayloadClient(std::shared_ptr<grpc::Channel> channel, std::shared_ptr<arrow::fs::FileSystem> object_fs, std::chrono::milliseconds rpc_timeout = {});
+  PayloadClient(std::shared_ptr<grpc::Channel> channel, std::shared_ptr<arrow::fs::FileSystem> object_fs,
+                std::chrono::milliseconds rpc_timeout = {});
 
   ~PayloadClient();
 
-  PayloadClient(const PayloadClient&)            = delete;
+  PayloadClient(const PayloadClient&) = delete;
   PayloadClient& operator=(const PayloadClient&) = delete;
   PayloadClient(PayloadClient&&) noexcept;
   PayloadClient& operator=(PayloadClient&&) noexcept;
 
   /// Allocate a payload and open a writable Arrow buffer for it.
-  arrow::Result<WritablePayload> AllocateWritableBuffer(uint64_t                   size_bytes,
-                                                        payload::manager::v1::Tier preferred_tier = payload::manager::v1::TIER_RAM,
-                                                        uint64_t ttl_ms = 0, bool no_evict = false) const;
+  arrow::Result<WritablePayload> AllocateWritableBuffer(
+      uint64_t size_bytes,
+      payload::manager::v1::Tier preferred_tier = payload::manager::v1::TIER_RAM,
+      uint64_t ttl_ms = 0, bool no_evict = false) const;
 
   /// Convert a UUID string into a protobuf PayloadID.
   static arrow::Result<payload::manager::v1::PayloadID> PayloadIdFromUuid(std::string_view uuid);
+  /// Hex-encode a 16-byte UUID (no dashes, lowercase) for logs and gRPC
+  /// metadata that wants the legacy text form.
+  static std::string UuidBytesToHex(std::string_view bytes);
   /// Validate that a PayloadID contains a 16-byte UUID payload.
   static arrow::Status ValidatePayloadId(const payload::manager::v1::PayloadID& payload_id);
 
@@ -86,22 +92,27 @@ class PayloadClient {
   arrow::Status CommitPayload(const payload::manager::v1::PayloadID& payload_id) const;
 
   /// Resolve payload metadata for a committed payload.
-  arrow::Result<payload::manager::v1::ResolveSnapshotResponse> Resolve(const payload::manager::v1::PayloadID& payload_id) const;
+  arrow::Result<payload::manager::v1::ResolveSnapshotResponse> Resolve(
+      const payload::manager::v1::PayloadID& payload_id) const;
 
   /// Acquire a read lease and open a readable Arrow buffer.
   arrow::Result<ReadablePayload> AcquireReadableBuffer(
-      const payload::manager::v1::PayloadID& payload_id, payload::manager::v1::Tier min_tier = payload::manager::v1::TIER_RAM,
-      payload::manager::v1::PromotionPolicy promotion_policy      = payload::manager::v1::PROMOTION_POLICY_BEST_EFFORT,
-      uint64_t                              min_lease_duration_ms = 0) const;
+      const payload::manager::v1::PayloadID& payload_id,
+      payload::manager::v1::Tier min_tier = payload::manager::v1::TIER_RAM,
+      payload::manager::v1::PromotionPolicy promotion_policy =
+          payload::manager::v1::PROMOTION_POLICY_BEST_EFFORT,
+      uint64_t min_lease_duration_ms = 0) const;
 
   /// Release a previously acquired read lease.
   arrow::Status Release(const payload::manager::v1::LeaseID& lease_id) const;
 
   /// Request promotion to a higher tier.
-  arrow::Result<payload::manager::v1::PromoteResponse> Promote(const payload::manager::v1::PromoteRequest& request) const;
+  arrow::Result<payload::manager::v1::PromoteResponse> Promote(
+      const payload::manager::v1::PromoteRequest& request) const;
 
   /// Request spill to a lower tier.
-  arrow::Result<payload::manager::v1::SpillResponse> Spill(const payload::manager::v1::SpillRequest& request) const;
+  arrow::Result<payload::manager::v1::SpillResponse> Spill(
+      const payload::manager::v1::SpillRequest& request) const;
 
   /// Hint the service to prefetch payloads.
   arrow::Status Prefetch(const payload::manager::v1::PrefetchRequest& request) const;
@@ -119,7 +130,8 @@ class PayloadClient {
   arrow::Status AddLineage(const payload::manager::v1::AddLineageRequest& request) const;
 
   /// Query lineage for a payload.
-  arrow::Result<payload::manager::v1::GetLineageResponse> GetLineage(const payload::manager::v1::GetLineageRequest& request) const;
+  arrow::Result<payload::manager::v1::GetLineageResponse> GetLineage(
+      const payload::manager::v1::GetLineageRequest& request) const;
 
   /// Upsert structured metadata on a payload.
   arrow::Result<payload::manager::v1::UpdatePayloadMetadataResponse> UpdatePayloadMetadata(
@@ -130,10 +142,12 @@ class PayloadClient {
       const payload::manager::v1::AppendPayloadMetadataEventRequest& request) const;
 
   /// List all payloads with summary info (tier, state, size, age, lease count).
-  arrow::Result<payload::manager::v1::ListPayloadsResponse> ListPayloads(const payload::manager::v1::ListPayloadsRequest& request) const;
+  arrow::Result<payload::manager::v1::ListPayloadsResponse> ListPayloads(
+      const payload::manager::v1::ListPayloadsRequest& request) const;
 
   /// Fetch service stats.
-  arrow::Result<payload::manager::v1::StatsResponse> Stats(const payload::manager::v1::StatsRequest& request) const;
+  arrow::Result<payload::manager::v1::StatsResponse> Stats(
+      const payload::manager::v1::StatsRequest& request) const;
 
   /// Create a stream.
   arrow::Status CreateStream(const payload::manager::v1::CreateStreamRequest& request) const;
@@ -142,10 +156,12 @@ class PayloadClient {
   arrow::Status DeleteStream(const payload::manager::v1::DeleteStreamRequest& request) const;
 
   /// Append payload references to a stream.
-  arrow::Result<payload::manager::v1::AppendResponse> Append(const payload::manager::v1::AppendRequest& request) const;
+  arrow::Result<payload::manager::v1::AppendResponse> Append(
+      const payload::manager::v1::AppendRequest& request) const;
 
   /// Read stream entries at an offset.
-  arrow::Result<payload::manager::v1::ReadResponse> Read(const payload::manager::v1::ReadRequest& request) const;
+  arrow::Result<payload::manager::v1::ReadResponse> Read(
+      const payload::manager::v1::ReadRequest& request) const;
 
   /// Subscribe to stream events using a server-side streaming RPC.
   /// Returns a SubscribeHandle that owns both the context and the reader.
@@ -155,33 +171,79 @@ class PayloadClient {
   arrow::Status Commit(const payload::manager::v1::CommitRequest& request) const;
 
   /// Get the committed offset for a consumer.
-  arrow::Result<payload::manager::v1::GetCommittedResponse> GetCommitted(const payload::manager::v1::GetCommittedRequest& request) const;
+  arrow::Result<payload::manager::v1::GetCommittedResponse> GetCommitted(
+      const payload::manager::v1::GetCommittedRequest& request) const;
 
   /// Read a range of stream entries.
-  arrow::Result<payload::manager::v1::GetRangeResponse> GetRange(const payload::manager::v1::GetRangeRequest& request) const;
+  arrow::Result<payload::manager::v1::GetRangeResponse> GetRange(
+      const payload::manager::v1::GetRangeRequest& request) const;
+
+  // -----------------------------------------------------------------------
+  // Ring tier (TIER_RAM_RING)
+  // -----------------------------------------------------------------------
+  //
+  // Position-addressed: producers Acquire/Commit; consumers MapRing
+  // once at startup (mmap'ing every slot's /dev/shm region) and then
+  // per capture do LeaseRingSlot / use cached pointer / ReleaseRingSlot.
+
+  /// MapRing — consumer-side discovery. Returns slot count + per-slot
+  /// shm names so the consumer can mmap every slot once at startup.
+  arrow::Result<payload::manager::v1::MapRingResponse> MapRing(const std::string& ring_id) const;
+
+  /// AcquireRingSlot — producer reserves the next available slot.
+  /// Returns the slot's shm_name, slot_idx, generation, and capacity.
+  /// Producer is expected to mmap shm_name and write into it, then
+  /// call CommitRingSlot with the same (slot_idx, generation) and
+  /// the actual bytes written. Fails with arrow::Status of
+  /// CapacityError when every slot is currently leased
+  /// (RESOURCE_EXHAUSTED at the wire layer).
+  arrow::Result<payload::manager::v1::AcquireRingSlotResponse> AcquireRingSlot(
+      const std::string& ring_id) const;
+
+  /// CommitRingSlot — publish the slot. Pass back the slot_idx,
+  /// generation, and size_bytes from the matching AcquireRingSlot.
+  arrow::Status CommitRingSlot(const std::string& ring_id, uint32_t slot_idx, uint64_t generation,
+                               uint64_t size_bytes) const;
+
+  /// LeaseRingSlot — consumer takes a read lease on (slot_idx, generation).
+  /// Caller passes values extracted from the upstream domain event's
+  /// RingSlotRef. The returned lease_id must be passed back to
+  /// ReleaseRingSlot. FAILED_PRECONDITION (arrow::Status::Invalid)
+  /// when the generation no longer matches — consumer should skip
+  /// this capture.
+  arrow::Result<payload::manager::v1::LeaseRingSlotResponse> LeaseRingSlot(
+      const std::string& ring_id, uint32_t slot_idx, uint64_t generation) const;
+
+  /// ReleaseRingSlot — drop the lease. Idempotent: re-releasing a
+  /// lease_id that's already been released returns OK.
+  arrow::Status ReleaseRingSlot(const std::string& lease_id) const;
 
  private:
   /// Create a ClientContext with optional deadline and injected trace context.
   std::unique_ptr<grpc::ClientContext> MakeContext() const;
 
   /// Open a mutable Arrow buffer from a descriptor location.
-  arrow::Result<std::shared_ptr<arrow::MutableBuffer>> OpenMutableBuffer(const payload::manager::v1::PayloadDescriptor& descriptor) const;
+  arrow::Result<std::shared_ptr<arrow::MutableBuffer>> OpenMutableBuffer(
+      const payload::manager::v1::PayloadDescriptor& descriptor) const;
   /// Open a read-only Arrow buffer from a descriptor location.
-  arrow::Result<std::shared_ptr<arrow::Buffer>> OpenReadableBuffer(const payload::manager::v1::PayloadDescriptor& descriptor) const;
+  arrow::Result<std::shared_ptr<arrow::Buffer>> OpenReadableBuffer(
+      const payload::manager::v1::PayloadDescriptor& descriptor) const;
 
   /// Ensure descriptor has a concrete location for its tier.
   static arrow::Status ValidateHasLocation(const payload::manager::v1::PayloadDescriptor& descriptor);
   /// Return descriptor byte length for whichever location is set, or Invalid if none.
-  static arrow::Result<uint64_t> DescriptorLengthBytes(const payload::manager::v1::PayloadDescriptor& descriptor);
+  static arrow::Result<uint64_t> DescriptorLengthBytes(
+      const payload::manager::v1::PayloadDescriptor& descriptor);
 
   std::unique_ptr<payload::manager::v1::PayloadCatalogService::Stub> catalog_stub_;
-  std::unique_ptr<payload::manager::v1::PayloadDataService::Stub>    data_stub_;
-  std::unique_ptr<payload::manager::v1::PayloadAdminService::Stub>   admin_stub_;
-  std::unique_ptr<payload::manager::v1::PayloadStreamService::Stub>  stream_stub_;
+  std::unique_ptr<payload::manager::v1::PayloadDataService::Stub> data_stub_;
+  std::unique_ptr<payload::manager::v1::PayloadAdminService::Stub> admin_stub_;
+  std::unique_ptr<payload::manager::v1::PayloadStreamService::Stub> stream_stub_;
+  std::unique_ptr<payload::manager::v1::PayloadRingService::Stub> ring_stub_;
   /// Arrow filesystem for object-tier uploads. Null = use FileSystemFromUri default chain.
   std::shared_ptr<arrow::fs::FileSystem> object_fs_;
   /// Per-call RPC deadline. Zero means no deadline is applied.
   std::chrono::milliseconds rpc_timeout_{};
 };
 
-} // namespace payload::manager::client
+}  // namespace payload::manager::client
