@@ -140,6 +140,11 @@ SpillResponse CatalogService::Spill(const SpillRequest& req) {
           *result->mutable_payload_descriptor() = ctx_.manager->ResolveSnapshot(id);
         }
       } catch (const std::exception& e) {
+        // Also log it: the message goes back on the wire, but a spill failing
+        // otherwise leaves nothing at all in the service log, so an operator
+        // seeing payloads stuck in their source tier has nowhere to look.
+        PAYLOAD_LOG_ERROR("spill failed", {payload::observability::StringField("payload_id", payload::util::PayloadIdToHex(id)),
+                                           payload::observability::StringField("error", e.what())});
         result->set_ok(false);
         result->set_error_message(e.what());
       }

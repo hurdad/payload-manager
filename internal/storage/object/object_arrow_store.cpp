@@ -33,6 +33,29 @@ std::string Key(const PayloadID& id) {
 
 ObjectArrowStore::ObjectArrowStore(std::shared_ptr<arrow::fs::FileSystem> fs, std::string root_path, bool is_s3)
     : fs_(std::move(fs)), root_path_(std::move(root_path)), is_s3_(is_s3) {
+  // Ensure the root exists before anything tries to write into it.
+  //
+  // allow_bucket_creation is an S3Options flag that Arrow consults in
+  // CreateDir and nowhere else — OpenOutputStream will not create a bucket
+  // implicitly. Nothing called CreateDir, so with the flag set and the bucket
+  // absent every spill failed at the first upload:
+  //
+  //   AWS Error NO_SUCH_BUCKET during CreateMultipartUpload operation
+  //
+  // CreateDir is a no-op when the root already exists, so this is safe on
+  // every start. It is not fatal when it fails: the object tier may be
+  // configured against a bucket an operator creates out of band, with
+  // allow_bucket_creation deliberately off, and refusing to start would be
+  // worse than the clear error a later write produces. Say so loudly instead.
+  auto status = fs_->CreateDir(root_path_, /*recursive=*/true);
+  if (status.ok()) {
+    spdlog::debug("[obj] root ready path={}", root_path_);
+  } else {
+    spdlog::warn(
+        "[obj] could not create root '{}': {} — writes will fail unless it already exists "
+        "(for S3, set storage.object.filesystem_options.s3.allow_bucket_creation or create the bucket)",
+        root_path_, status.ToString());
+  }
 }
 
 ObjectArrowStore::~ObjectArrowStore() {

@@ -240,6 +240,12 @@ void TestSpillToObject(const std::string& endpoint, const std::string& minio_end
   const auto& result = spill_resp->results(0);
 
   // --- 4. Verify SpillResponse ---
+  // The server puts the reason in error_message; printing it turns a bare
+  // "assertion failed" into something diagnosable without attaching to the
+  // service.
+  if (!result.ok()) {
+    std::cout << "  spill failed: " << result.error_message() << '\n';
+  }
   ASSERT_TRUE(result.ok());
   ASSERT_EQ(static_cast<int>(result.payload_descriptor().tier()), static_cast<int>(TIER_OBJECT));
 

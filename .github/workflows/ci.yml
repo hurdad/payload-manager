@@ -394,134 +394,59 @@ jobs:
             down -v --remove-orphans
 
   # ---------------------------------------------------------------------------
-  # integration-object is disabled for now.
+  # Object tier (MinIO)
   #
-  # It fails on a real TIER_OBJECT bug rather than flake: the S3 write to MinIO
-  # begins and never completes, and the spill result comes back not-ok.
-  #
-  #   [obj] Write begin path=payloads/<uuid>.bin size=512
-  #   ... nothing further; SpillResponse result.ok() == false
-  #
-  # Left commented rather than marked continue-on-error, because a job that is
-  # permitted to fail is a job nobody reads. Uncomment this block and put
-  # integration-object back in the images `needs:` list once the spill is fixed;
-  # the compose overlays it drives are unchanged and still work.
+  # Was disabled while TIER_OBJECT spill failed outright: nothing created the
+  # bucket, so every upload died with NO_SUCH_BUCKET. Re-enabled now that
+  # ObjectArrowStore creates its root at construction.
   # ---------------------------------------------------------------------------
-  # integration-object:
-  #   name: Integration (object tier / MinIO)
-  #   runs-on: ubuntu-latest
-  #   steps:
-  #     - uses: actions/checkout@v4
-  #
-  #     # Same false-green guard as the API suite above.
-  #     - name: Run the object-spill suite
-  #       run: |
-  #         set -euo pipefail
-  #         COMPOSE=(docker compose
-  #           -f docker/docker-compose.postgres.yml
-  #           -f docker/docker-compose.minio.yml
-  #           -f docker/docker-compose.minio.test.yml)
-  #
-  #         "${COMPOSE[@]}" up --build --abort-on-container-exit --exit-code-from object-spill-test || true
-  #
-  #         cid=$("${COMPOSE[@]}" ps -a -q object-spill-test)
-  #         if [ -z "$cid" ]; then
-  #           echo "::error::object-spill-test container was never created — the stack failed to come up."
-  #           exit 1
-  #         fi
-  #         status=$(docker inspect -f '{{.State.Status}}:{{.State.ExitCode}}' "$cid")
-  #         echo "object-spill-test => $status"
-  #         case "$status" in
-  #           exited:0) echo "object-spill suite passed" ;;
-  #           *) echo "::error::object-spill-test did not pass (state $status)"; exit 1 ;;
-  #         esac
-  #
-  #     - name: Dump logs on failure
-  #       if: failure()
-  #       run: |
-  #         docker compose \
-  #           -f docker/docker-compose.postgres.yml \
-  #           -f docker/docker-compose.minio.yml \
-  #           -f docker/docker-compose.minio.test.yml \
-  #           logs --no-color
-  #
-  #     - name: Tear down
-  #       if: always()
-  #       run: |
-  #         docker compose \
-  #           -f docker/docker-compose.postgres.yml \
-  #           -f docker/docker-compose.minio.yml \
-  #           -f docker/docker-compose.minio.test.yml \
-  #           down -v --remove-orphans
-  #
-  # ---------------------------------------------------------------------------
-  # e2e is disabled for now.
-  #
-  # The stack itself is fixed — docker-compose.e2e.yml had no postgres service,
-  # so payload-manager exited 2 on DNS and Playwright never ran at all. With
-  # that added the suite executes: 54 passed, 11 failed, 1 skipped.
-  #
-  # The 11 are real UI failures, not infrastructure:
-  #   tests/pagination.spec.ts  9 cases — Next/Prev enablement, the X-Y of Z
-  #                             count line, tier-filter reset, empty result
-  #   tests/streams.spec.ts     2 cases — appending a payload ID, commit last
-  #                             offset
-  #
-  # Uncomment and restore to the images `needs:` list once those pass. The
-  # compose stack runs by hand today:
-  #   docker compose -f docker/docker-compose.e2e.yml up --build \
-  #     --abort-on-container-exit --exit-code-from e2e
-  # ---------------------------------------------------------------------------
-  # e2e:
-  #   name: End-to-end (gateway + UI)
-  #   runs-on: ubuntu-latest
-  #   steps:
-  #     - uses: actions/checkout@v4
-  #
-  #     # Same false-green guard as the integration suites above.
-  #     - name: Run Playwright against the gateway
-  #       run: |
-  #         set -euo pipefail
-  #         COMPOSE=(docker compose -f docker/docker-compose.e2e.yml)
-  #
-  #         "${COMPOSE[@]}" up --build --abort-on-container-exit --exit-code-from e2e || true
-  #
-  #         cid=$("${COMPOSE[@]}" ps -a -q e2e)
-  #         if [ -z "$cid" ]; then
-  #           echo "::error::e2e container was never created — the stack failed to come up."
-  #           exit 1
-  #         fi
-  #         status=$(docker inspect -f '{{.State.Status}}:{{.State.ExitCode}}' "$cid")
-  #         echo "e2e => $status"
-  #         case "$status" in
-  #           exited:0) echo "e2e suite passed" ;;
-  #           *) echo "::error::e2e did not pass (state $status)"; exit 1 ;;
-  #         esac
-  #
-  #     - name: Dump logs on failure
-  #       if: failure()
-  #       run: docker compose -f docker/docker-compose.e2e.yml logs --no-color
-  #
-  #     # Screenshots and video are captured only on failure, which is when
-  #     # they are worth keeping.
-  #     - name: Upload Playwright report
-  #       if: ${{ !cancelled() }}
-  #       uses: actions/upload-artifact@v4
-  #       with:
-  #         name: playwright-report
-  #         path: |
-  #           ui/playwright-report
-  #           ui/test-results
-  #         if-no-files-found: ignore
-  #         retention-days: 7
-  #
-  #     - name: Tear down
-  #       if: always()
-  #       run: docker compose -f docker/docker-compose.e2e.yml down -v --remove-orphans
-  #
-  # ---------------------------------------------------------------------------
-  # GPU
-  # ---------------------------------------------------------------------------
+  integration-object:
+    name: Integration (object tier / MinIO)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Same false-green guard as the API suite above.
+      - name: Run the object-spill suite
+        run: |
+          set -euo pipefail
+          COMPOSE=(docker compose
+            -f docker/docker-compose.postgres.yml
+            -f docker/docker-compose.minio.yml
+            -f docker/docker-compose.minio.test.yml)
+
+          "${COMPOSE[@]}" up --build --abort-on-container-exit --exit-code-from object-spill-test || true
+
+          cid=$("${COMPOSE[@]}" ps -a -q object-spill-test)
+          if [ -z "$cid" ]; then
+            echo "::error::object-spill-test container was never created — the stack failed to come up."
+            exit 1
+          fi
+          status=$(docker inspect -f '{{.State.Status}}:{{.State.ExitCode}}' "$cid")
+          echo "object-spill-test => $status"
+          case "$status" in
+            exited:0) echo "object-spill suite passed" ;;
+            *) echo "::error::object-spill-test did not pass (state $status)"; exit 1 ;;
+          esac
+
+      - name: Dump logs on failure
+        if: failure()
+        run: |
+          docker compose \
+            -f docker/docker-compose.postgres.yml \
+            -f docker/docker-compose.minio.yml \
+            -f docker/docker-compose.minio.test.yml \
+            logs --no-color
+
+      - name: Tear down
+        if: always()
+        run: |
+          docker compose \
+            -f docker/docker-compose.postgres.yml \
+            -f docker/docker-compose.minio.yml \
+            -f docker/docker-compose.minio.test.yml \
+            down -v --remove-orphans
+
 
   gpu:
     name: GPU tests
@@ -583,7 +508,7 @@ jobs:
   images:
     name: Image (${{ matrix.name }})
     # integration-object is absent deliberately — see the commented block above.
-    needs: [format, tidy, generated, build-test, python, integration-api]
+    needs: [format, tidy, generated, build-test, python, integration-api, integration-object]
     runs-on: ${{ matrix.runner }}
     permissions:
       contents: read
