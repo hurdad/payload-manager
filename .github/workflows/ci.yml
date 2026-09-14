@@ -563,6 +563,11 @@ jobs:
           # self-hosted runner, so it needs no QEMU and no cross platform
           # argument — uncomment this entry to bring it back. The ARM64 label
           # is still declared in .github/actionlint.yaml for that.
+          #
+          # Its dependencies are not built here: the "Resolve Jetson dependency
+          # images" step below points it at the pair published by
+          # .github/workflows/jetson-deps.yml, so this stays a minutes-long
+          # build of the service rather than an hours-long build of Arrow.
           # - name: jetson
           #   file: docker/Dockerfile.jetson
           #   suffix: "-jetson"
@@ -600,11 +605,30 @@ jobs:
             type=sha
             type=raw,value=latest,enable={{is_default_branch}}
 
+      # Derives the same tag jetson-deps.yml derives, from the same file, so
+      # the two cannot drift without a cross-workflow `needs` that GitHub does
+      # not offer. Every other image builds its dependencies from apt and this
+      # step does not run, leaving build-args empty.
+      - name: Resolve Jetson dependency images
+        if: matrix.name == 'jetson'
+        id: jetson_deps
+        run: |
+          set -euo pipefail
+          tag="$(sha256sum docker/Dockerfile.jetson-deps | cut -c1-12)"
+          {
+            echo "build_args<<ARGS_EOF"
+            echo "DEPS_DEV_IMAGE=ghcr.io/${{ github.repository }}-jetson-deps-dev:${tag}"
+            echo "DEPS_RUNTIME_IMAGE=ghcr.io/${{ github.repository }}-jetson-deps-runtime:${tag}"
+            echo "BUILD_JOBS=2"
+            echo "ARGS_EOF"
+          } >> "$GITHUB_OUTPUT"
+
       - name: Build and push
         uses: docker/build-push-action@v6
         with:
           context: .
           file: ${{ matrix.file }}
+          build-args: ${{ steps.jetson_deps.outputs.build_args }}
           platforms: ${{ matrix.platforms }}
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}

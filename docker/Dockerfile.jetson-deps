@@ -1,0 +1,302 @@
+# Dockerfile.jetson-deps
+#
+# Dependency image for docker/Dockerfile.jetson: Abseil, re2, Protobuf, gRPC,
+# OpenTelemetry, the AWS SDK, Arrow and libpqxx, built from source for
+# aarch64 / L4T / JetPack 6 and installed into /usr/local.
+#
+# This is a separate image because building it takes hours on Jetson hardware,
+# and none of it changes when the project's own sources do. docker/Dockerfile.jetson
+# starts FROM the published result, so CI rebuilds the service in minutes.
+#
+# It replaces the third-party ghcr.io/hurdad/docker-jetpack6-dev base the image
+# used to sit on. The point was never that a prebuilt base is wrong — it is that
+# the recipe for one belongs in the repository that depends on it, at versions
+# this project pins, rather than somewhere opaque.
+#
+# Ubuntu 22.04 — what JetPack 6 ships — packages none of these at usable
+# versions: no opentelemetry-cpp at all, no libarrow with both S3 and CUDA, an
+# re2 with no CMake config, and a libpqxx four minor versions too old to compile
+# the repository layer.
+#
+# Base image: nvcr.io/nvidia/l4t-cuda, tagged by CUDA version rather than by L4T
+# release. 12.2.12 is the CUDA that ships with L4T R36.2 / JetPack 6. There is no
+# l4t-cuda:r36.2.0 tag.
+#
+# Build and publish (natively, on a Jetson or an ARM64 host):
+#   docker build -f docker/Dockerfile.jetson-deps \
+#     -t ghcr.io/hurdad/payload-manager-jetson-deps:latest .
+#
+# Rebuilt by .github/workflows/jetson-deps.yml whenever this file changes; the
+# tag is derived from its contents, so a version bump here publishes a new image
+# and leaves the old one resolvable.
+
+# ============================================================
+# dev — headers, static archives and the toolchain
+# ============================================================
+FROM nvcr.io/nvidia/l4t-cuda:12.2.12-devel AS dev
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Pinned together on purpose. gRPC constrains Protobuf, Protobuf constrains
+# Abseil, and picking them independently is how you end up debugging a link
+# error in generated code. This set is the one the previous JetPack 6 base
+# image shipped, so it is known to build this project on aarch64.
+ARG ABSEIL_VERSION=20240722.0
+ARG PROTOBUF_VERSION=v27.3
+ARG GRPC_VERSION=v1.66.2
+ARG OTEL_CPP_VERSION=v1.23.0
+# Jammy packages re2 20220201, which installs a pkg-config file and no CMake
+# config at all — gRPC below is configured with gRPC_RE2_PROVIDER=package and
+# its find_package(re2 REQUIRED) cannot see a .pc file. Letting gRPC fall back
+# to its bundled copy would instead put two re2 implementations in one process,
+# gRPC's statically linked one and the system libre2 Arrow resolves, with the
+# same unversioned symbols in both. One shared re2 in /usr/local settles both.
+ARG RE2_VERSION=2024-07-02
+# Must be >= 23.0: CMakeLists.txt fails the configure below that, and it would
+# do so only after the longest build step in the image. 25.0.1 is what the x86
+# images pin, so the tiers behave identically on both architectures.
+ARG ARROW_VERSION=apache-arrow-25.0.1
+# 7.10 is the floor, not a preference: internal/db/postgres uses pqxx::prepped,
+# which does not exist before it, and pqxx::params in thirty places. Ubuntu
+# 22.04 ships 6.4, which has neither — the repository layer does not compile
+# against it. 7.10.0 is also what the x86 images link against.
+ARG LIBPQXX_VERSION=7.10.0
+# Exactly the version Arrow 25.0.1 vendors — cpp/thirdparty/versions.txt pins
+# ARROW_AWSSDK_BUILD_VERSION=1.11.778 — so building it here rather than letting
+# Arrow bundle it changes nothing about what Arrow links, while making it a
+# cache layer of its own. Arrow is rebuilt far more often than the SDK is.
+ARG AWS_SDK_VERSION=1.11.778
+ARG BUILD_JOBS=4
+
+# Ubuntu 22.04's cmake is 3.22. Arrow wants newer, so take Kitware's.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        ca-certificates gnupg wget git \
+    && wget -qO- https://apt.kitware.com/keys/kitware-archive-latest.asc \
+       | gpg --dearmor -o /usr/share/keyrings/kitware-archive-keyring.gpg \
+    && echo "deb [signed-by=/usr/share/keyrings/kitware-archive-keyring.gpg] https://apt.kitware.com/ubuntu/ jammy main" \
+       > /etc/apt/sources.list.d/kitware.list \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends \
+        build-essential ninja-build cmake pkg-config \
+        libssl-dev zlib1g-dev libcurl4-openssl-dev \
+        liblz4-dev libzstd-dev libsnappy-dev libbrotli-dev libbz2-dev \
+        libutf8proc-dev libxml2-dev \
+        libpq-dev uuid-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /deps
+
+# C++17 for every dependency: that is what distribution packages of these
+# libraries are built with, and therefore the configuration this project
+# already links against on x86. The project itself is C++20; mixing is fine
+# here because both standards alias absl::string_view to std::string_view,
+# which is where an Abseil ABI mismatch would otherwise bite.
+ENV DEPS_CXX_STANDARD=17
+
+# --- Abseil ---------------------------------------------------------------
+RUN git clone --depth 1 --branch ${ABSEIL_VERSION} https://github.com/abseil/abseil-cpp.git \
+    && cmake -S abseil-cpp -B build-absl -G Ninja \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
+        -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
+        -DCMAKE_CXX_STANDARD=${DEPS_CXX_STANDARD} \
+        -DBUILD_SHARED_LIBS=ON \
+        -DABSL_PROPAGATE_CXX_STD=ON \
+        -DABSL_ENABLE_INSTALL=ON \
+        -DBUILD_TESTING=OFF \
+    && cmake --build build-absl -j ${BUILD_JOBS} \
+    && cmake --install build-absl \
+    && rm -rf abseil-cpp build-absl
+
+# --- re2 ------------------------------------------------------------------
+# After Abseil: re2 has depended on it since 2023 and links absl::base and
+# friends. Before gRPC and Arrow, which both resolve it from /usr/local.
+RUN git clone --depth 1 --branch ${RE2_VERSION} https://github.com/google/re2.git \
+    && cmake -S re2 -B build-re2 -G Ninja \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
+        -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
+        -DCMAKE_CXX_STANDARD=${DEPS_CXX_STANDARD} \
+        -DBUILD_SHARED_LIBS=ON \
+        -DRE2_BUILD_TESTING=OFF \
+    && cmake --build build-re2 -j ${BUILD_JOBS} \
+    && cmake --install build-re2 \
+    && ldconfig \
+    && rm -rf re2 build-re2
+
+# --- Protobuf -------------------------------------------------------------
+# Against the Abseil just installed, not a bundled copy, so gRPC and Arrow
+# below resolve one protobuf and one Abseil.
+RUN git clone --depth 1 --branch ${PROTOBUF_VERSION} https://github.com/protocolbuffers/protobuf.git \
+    && cmake -S protobuf -B build-protobuf -G Ninja \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
+        -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
+        -DCMAKE_CXX_STANDARD=${DEPS_CXX_STANDARD} \
+        -DBUILD_SHARED_LIBS=ON \
+        -Dprotobuf_BUILD_TESTS=OFF \
+        -Dprotobuf_ABSL_PROVIDER=package \
+    && cmake --build build-protobuf -j ${BUILD_JOBS} \
+    && cmake --install build-protobuf \
+    && ldconfig \
+    && rm -rf protobuf build-protobuf
+
+# --- gRPC -----------------------------------------------------------------
+# Needs its submodules for the pieces not provided as packages (c-ares,
+# re2 is taken from the system, upb ships in-tree).
+RUN git clone --depth 1 --branch ${GRPC_VERSION} --recurse-submodules --shallow-submodules \
+        https://github.com/grpc/grpc.git \
+    && cmake -S grpc -B build-grpc -G Ninja \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
+        -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
+        -DCMAKE_CXX_STANDARD=${DEPS_CXX_STANDARD} \
+        -DBUILD_SHARED_LIBS=ON \
+        -DgRPC_INSTALL=ON \
+        -DgRPC_BUILD_TESTS=OFF \
+        -DgRPC_ABSL_PROVIDER=package \
+        -DgRPC_PROTOBUF_PROVIDER=package \
+        -DgRPC_SSL_PROVIDER=package \
+        -DgRPC_ZLIB_PROVIDER=package \
+        -DgRPC_RE2_PROVIDER=package \
+        -DgRPC_BUILD_GRPC_CSHARP_PLUGIN=OFF \
+        -DgRPC_BUILD_GRPC_NODE_PLUGIN=OFF \
+        -DgRPC_BUILD_GRPC_OBJECTIVE_C_PLUGIN=OFF \
+        -DgRPC_BUILD_GRPC_PHP_PLUGIN=OFF \
+        -DgRPC_BUILD_GRPC_RUBY_PLUGIN=OFF \
+    && cmake --build build-grpc -j ${BUILD_JOBS} \
+    && cmake --install build-grpc \
+    && ldconfig \
+    && rm -rf grpc build-grpc
+
+# --- OpenTelemetry --------------------------------------------------------
+# All six OTLP exporters, because CMakeLists.txt aliases every one of them and
+# find_package(opentelemetry-cpp REQUIRED) fails the build if any is absent.
+RUN git clone --depth 1 --branch ${OTEL_CPP_VERSION} --recurse-submodules --shallow-submodules \
+        https://github.com/open-telemetry/opentelemetry-cpp.git \
+    && cmake -S opentelemetry-cpp -B build-otel -G Ninja \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
+        -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
+        -DCMAKE_CXX_STANDARD=${DEPS_CXX_STANDARD} \
+        -DBUILD_SHARED_LIBS=ON \
+        -DWITH_OTLP_GRPC=ON \
+        -DWITH_OTLP_HTTP=ON \
+        -DWITH_ABSEIL=ON \
+        -DWITH_EXAMPLES=OFF \
+        -DWITH_FUNC_TESTS=OFF \
+        -DBUILD_TESTING=OFF \
+        -DOPENTELEMETRY_INSTALL=ON \
+    && cmake --build build-otel -j ${BUILD_JOBS} \
+    && cmake --install build-otel \
+    && ldconfig \
+    && rm -rf opentelemetry-cpp build-otel
+
+# --- AWS SDK for C++ ------------------------------------------------------
+# Arrow's S3 filesystem needs these six components; the list is Arrow's own
+# from ThirdpartyToolchain.cmake, plus cognito-identity which
+# identity-management pulls in. Shared, so the runtime stage picks it up with
+# the rest of /usr/local.
+RUN git clone --depth 1 --branch ${AWS_SDK_VERSION} https://github.com/aws/aws-sdk-cpp.git \
+    && git -C aws-sdk-cpp submodule update --init --depth 1 --recursive \
+    && cmake -S aws-sdk-cpp -B build-aws -G Ninja \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
+        -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
+        -DCMAKE_INSTALL_PREFIX=/usr/local \
+        -DCMAKE_PREFIX_PATH=/usr/local \
+        -DBUILD_SHARED_LIBS=ON \
+        -DBUILD_ONLY="s3;core;config;transfer;identity-management;sts;cognito-identity" \
+        -DENABLE_TESTING=OFF \
+        -DAUTORUN_UNIT_TESTS=OFF \
+    && cmake --build build-aws -j ${BUILD_JOBS} \
+    && cmake --install build-aws \
+    && ldconfig \
+    && rm -rf aws-sdk-cpp build-aws
+
+# --- Arrow ----------------------------------------------------------------
+# S3 and CUDA are both required: the object tier calls
+# arrow::fs::EnsureS3Initialized and the GPU tier uses arrow::cuda. AWSSDK_SOURCE
+# is SYSTEM because the step above already installed the exact version Arrow
+# would otherwise have downloaded and built inside this one.
+RUN git clone --depth 1 --branch ${ARROW_VERSION} https://github.com/apache/arrow.git \
+    && cmake -S arrow/cpp -B build-arrow -G Ninja \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
+        -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
+        -DCMAKE_CXX_STANDARD=${DEPS_CXX_STANDARD} \
+        -DARROW_BUILD_SHARED=ON \
+        -DARROW_BUILD_STATIC=OFF \
+        -DARROW_BUILD_TESTS=OFF \
+        -DARROW_DEPENDENCY_SOURCE=AUTO \
+        -DARROW_CUDA=ON \
+        -DARROW_S3=ON \
+        -DAWSSDK_SOURCE=SYSTEM \
+        -DARROW_FILESYSTEM=ON \
+        -DARROW_COMPUTE=ON \
+        -DARROW_JSON=ON \
+        -DARROW_WITH_ZLIB=ON \
+        -DARROW_WITH_ZSTD=ON \
+        -DARROW_WITH_LZ4=ON \
+        -DARROW_WITH_SNAPPY=ON \
+        -DARROW_WITH_BROTLI=ON \
+        -DARROW_WITH_BZ2=ON \
+        -DARROW_WITH_RE2=ON \
+        -DARROW_WITH_UTF8PROC=ON \
+    && cmake --build build-arrow -j ${BUILD_JOBS} \
+    && cmake --install build-arrow \
+    && ldconfig \
+    && rm -rf arrow build-arrow
+
+# --- libpqxx --------------------------------------------------------------
+# Links against the system libpq, which only needs to speak the wire protocol
+# and so is fine at 22.04's version; it is the C++ wrapper that is too old.
+RUN git clone --depth 1 --branch ${LIBPQXX_VERSION} https://github.com/jtv/libpqxx.git \
+    && cmake -S libpqxx -B build-pqxx -G Ninja \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
+        -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
+        -DCMAKE_CXX_STANDARD=${DEPS_CXX_STANDARD} \
+        -DBUILD_SHARED_LIBS=ON \
+        -DSKIP_BUILD_TEST=ON \
+    && cmake --build build-pqxx -j ${BUILD_JOBS} \
+    && cmake --install build-pqxx \
+    && ldconfig \
+    && rm -rf libpqxx build-pqxx
+
+# --- the rest of the project's link surface --------------------------------
+# These three Ubuntu 22.04 packages at versions this project can use, unlike the
+# eight built above. Last in the stage deliberately: it is a few seconds of apt,
+# and adding to this list should not invalidate hours of from-source layers.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        libyaml-cpp-dev \
+        libspdlog-dev \
+        libgtest-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# ============================================================
+# runtime — the shared objects only, on the smaller CUDA base
+# ============================================================
+# Everything the service links and nothing that compiles it. Published as its
+# own image so docker/Dockerfile.jetson's runtime stage is just the binary:
+# pulling this is a few hundred MB instead of the multi-GB dev image.
+FROM nvcr.io/nvidia/l4t-cuda:12.2.12-runtime AS runtime
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Runtime halves of what the dev stage links against. re2, Abseil, Protobuf,
+# gRPC, OpenTelemetry, the AWS SDK, Arrow and libpqxx are not here — they arrive
+# as shared objects in the COPY below. libpq5 is the C library libpqxx wraps.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        ca-certificates \
+        libssl3 zlib1g libcurl4 \
+        liblz4-1 libzstd1 libsnappy1v5 libbrotli1 libbz2-1.0 \
+        libutf8proc2 libxml2 \
+        libyaml-cpp0.7 libpq5 libspdlog1 \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY --from=dev /usr/local/lib/ /usr/local/lib/
+RUN ldconfig
