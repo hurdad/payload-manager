@@ -1,0 +1,42 @@
+# Codecov configuration.
+#
+# Coverage is collected by .github/workflows/quality.yml, which builds with
+# -DPAYLOAD_MANAGER_ENABLE_COVERAGE=ON and runs the unit lane (integration
+# suites need live Postgres/MinIO and are excluded there).
+
+coverage:
+  precision: 1
+  round: down
+  range: "50...80"
+
+  status:
+    project:
+      default:
+        # The baseline is what it is; what matters is that it does not slide.
+        target: auto
+        threshold: 1%
+        informational: false
+    patch:
+      default:
+        # New and changed lines should be covered even while the project
+        # baseline is still climbing.
+        target: 70%
+        threshold: 0%
+
+comment:
+  layout: "reach, diff, flags, files"
+  behavior: default
+  require_changes: true
+
+ignore:
+  - "tests/**"
+  - "examples/**"
+  - "build/**"
+  - "cmake-build-*/**"
+  - "api/third_party/**"      # vendored googleapis protos
+  - "**/*.pb.h"               # generated protobuf
+  - "**/*.pb.cc"
+  - "**/*.grpc.pb.h"
+  - "**/*.grpc.pb.cc"
+  - "gateway/**"              # Go, covered separately if at all
+  - "ui/**"

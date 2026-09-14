@@ -17,7 +17,6 @@
 #include "internal/db/model/payload_record.hpp"
 #include "internal/util/uuid.hpp"
 
-
 #if PAYLOAD_DB_POSTGRES
 #include "internal/db/postgres/pg_pool.hpp"
 #include "internal/db/postgres/pg_repository.hpp"
@@ -398,7 +397,6 @@ BackendFactory MakeMemoryFactory() {
       .supports_parallel_transactions = true,
   };
 }
-
 
 #if PAYLOAD_DB_POSTGRES
 BackendFactory MakePostgresFactory() {

@@ -13,6 +13,9 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
+# clang-tidy, IWYU and most IDEs consume this.
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+
 option(PAYLOAD_MANAGER_ENABLE_OTEL "Enable OpenTelemetry integration" OFF)
 option(PAYLOAD_MANAGER_BUILD_SERVICE "Build payload-manager service components" ON)
 option(PAYLOAD_MANAGER_BUILD_PAYLOADCTL "Build payloadctl CLI" ON)
@@ -21,6 +24,22 @@ option(PAYLOAD_MANAGER_BUILD_EXAMPLES "Build C++ examples" ON)
 option(PAYLOAD_MANAGER_ENABLE_PYTHON_PROTO
        "Generate Python protobuf/gRPC stubs (requires grpcio-tools); OFF = auto-detect"
        OFF)
+
+option(PAYLOAD_MANAGER_ENABLE_COVERAGE
+       "Instrument the build for gcov/llvm-cov coverage reporting"
+       OFF)
+
+if(PAYLOAD_MANAGER_ENABLE_COVERAGE)
+  if(NOT CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+    message(FATAL_ERROR "PAYLOAD_MANAGER_ENABLE_COVERAGE requires GCC or Clang")
+  endif()
+  # Coverage counters are meaningless against an optimised build, and inlining
+  # makes line attribution misleading, so force -O0 -g here rather than trusting
+  # whatever CMAKE_BUILD_TYPE was passed.
+  add_compile_options(-O0 -g --coverage -fprofile-update=atomic)
+  add_link_options(--coverage)
+  message(STATUS "Coverage instrumentation enabled (-O0 -g --coverage)")
+endif()
 
 if(PAYLOAD_MANAGER_ENABLE_OTEL)
   add_compile_definitions(ENABLE_OTEL)
@@ -74,13 +93,17 @@ endif()
 # ================================================================
 #
 # Arrow is always taken from an installed package; there is no vendored copy.
-#   - Ubuntu 26.04 universe ships libarrow-dev 23.0.1 (no CUDA).
-#   - The Apache Arrow apt repo (apache.jfrog.io/artifactory/arrow/ubuntu)
-#     ships libarrow-dev and libarrow-cuda-dev for every release; the CI
-#     images pin an exact version there.
+#
+# Use the Apache Arrow apt repo (apache.jfrog.io/artifactory/arrow/ubuntu).
+# Ubuntu 26.04 universe's libarrow-dev 23.0.1 is NOT sufficient: it is built
+# with ARROW_S3=OFF (and ARROW_GCS=OFF), so the object tier and the client's
+# EnsureS3Initialized call fail to link. The Apache packages enable S3, and are
+# the only source of libarrow-cuda-dev. See the S3 check below, which turns
+# that into a configure-time error rather than an obscure undefined reference.
+#
 # The version floor is deliberately loose so a developer can build against
-# whichever Arrow their distribution provides; the container images pin an
-# exact version so CI is reproducible.
+# whichever Arrow they install; the container images pin an exact version so CI
+# is reproducible.
 
 option(PAYLOAD_MANAGER_ENABLE_ARROW_CUDA
        "Enable Arrow CUDA integration (requires libarrow-cuda-dev and a GPU build)"
@@ -105,6 +128,21 @@ if(Arrow_VERSION VERSION_LESS PAYLOAD_MANAGER_ARROW_MIN_VERSION)
     "${PAYLOAD_MANAGER_ARROW_MIN_VERSION}. Install a newer libarrow-dev.")
 endif()
 message(STATUS "Arrow: using package ${Arrow_VERSION}")
+
+# ArrowOptions.cmake (pulled in by find_package(Arrow)) records the flags the
+# package was built with. Both the object tier and the C++ client reference
+# arrow::fs::EnsureS3Initialized, so an Arrow without S3 fails at link time with
+# nothing pointing at the real cause. Catch it here instead.
+if(PAYLOAD_MANAGER_BUILD_SERVICE OR PAYLOAD_MANAGER_BUILD_CLIENT)
+  if(DEFINED ARROW_S3 AND NOT ARROW_S3)
+    message(FATAL_ERROR
+      "The installed Arrow ${Arrow_VERSION} was built with ARROW_S3=OFF, which "
+      "cannot provide the object tier or the client's S3 initialisation.\n"
+      "Ubuntu universe's libarrow-dev is built this way; install from the "
+      "Apache Arrow apt repository instead:\n"
+      "  https://arrow.apache.org/install/")
+  endif()
+endif()
 
 # ArrowConfig.cmake may export Arrow::arrow_static as an alias of
 # Arrow::arrow_shared.  CMake >= 3.28 forbids an ALIAS of an ALIAS, so point
@@ -154,6 +192,19 @@ if(CLANG_FORMAT_EXE)
       ${CMAKE_SOURCE_DIR}/cmake/RunClangFormat.cmake
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
     COMMENT "Running clang-format using ${CMAKE_SOURCE_DIR}/.clang-format")
+
+  # Same script in report-only mode, for CI.
+  add_custom_target(
+    format-check
+    COMMAND
+      ${CMAKE_COMMAND}
+      -DCLANG_FORMAT_EXE=${CLANG_FORMAT_EXE}
+      -DSOURCE_DIR=${CMAKE_SOURCE_DIR}
+      -DCHECK=ON
+      -P
+      ${CMAKE_SOURCE_DIR}/cmake/RunClangFormat.cmake
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+    COMMENT "Checking formatting against ${CMAKE_SOURCE_DIR}/.clang-format")
 else()
   add_custom_target(
     format
@@ -161,6 +212,12 @@ else()
       ${CMAKE_COMMAND} -E echo
       "clang-format not found; install clang-format to use the format target"
     COMMENT "Skipping formatting because clang-format is unavailable")
+  add_custom_target(
+    format-check
+    COMMAND
+      ${CMAKE_COMMAND} -E echo
+      "clang-format not found; install clang-format to use the format-check target"
+    COMMENT "Skipping format check because clang-format is unavailable")
 endif()
 
 add_subdirectory(api)

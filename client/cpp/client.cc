@@ -74,12 +74,18 @@ arrow::Status GrpcToArrow(const grpc::Status& status, std::string_view action) {
   if (status.ok()) return arrow::Status::OK();
   const std::string msg = std::string(action) + ": " + status.error_message();
   switch (status.error_code()) {
-    case grpc::StatusCode::NOT_FOUND:        return arrow::Status::KeyError(msg);
-    case grpc::StatusCode::ALREADY_EXISTS:   return arrow::Status::AlreadyExists(msg);
-    case grpc::StatusCode::INVALID_ARGUMENT: return arrow::Status::Invalid(msg);
-    case grpc::StatusCode::UNIMPLEMENTED:    return arrow::Status::NotImplemented(msg);
-    case grpc::StatusCode::CANCELLED:        return arrow::Status::Cancelled(msg);
-    default:                                 return arrow::Status::IOError(msg);
+    case grpc::StatusCode::NOT_FOUND:
+      return arrow::Status::KeyError(msg);
+    case grpc::StatusCode::ALREADY_EXISTS:
+      return arrow::Status::AlreadyExists(msg);
+    case grpc::StatusCode::INVALID_ARGUMENT:
+      return arrow::Status::Invalid(msg);
+    case grpc::StatusCode::UNIMPLEMENTED:
+      return arrow::Status::NotImplemented(msg);
+    case grpc::StatusCode::CANCELLED:
+      return arrow::Status::Cancelled(msg);
+    default:
+      return arrow::Status::IOError(msg);
   }
 }
 
@@ -121,8 +127,7 @@ arrow::Status SetPayloadIdFromUuid(std::string_view uuid, payload::manager::v1::
 }
 
 arrow::Status ValidatePayloadIdValue(const payload::manager::v1::PayloadID& id) {
-  if (id.value().size() != 16)
-    return arrow::Status::Invalid("payload_id must contain 16 bytes, got ", id.value().size());
+  if (id.value().size() != 16) return arrow::Status::Invalid("payload_id must contain 16 bytes, got ", id.value().size());
   return arrow::Status::OK();
 }
 
@@ -190,15 +195,14 @@ arrow::Result<MMapRegion> AlignAndMap(int fd, uint64_t offset, uint64_t length, 
 arrow::Result<std::shared_ptr<arrow::Buffer>> MMapReadOnly(int fd, uint64_t offset, uint64_t length) {
   if (length == 0) return std::make_shared<arrow::Buffer>(nullptr, 0);
   ARROW_ASSIGN_OR_RAISE(auto r, AlignAndMap(fd, offset, length, PROT_READ));
-  return std::make_shared<ReadOnlyMMapBuffer>(
-      reinterpret_cast<const uint8_t*>(r.base) + r.delta, static_cast<int64_t>(length), r.base, r.map_size, fd);
+  return std::make_shared<ReadOnlyMMapBuffer>(reinterpret_cast<const uint8_t*>(r.base) + r.delta, static_cast<int64_t>(length), r.base, r.map_size,
+                                              fd);
 }
 
 arrow::Result<std::shared_ptr<arrow::MutableBuffer>> MMapMutable(int fd, uint64_t offset, uint64_t length) {
   if (length == 0) return std::make_shared<arrow::MutableBuffer>(nullptr, 0);
   ARROW_ASSIGN_OR_RAISE(auto r, AlignAndMap(fd, offset, length, PROT_READ | PROT_WRITE));
-  return std::make_shared<MutableMMapBuffer>(
-      reinterpret_cast<uint8_t*>(r.base) + r.delta, static_cast<int64_t>(length), r.base, r.map_size, fd);
+  return std::make_shared<MutableMMapBuffer>(reinterpret_cast<uint8_t*>(r.base) + r.delta, static_cast<int64_t>(length), r.base, r.map_size, fd);
 }
 
 arrow::Result<int> OpenShm(std::string_view shm_name, bool writable) {
@@ -312,7 +316,7 @@ class PendingObjectRegistry {
   }
 
  private:
-  std::mutex                                                                                      mutex_;
+  std::mutex                                                                                     mutex_;
   std::unordered_map<const PayloadClient*, std::unordered_map<std::string, PendingObjectUpload>> registry_;
 };
 
@@ -756,11 +760,10 @@ arrow::Status PayloadClient::ValidateHasLocation(const payload::manager::v1::Pay
 }
 
 arrow::Result<uint64_t> PayloadClient::DescriptorLengthBytes(const payload::manager::v1::PayloadDescriptor& descriptor) {
-  if (descriptor.has_gpu())  return descriptor.gpu().length_bytes();
-  if (descriptor.has_ram())  return descriptor.ram().length_bytes();
+  if (descriptor.has_gpu()) return descriptor.gpu().length_bytes();
+  if (descriptor.has_ram()) return descriptor.ram().length_bytes();
   if (descriptor.has_disk()) return descriptor.disk().length_bytes();
-  return arrow::Status::Invalid("payload descriptor has no location for tier ",
-                                payload::manager::v1::Tier_Name(descriptor.tier()));
+  return arrow::Status::Invalid("payload descriptor has no location for tier ", payload::manager::v1::Tier_Name(descriptor.tier()));
 }
 
 } // namespace payload::manager::client

@@ -40,7 +40,6 @@ using namespace payload;
 
 namespace {
 
-
 #if PAYLOAD_DB_POSTGRES
 void BootstrapPostgresSchema(const std::string& conninfo) {
   pqxx::connection conn(conninfo);

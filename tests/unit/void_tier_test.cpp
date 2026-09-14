@@ -42,7 +42,8 @@ using payload::tiering::TieringPolicy;
 
 class SimpleBackend final : public payload::storage::StorageBackend {
  public:
-  explicit SimpleBackend(payload::manager::v1::Tier tier) : tier_(tier) {}
+  explicit SimpleBackend(payload::manager::v1::Tier tier) : tier_(tier) {
+  }
 
   std::shared_ptr<arrow::Buffer> Allocate(const PayloadID& id, uint64_t size) override {
     auto r = arrow::AllocateBuffer(size);
@@ -52,11 +53,21 @@ class SimpleBackend final : public payload::storage::StorageBackend {
     bufs_[id.value()] = buf;
     return buf;
   }
-  std::shared_ptr<arrow::Buffer> Read(const PayloadID& id) override { return bufs_.at(id.value()); }
-  void Write(const PayloadID& id, const std::shared_ptr<arrow::Buffer>& b, bool) override { bufs_[id.value()] = b; }
-  void Remove(const PayloadID& id) override { bufs_.erase(id.value()); }
-  payload::manager::v1::Tier TierType() const override { return tier_; }
-  bool                       Has(const PayloadID& id) const { return bufs_.count(id.value()) > 0; }
+  std::shared_ptr<arrow::Buffer> Read(const PayloadID& id) override {
+    return bufs_.at(id.value());
+  }
+  void Write(const PayloadID& id, const std::shared_ptr<arrow::Buffer>& b, bool) override {
+    bufs_[id.value()] = b;
+  }
+  void Remove(const PayloadID& id) override {
+    bufs_.erase(id.value());
+  }
+  payload::manager::v1::Tier TierType() const override {
+    return tier_;
+  }
+  bool Has(const PayloadID& id) const {
+    return bufs_.count(id.value()) > 0;
+  }
 
  private:
   payload::manager::v1::Tier                                      tier_;
@@ -68,11 +79,11 @@ class SimpleBackend final : public payload::storage::StorageBackend {
 // ---------------------------------------------------------------------------
 
 struct Fixture {
-  std::shared_ptr<LeaseManager>                           lease_mgr = std::make_shared<LeaseManager>();
-  std::shared_ptr<payload::db::memory::MemoryRepository>  repo      = std::make_shared<payload::db::memory::MemoryRepository>();
-  std::shared_ptr<SimpleBackend>                          ram       = std::make_shared<SimpleBackend>(TIER_RAM);
-  std::shared_ptr<SimpleBackend>                          disk      = std::make_shared<SimpleBackend>(TIER_DISK);
-  std::shared_ptr<PayloadManager>                         manager{[&] {
+  std::shared_ptr<LeaseManager>                          lease_mgr = std::make_shared<LeaseManager>();
+  std::shared_ptr<payload::db::memory::MemoryRepository> repo      = std::make_shared<payload::db::memory::MemoryRepository>();
+  std::shared_ptr<SimpleBackend>                         ram       = std::make_shared<SimpleBackend>(TIER_RAM);
+  std::shared_ptr<SimpleBackend>                         disk      = std::make_shared<SimpleBackend>(TIER_DISK);
+  std::shared_ptr<PayloadManager>                        manager{[&] {
     payload::storage::StorageFactory::TierMap s;
     s[TIER_RAM]  = ram;
     s[TIER_DISK] = disk;
@@ -80,8 +91,7 @@ struct Fixture {
   }()};
 
   // Allocate and commit a payload at the given tier with an optional eviction policy.
-  PayloadID AllocateAndCommit(payload::manager::v1::Tier tier, uint64_t size = 64,
-                               const EvictionPolicy& policy = {}) {
+  PayloadID AllocateAndCommit(payload::manager::v1::Tier tier, uint64_t size = 64, const EvictionPolicy& policy = {}) {
     auto desc = manager->Allocate(size, tier, /*ttl_ms=*/0, /*no_evict=*/false, policy);
     manager->Commit(desc.payload_id());
     return desc.payload_id();
@@ -113,7 +123,7 @@ TEST(VoidTier, DiskPressureNotFiredAtExactLimit) {
 // ---------------------------------------------------------------------------
 
 TEST(VoidTier, ChooseDiskEvictionNoPressureReturnsNull) {
-  auto  cache  = std::make_shared<MetadataCache>();
+  auto            cache = std::make_shared<MetadataCache>();
   PayloadMetadata meta;
   meta.mutable_id()->set_value("p1");
   cache->Put(meta.id(), meta);
@@ -127,7 +137,7 @@ TEST(VoidTier, ChooseDiskEvictionNoPressureReturnsNull) {
 }
 
 TEST(VoidTier, ChooseDiskEvictionUnderPressureReturnsVictim) {
-  auto cache = std::make_shared<MetadataCache>();
+  auto            cache = std::make_shared<MetadataCache>();
   PayloadMetadata meta;
   meta.mutable_id()->set_value("disk-payload");
   cache->Put(meta.id(), meta);
@@ -143,7 +153,7 @@ TEST(VoidTier, ChooseDiskEvictionUnderPressureReturnsVictim) {
 }
 
 TEST(VoidTier, ChooseDiskEvictionPredicateRejectsAllYieldsNull) {
-  auto cache = std::make_shared<MetadataCache>();
+  auto            cache = std::make_shared<MetadataCache>();
   PayloadMetadata meta;
   meta.mutable_id()->set_value("p1");
   cache->Put(meta.id(), meta);
@@ -168,7 +178,7 @@ TEST(VoidTier, GetDiskSpillTargetDefaultsToObject) {
 }
 
 TEST(VoidTier, GetDiskSpillTargetHonorsVoidOverride) {
-  Fixture f;
+  Fixture        f;
   EvictionPolicy policy;
   policy.set_spill_target(TIER_VOID);
   auto id = f.AllocateAndCommit(TIER_DISK, 64, policy);
@@ -201,7 +211,7 @@ TEST(VoidTier, SpillToVoidDeletesRamPayload) {
   // Storage bytes removed.
   EXPECT_FALSE(f.ram->Has(id));
   // Tier accounting zeroed.
-  auto bytes = f.manager->GetTierBytes();
+  auto     bytes     = f.manager->GetTierBytes();
   uint64_t ram_bytes = bytes.count(static_cast<int>(TIER_RAM)) ? bytes.at(static_cast<int>(TIER_RAM)) : 0;
   EXPECT_EQ(ram_bytes, 0u);
   // ResolveSnapshot should throw now that the payload is deleted.
@@ -217,14 +227,14 @@ TEST(VoidTier, SpillToVoidDeletesDiskPayload) {
   f.manager->ExecuteSpill(id, TIER_VOID, /*fsync=*/false);
 
   EXPECT_FALSE(f.disk->Has(id));
-  auto bytes = f.manager->GetTierBytes();
+  auto     bytes      = f.manager->GetTierBytes();
   uint64_t disk_bytes = bytes.count(static_cast<int>(TIER_DISK)) ? bytes.at(static_cast<int>(TIER_DISK)) : 0;
   EXPECT_EQ(disk_bytes, 0u);
   EXPECT_THROW(f.manager->ResolveSnapshot(id), std::exception);
 }
 
 TEST(VoidTier, SpillToVoidWithRequireDurableThrows) {
-  Fixture f;
+  Fixture        f;
   EvictionPolicy policy;
   policy.set_require_durable(true);
   auto id = f.AllocateAndCommit(TIER_RAM, 64, policy);
@@ -238,14 +248,14 @@ TEST(VoidTier, SpillToVoidWithRequireDurableThrows) {
 
 TEST(VoidTier, SpillToVoidDecrementsTierCount) {
   Fixture    f;
-  auto       id    = f.AllocateAndCommit(TIER_RAM);
+  auto       id           = f.AllocateAndCommit(TIER_RAM);
   const auto bytes_before = f.manager->GetTierBytes();
   ASSERT_GT(bytes_before.count(static_cast<int>(TIER_RAM)), 0u);
 
   f.manager->ExecuteSpill(id, TIER_VOID, /*fsync=*/false);
 
-  auto       bytes_after  = f.manager->GetTierBytes();
-  uint64_t   ram_after    = bytes_after.count(static_cast<int>(TIER_RAM)) ? bytes_after.at(static_cast<int>(TIER_RAM)) : 0;
+  auto     bytes_after = f.manager->GetTierBytes();
+  uint64_t ram_after   = bytes_after.count(static_cast<int>(TIER_RAM)) ? bytes_after.at(static_cast<int>(TIER_RAM)) : 0;
   EXPECT_EQ(ram_after, 0u);
 }
 
@@ -256,7 +266,7 @@ TEST(VoidTier, TierBytesCleanAfterVoidThenReallocate) {
   auto    id = f.AllocateAndCommit(TIER_RAM, 128);
   f.manager->ExecuteSpill(id, TIER_VOID, /*fsync=*/false);
 
-  auto id2 = f.AllocateAndCommit(TIER_RAM, 64);
+  auto id2   = f.AllocateAndCommit(TIER_RAM, 64);
   auto bytes = f.manager->GetTierBytes();
   EXPECT_EQ(bytes.at(static_cast<int>(TIER_RAM)), 64u);
 }

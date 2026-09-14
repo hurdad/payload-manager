@@ -1,11 +1,11 @@
-#include "client/cpp/client.h"
-
 #include <grpcpp/create_channel.h>
 #include <grpcpp/security/credentials.h>
 #include <gtest/gtest.h>
 
 #include <cstdint>
 #include <string>
+
+#include "client/cpp/client.h"
 
 namespace {
 

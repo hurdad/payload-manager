@@ -11,7 +11,9 @@ TieringPolicy::TieringPolicy(std::shared_ptr<payload::metadata::MetadataCache>  
                              std::function<bool(const payload::manager::v1::PayloadID&)> is_ram_evictable,
                              std::function<bool(const payload::manager::v1::PayloadID&)> is_gpu_evictable,
                              std::function<bool(const payload::manager::v1::PayloadID&)> is_disk_evictable)
-    : cache_(std::move(cache)), is_ram_evictable_(std::move(is_ram_evictable)), is_gpu_evictable_(std::move(is_gpu_evictable)),
+    : cache_(std::move(cache)),
+      is_ram_evictable_(std::move(is_ram_evictable)),
+      is_gpu_evictable_(std::move(is_gpu_evictable)),
       is_disk_evictable_(std::move(is_disk_evictable)) {
 }
 

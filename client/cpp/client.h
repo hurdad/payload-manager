@@ -50,23 +50,20 @@ class PayloadClient {
   /// so their lifetimes are tied together. Call context->TryCancel() to cancel
   /// the stream, then reader->Finish() to retrieve the final gRPC status.
   struct SubscribeHandle {
-    std::unique_ptr<grpc::ClientContext>                                          context;
+    std::unique_ptr<grpc::ClientContext>                                         context;
     std::unique_ptr<grpc::ClientReader<payload::manager::v1::SubscribeResponse>> reader;
   };
 
   /// Construct a client from a shared gRPC channel.
   /// rpc_timeout of zero (the default) means no per-call deadline is applied.
-  explicit PayloadClient(std::shared_ptr<grpc::Channel> channel,
-                         std::chrono::milliseconds      rpc_timeout = {});
+  explicit PayloadClient(std::shared_ptr<grpc::Channel> channel, std::chrono::milliseconds rpc_timeout = {});
 
   /// Construct a client with a pre-configured Arrow filesystem for object-tier uploads.
   /// Use this overload to supply custom S3/GCS credentials, endpoint overrides (e.g. MinIO),
   /// or any other Arrow-supported filesystem built from FileSystemOptions proto config.
   /// When object_fs is null the default credential chain (env vars / AWS profile) is used.
   /// rpc_timeout of zero (the default) means no per-call deadline is applied.
-  PayloadClient(std::shared_ptr<grpc::Channel>        channel,
-                std::shared_ptr<arrow::fs::FileSystem> object_fs,
-                std::chrono::milliseconds              rpc_timeout = {});
+  PayloadClient(std::shared_ptr<grpc::Channel> channel, std::shared_ptr<arrow::fs::FileSystem> object_fs, std::chrono::milliseconds rpc_timeout = {});
 
   ~PayloadClient();
 
@@ -78,8 +75,7 @@ class PayloadClient {
   /// Allocate a payload and open a writable Arrow buffer for it.
   arrow::Result<WritablePayload> AllocateWritableBuffer(uint64_t                   size_bytes,
                                                         payload::manager::v1::Tier preferred_tier = payload::manager::v1::TIER_RAM,
-                                                        uint64_t                   ttl_ms         = 0,
-                                                        bool                       no_evict       = false) const;
+                                                        uint64_t ttl_ms = 0, bool no_evict = false) const;
 
   /// Convert a UUID string into a protobuf PayloadID.
   static arrow::Result<payload::manager::v1::PayloadID> PayloadIdFromUuid(std::string_view uuid);
@@ -94,10 +90,9 @@ class PayloadClient {
 
   /// Acquire a read lease and open a readable Arrow buffer.
   arrow::Result<ReadablePayload> AcquireReadableBuffer(
-      const payload::manager::v1::PayloadID& payload_id,
-      payload::manager::v1::Tier             min_tier              = payload::manager::v1::TIER_RAM,
-      payload::manager::v1::PromotionPolicy  promotion_policy      = payload::manager::v1::PROMOTION_POLICY_BEST_EFFORT,
-      uint64_t                               min_lease_duration_ms = 0) const;
+      const payload::manager::v1::PayloadID& payload_id, payload::manager::v1::Tier min_tier = payload::manager::v1::TIER_RAM,
+      payload::manager::v1::PromotionPolicy promotion_policy      = payload::manager::v1::PROMOTION_POLICY_BEST_EFFORT,
+      uint64_t                              min_lease_duration_ms = 0) const;
 
   /// Release a previously acquired read lease.
   arrow::Status Release(const payload::manager::v1::LeaseID& lease_id) const;

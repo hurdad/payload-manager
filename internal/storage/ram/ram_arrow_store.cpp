@@ -98,7 +98,7 @@ std::shared_ptr<arrow::Buffer> RamArrowStore::OpenShm(const std::string& name, s
       throw std::runtime_error("shm_open(read) failed for " + name + ": " + strerror(errno));
     }
     if (size_bytes == 0) {
-      struct stat st {};
+      struct stat st{};
       if (fstat(fd, &st) == 0) {
         size_bytes = static_cast<size_t>(st.st_size);
       }
