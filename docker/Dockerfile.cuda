@@ -66,7 +66,19 @@ RUN ln -sf /usr/local/cuda/lib64/stubs/libcuda.so /usr/local/cuda/lib64/stubs/li
         -DPAYLOAD_MANAGER_BUILD_PAYLOADCTL=OFF \
     && cmake --build /workspace/build \
     && LD_LIBRARY_PATH=/usr/local/cuda/lib64/stubs:${LD_LIBRARY_PATH} \
-       ctest --test-dir /workspace/build --output-on-failure -E payload_manager_integration_api
+       ctest --test-dir /workspace/build --output-on-failure -E payload_manager_integration_api -LE gpu
+
+# -LE gpu above: docker build has no GPU (there is no --gpus for build), which is
+# why the libcuda stub is linked at all. GPU-labelled tests would therefore just
+# GTEST_SKIP here, reporting green without executing anything. They are run
+# instead against a real device on a GPU runner:
+#
+#   docker build --target builder -t pm:cuda-builder -f docker/Dockerfile.cuda .
+#   docker run --rm --gpus all pm:cuda-builder \
+#     ctest --test-dir /workspace/build -L gpu --output-on-failure
+#
+# The builder stage keeps the test binaries; the runtime stage below carries
+# only the service binary.
 
 
 FROM nvidia/cuda:13.3.1-runtime-ubuntu26.04 AS runtime

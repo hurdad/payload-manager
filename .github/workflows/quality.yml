@@ -167,3 +167,44 @@ jobs:
           run-clang-tidy -p build -quiet -j"$(nproc)" \
             -extra-arg=-DFMT_CONSTEVAL= \
             "${files[@]}"
+
+  gpu:
+    name: GPU tests
+    # Self-hosted runner with an NVIDIA device. Adjust these labels to match the
+    # runner's registration; the Jetson workflow uses [self-hosted, ARM64].
+    runs-on: [self-hosted, gpu]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Docker build has no GPU access — there is no --gpus for build — so the
+      # image links against the libcuda stub and its in-build ctest skips every
+      # GPU case. Build the builder stage (which keeps the test binaries) and
+      # run the gpu-labelled suites against a real device.
+      - name: Build the CUDA builder stage
+        run: |
+          docker build --target builder \
+            -t pm:cuda-builder \
+            -f docker/Dockerfile.cuda .
+
+      - name: Confirm a device is visible
+        run: |
+          docker run --rm --gpus all pm:cuda-builder nvidia-smi \
+            --query-gpu=name,driver_version,compute_cap --format=csv
+
+      # CUDA 13 requires a Turing-or-newer device (sm_75+) and an r580+ driver;
+      # a mismatch shows up here rather than as a confusing test failure.
+      # --output-junit writes to an absolute path inside the mounted directory,
+      # so the report survives the container being removed.
+      - name: Run GPU tests
+        run: |
+          docker run --rm --gpus all -v "$PWD:/out" pm:cuda-builder \
+            ctest --test-dir /workspace/build -L gpu --output-on-failure \
+                  --output-junit /out/gpu-test-results.xml
+
+      - name: Upload GPU test results to Codecov
+        if: ${{ !cancelled() }}
+        uses: codecov/test-results-action@v1
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: gpu-test-results.xml
