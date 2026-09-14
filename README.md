@@ -31,7 +31,7 @@ The thing to notice first: **payload bytes never travel through the service.**
 Clients ask for a descriptor and a lease, then read or write the memory, file or
 object directly. Everything in the control plane below moves metadata only.
 
-[![Payload Manager architecture](docs/architecture.svg)](docs/architecture.svg)
+[![Payload Manager architecture](docs/architecture.svg?v=2)](docs/architecture.svg)
 
 <sub>Clients talk to the control plane for metadata; bytes move directly between
 the client and the tier. The mermaid source for this diagram, and a fuller
