@@ -741,6 +741,14 @@ jobs:
         working-directory: /tmp/digests
         run: |
           set -euo pipefail
+          # Without this the glob below stays literal and imagetools reports a
+          # malformed reference rather than the real problem, which is that no
+          # build uploaded a digest.
+          count=$(find . -maxdepth 1 -type f | wc -l)
+          if [ "$count" -eq 0 ]; then
+            echo "::error::no digests downloaded for ${IMAGE} — every build job for it must have failed"
+            exit 1
+          fi
           ls -1 | sed 's/^/  digest: /'
           # shellcheck disable=SC2046
           docker buildx imagetools create \
