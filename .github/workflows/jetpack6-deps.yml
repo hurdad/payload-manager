@@ -89,7 +89,7 @@ jobs:
         if: steps.resolve.outputs.exists != 'true'
         run: |
           docker build -f docker/Dockerfile.jetpack6-deps --target dev \
-            --build-arg BUILD_JOBS=2 \
+            --build-arg BUILD_JOBS=6 \
             -t "${{ steps.resolve.outputs.dev }}" .
 
       # Reuses every layer above; only the runtime base and the library copy run.
@@ -97,7 +97,7 @@ jobs:
         if: steps.resolve.outputs.exists != 'true'
         run: |
           docker build -f docker/Dockerfile.jetpack6-deps --target runtime \
-            --build-arg BUILD_JOBS=2 \
+            --build-arg BUILD_JOBS=6 \
             -t "${{ steps.resolve.outputs.runtime }}" .
 
       # latest moves, the content tag does not. docker/Dockerfile.jetpack6 defaults

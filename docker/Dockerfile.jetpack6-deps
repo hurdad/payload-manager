@@ -72,7 +72,10 @@ ARG LIBPQXX_VERSION=7.10.0
 # Arrow bundle it changes nothing about what Arrow links, while making it a
 # cache layer of its own. Arrow is rebuilt far more often than the SDK is.
 ARG AWS_SDK_VERSION=1.11.778
-ARG BUILD_JOBS=4
+# 6 is every core on an Orin Nano / Orin NX. Raising it past the core count only
+# oversubscribes: no more throughput, and peak memory — the binding constraint on
+# a board with 8 GB and nothing but zram behind it — goes up with each extra job.
+ARG BUILD_JOBS=6
 
 # Ubuntu 22.04's cmake is 3.22. Arrow wants newer, so take Kitware's.
 #
@@ -252,6 +255,14 @@ RUN git clone --depth 1 --branch ${AWS_SDK_VERSION} https://github.com/aws/aws-s
 # find_package(CUDAToolkit) and links CUDA::cuda_driver. This project compiles no
 # device code either. sm_87 would have nothing to apply to, and naming it would
 # tie the image to Orin for no gain.
+# Arrow alone is capped below BUILD_JOBS. Its compute kernels are the outlier in
+# this file: scalar_compare, scalar_arithmetic and vector_selection each peak
+# around 2 GB in the compiler, where the other seven dependencies sit nearer
+# 0.5-1 GB. Six of those at once does not fit in 8 GB, and the fallback is zram
+# rather than a disk swap file. Declared here rather than with the other ARGs so
+# changing it re-runs Arrow without invalidating the six steps ahead of it.
+ARG ARROW_BUILD_JOBS=4
+
 RUN git clone --depth 1 --branch ${ARROW_VERSION} https://github.com/apache/arrow.git \
     && cmake -S arrow/cpp -B build-arrow -G Ninja \
         -DCMAKE_BUILD_TYPE=Release \
@@ -277,7 +288,7 @@ RUN git clone --depth 1 --branch ${ARROW_VERSION} https://github.com/apache/arro
         -DARROW_WITH_BZ2=ON \
         -DARROW_WITH_RE2=ON \
         -DARROW_WITH_UTF8PROC=ON \
-    && cmake --build build-arrow -j ${BUILD_JOBS} \
+    && cmake --build build-arrow -j ${ARROW_BUILD_JOBS} \
     && cmake --install build-arrow \
     && ldconfig \
     && rm -rf arrow build-arrow

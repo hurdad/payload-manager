@@ -70,8 +70,17 @@ docker build -f docker/Dockerfile.jetpack6 \
   -t payload-manager:jetpack6 .
 ```
 
-On a board with 8 GB or less, pass `--build-arg BUILD_JOBS=2`. Arrow's heavier
-translation units run past 2 GB each, and a Jetson has only zram to fall back on.
+`BUILD_JOBS` defaults to 6, which is every core on an Orin Nano or Orin NX.
+Raising it past the core count only oversubscribes — no extra throughput, and
+peak memory rises, which is the binding constraint on a board with 8 GB and only
+zram behind it.
+
+Arrow is capped separately by `ARROW_BUILD_JOBS`, default 4. Its compute kernels
+are the outlier: `scalar_compare`, `scalar_arithmetic` and `vector_selection`
+each peak near 2 GB in the compiler, where the other seven dependencies sit
+nearer 0.5–1 GB. On a 4 GB board drop both (`--build-arg BUILD_JOBS=2
+--build-arg ARROW_BUILD_JOBS=1`); on an AGX Orin with 32–64 GB, raise them to the
+core count.
 
 ### Other JetPack releases
 

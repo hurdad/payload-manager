@@ -49,10 +49,10 @@ FROM ${DEPS_DEV_IMAGE} AS builder
 ENV DEBIAN_FRONTEND=noninteractive
 WORKDIR /workspace
 
-# 4 is a desktop or CI default. A 7 GB Orin Nano wants 2 — Arrow is not built
-# here, but the service's own heavier translation units still run well past a
-# gigabyte each, and the board has only zram to fall back on.
-ARG BUILD_JOBS=4
+# 6 is every core on an Orin Nano / Orin NX, and this stage is the cheap half:
+# Arrow is not built here, and the service's own translation units stay near a
+# gigabyte. Past the core count is pure oversubscription.
+ARG BUILD_JOBS=6
 
 COPY . ./src
 

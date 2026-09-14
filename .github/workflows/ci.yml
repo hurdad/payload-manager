@@ -619,7 +619,7 @@ jobs:
             echo "build_args<<ARGS_EOF"
             echo "DEPS_DEV_IMAGE=ghcr.io/${{ github.repository }}-jetpack6-deps-dev:${tag}"
             echo "DEPS_RUNTIME_IMAGE=ghcr.io/${{ github.repository }}-jetpack6-deps-runtime:${tag}"
-            echo "BUILD_JOBS=2"
+            echo "BUILD_JOBS=6"
             echo "ARGS_EOF"
           } >> "$GITHUB_OUTPUT"
 
