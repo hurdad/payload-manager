@@ -29,6 +29,19 @@ option(PAYLOAD_MANAGER_ENABLE_COVERAGE
        "Instrument the build for gcov/llvm-cov coverage reporting"
        OFF)
 
+# Off by default so a plain `cmake ..` needs no jemalloc installed; the service
+# images turn it on. No header is included and no jemalloc API is called — the
+# whole mechanism is symbol interposition at link time, which is also why this
+# only applies to the service binary and not to the library targets.
+option(PAYLOAD_MANAGER_ENABLE_JEMALLOC
+       "Link the payload-manager binary against jemalloc"
+       OFF)
+
+if(PAYLOAD_MANAGER_ENABLE_JEMALLOC)
+  find_library(PAYLOAD_MANAGER_JEMALLOC_LIBRARY NAMES jemalloc REQUIRED)
+  message(STATUS "jemalloc: ${PAYLOAD_MANAGER_JEMALLOC_LIBRARY}")
+endif()
+
 if(PAYLOAD_MANAGER_ENABLE_COVERAGE)
   if(NOT CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
     message(FATAL_ERROR "PAYLOAD_MANAGER_ENABLE_COVERAGE requires GCC or Clang")

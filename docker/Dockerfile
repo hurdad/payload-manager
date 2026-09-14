@@ -32,6 +32,7 @@ RUN apt-get update \
         libyaml-cpp-dev \
         libpqxx-dev \
         libspdlog-dev \
+        libjemalloc-dev \
         libcurl4-openssl-dev \
         protobuf-compiler-grpc \
         libssl-dev \
@@ -51,6 +52,7 @@ RUN apt-get update \
 COPY . ./src
 
 RUN cmake -S ./src -B /workspace/build -G Ninja -DCMAKE_BUILD_TYPE=Release \
+    -DPAYLOAD_MANAGER_ENABLE_JEMALLOC=ON \
     -DPAYLOAD_MANAGER_ENABLE_OTEL=OFF \
     -DBUILD_TESTING=ON \
     -DPAYLOAD_MANAGER_BUILD_SERVICE=ON \
@@ -58,6 +60,8 @@ RUN cmake -S ./src -B /workspace/build -G Ninja -DCMAKE_BUILD_TYPE=Release \
     -DPAYLOAD_MANAGER_BUILD_EXAMPLES=OFF \
     -DPAYLOAD_MANAGER_BUILD_PAYLOADCTL=OFF \
     && cmake --build /workspace/build \
+    && ldd /workspace/build/bin/payload-manager | grep -q libjemalloc \
+    && echo "jemalloc: linked" \
     && ctest --test-dir /workspace/build --output-on-failure -E payload_manager_integration_api
 
 
@@ -91,6 +95,7 @@ RUN apt-get update \
         libyaml-cpp0.8 \
         libpq5 \
         libspdlog1.15 \
+        libjemalloc2 \
         libcurl4t64 \
         libssl3t64 \
         zlib1g \
