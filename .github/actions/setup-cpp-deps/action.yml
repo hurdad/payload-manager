@@ -7,6 +7,11 @@ description: >-
   every C++ job, and the Arrow repository step in particular is easy to get
   subtly wrong in one copy and not the others.
 
+  Note curl alongside libcurl4-openssl-dev: the -dev package carries the
+  library the client links against, not the binary. codecov-action shells out
+  to the binary and refuses to run without it, which is what made the coverage
+  upload fail on a container that had only the former.
+
 inputs:
   arrow-version:
     description: libarrow-dev version to pin, matching what the images build against.
@@ -42,6 +47,7 @@ runs:
           build-essential cmake ninja-build pkg-config git ca-certificates \
           protobuf-compiler protobuf-compiler-grpc libprotobuf-dev libgrpc++-dev libgrpc-dev \
           libyaml-cpp-dev libpqxx-dev libpq-dev libspdlog-dev libcurl4-openssl-dev \
+          curl \
           libssl-dev zlib1g-dev liblz4-dev libzstd-dev libsnappy-dev libbrotli-dev libbz2-dev \
           libre2-dev libutf8proc-dev libxml2-dev libgtest-dev \
           opentelemetry-cpp-dev \
