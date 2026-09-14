@@ -24,6 +24,23 @@ message ObservabilityConfig {
   string otlp_endpoint = 4;
   OtlpTransport transport = 5;
 
+  // Whether to talk to the OTLP gRPC collector without TLS.
+  //
+  // Defaults to true, which is what the exporter has always done — it was
+  // hardcoded and unreachable from configuration, so a collector serving TLS
+  // could not be used at all. Collectors deployed as a sidecar or inside the
+  // same network commonly serve plaintext, and pointing a TLS-by-default
+  // exporter at one fails at startup with a "wrong version number" handshake
+  // error that does not obviously name the cause.
+  //
+  // Set to false when the collector serves TLS. Ignored for the HTTP transport,
+  // which takes its scheme from otlp_endpoint.
+  //
+  // Declared optional so absence is distinguishable from false: a bare proto3
+  // bool defaults to false, which would silently switch every existing
+  // deployment from plaintext to TLS on upgrade.
+  optional bool otlp_insecure = 9;
+
   // Tracing configuration
   message TracingConfig {
 

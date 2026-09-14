@@ -33,14 +33,53 @@ static void HandleSigsegv(int /*sig*/) {
   _exit(139);
 }
 
+namespace {
+
+void PrintUsage(std::ostream& out) {
+  out << "Usage:\n"
+      << "  payload-manager <config.yaml>\n"
+      << "  payload-manager --config <config.yaml>\n"
+      << "  payload-manager --config=<config.yaml>\n"
+      << "  payload-manager --help\n";
+}
+
+} // namespace
+
 int main(int argc, char** argv) {
+  // Accept all three spellings. --config=<path> used to fall through to the
+  // usage message, which is the form most other services take and the one an
+  // operator reaches for first.
   std::string config_path;
-  if (argc == 2) {
-    config_path = argv[1];
-  } else if (argc == 3 && std::string(argv[1]) == "--config") {
-    config_path = argv[2];
-  } else {
-    std::cerr << "Usage: payload-manager <config.yaml> OR payload-manager --config <config.yaml>" << std::endl;
+
+  for (int i = 1; i < argc; ++i) {
+    const std::string arg = argv[i];
+
+    if (arg == "--help" || arg == "-h") {
+      PrintUsage(std::cout);
+      return 0;
+    }
+
+    if (arg.rfind("--config=", 0) == 0) {
+      config_path = arg.substr(std::string("--config=").size());
+    } else if (arg == "--config") {
+      if (i + 1 >= argc) {
+        std::cerr << "payload-manager: --config requires a path" << std::endl;
+        PrintUsage(std::cerr);
+        return 1;
+      }
+      config_path = argv[++i];
+    } else if (!arg.empty() && arg[0] == '-') {
+      std::cerr << "payload-manager: unrecognised option '" << arg << "'" << std::endl;
+      PrintUsage(std::cerr);
+      return 1;
+    } else {
+      config_path = arg; // bare positional
+    }
+  }
+
+  if (config_path.empty()) {
+    std::cerr << "payload-manager: no config file given" << std::endl;
+    PrintUsage(std::cerr);
     return 1;
   }
 

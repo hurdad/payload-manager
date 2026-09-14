@@ -112,6 +112,12 @@ bool InitializeTracing(const payload::runtime::config::RuntimeConfig& config) {
   otlp_config.transport =
       observability.transport() == payload::runtime::config::OTLP_TRANSPORT_HTTP ? OtlpTransport::kHttpProtobuf : OtlpTransport::kGrpc;
 
+  // Absent means keep the long-standing plaintext default; present means the
+  // operator has said what they want.
+  if (observability.has_otlp_insecure()) {
+    otlp_config.insecure = observability.otlp_insecure();
+  }
+
   auto endpoint = ResolveEndpoint(otlp_config);
 
   std::unique_ptr<sdktrace::SpanExporter> exporter;

@@ -1,10 +1,12 @@
 #include "factory.hpp"
 
 #include <chrono>
+#include <functional>
 #include <limits>
 #include <memory>
 #include <stdexcept>
 #include <string>
+#include <thread>
 #include <unordered_set>
 #include <vector>
 
@@ -139,11 +141,55 @@ void BootstrapPostgresSchema(const std::string& conninfo) {
 }
 #endif
 
+#if PAYLOAD_DB_POSTGRES
+/*
+  Retry the first connection with bounded backoff.
+
+  Postgres reports itself started before its listener accepts connections, so on
+  a cold boot this process would get "connection refused" and exit 2. Compose
+  restarts it, but the gRPC clients that already resolved the name cache the
+  negative DNS result and loop on "Domain name not found" until they are
+  restarted too — a stack-wide failure from a few seconds of startup skew.
+
+  Retrying here fixes it regardless of whether the orchestrator has a
+  healthcheck configured. The ceiling is deliberately finite: a genuinely
+  misconfigured connection string should still fail the process rather than hang
+  forever pretending to start.
+*/
+void ConnectWithBackoff(const std::function<void()>& attempt) {
+  constexpr int  kMaxAttempts  = 10;
+  constexpr auto kInitialDelay = std::chrono::milliseconds(250);
+  constexpr auto kMaxDelay     = std::chrono::seconds(5);
+
+  auto delay = kInitialDelay;
+  for (int i = 1;; ++i) {
+    try {
+      attempt();
+      if (i > 1) {
+        PAYLOAD_LOG_INFO("connected to postgres", {payload::observability::IntField("attempts", i)});
+      }
+      return;
+    } catch (const std::exception& e) {
+      if (i >= kMaxAttempts) {
+        throw std::runtime_error("could not reach postgres after " + std::to_string(kMaxAttempts) + " attempts: " + e.what());
+      }
+      PAYLOAD_LOG_WARN("postgres not reachable yet; retrying",
+                       {payload::observability::IntField("attempt", i), payload::observability::IntField("of", kMaxAttempts),
+                        payload::observability::IntField("retry_in_ms", static_cast<int64_t>(delay.count())),
+                        payload::observability::StringField("error", e.what())});
+      std::this_thread::sleep_for(delay);
+      delay = std::min(std::chrono::duration_cast<std::chrono::milliseconds>(delay * 2),
+                       std::chrono::duration_cast<std::chrono::milliseconds>(kMaxDelay));
+    }
+  }
+}
+#endif
+
 std::shared_ptr<db::Repository> BuildRepository(const payload::runtime::config::RuntimeConfig& config) {
   const auto& database = config.database();
   if (database.has_postgres()) {
 #if PAYLOAD_DB_POSTGRES
-    BootstrapPostgresSchema(database.postgres().connection_uri());
+    ConnectWithBackoff([&] { BootstrapPostgresSchema(database.postgres().connection_uri()); });
 
     // Single-instance guard: acquire a PostgreSQL session-level advisory lock.
     // pg_try_advisory_lock returns true only if this session obtained the lock.
