@@ -464,10 +464,18 @@ PayloadDescriptor PayloadManager::Allocate(uint64_t size_bytes, Tier preferred, 
   record.spill_target   = static_cast<int>(spill_tier);
 
   // no_evict overrides TTL: a no_evict payload never auto-expires.
-  const auto now_ms    = payload::util::ToUnixMillis(payload::util::Now());
+  //
+  // ttl_ms == 0 means "never expires" on the wire, and it is also the default
+  // of the client's AllocateWritableBuffer parameter — so a producer that never
+  // considers expiry silently creates permanent payloads. When the operator has
+  // configured a default, apply it rather than letting those accumulate until
+  // the tier exhausts. An explicit ttl_ms always wins.
+  const auto     now_ms        = payload::util::ToUnixMillis(payload::util::Now());
+  const uint64_t effective_ttl = (ttl_ms > 0) ? ttl_ms : default_payload_ttl_ms_;
+
   record.created_at_ms = now_ms;
-  if (!never_evict && ttl_ms > 0) {
-    record.expires_at_ms = now_ms + ttl_ms;
+  if (!never_evict && effective_ttl > 0) {
+    record.expires_at_ms = now_ms + effective_ttl;
   }
 
   try {

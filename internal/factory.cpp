@@ -319,6 +319,11 @@ Application Build(const payload::runtime::config::RuntimeConfig& config) {
   // Hand the resolved limits to the manager so Allocate can refuse requests a
   // tier cannot take, rather than letting the producer discover it as SIGBUS.
   payload_manager->SetPressureState(pressure_state);
+  payload_manager->SetDefaultPayloadTtlMs(config.default_payload_ttl_ms());
+  if (config.default_payload_ttl_ms() > 0) {
+    PAYLOAD_LOG_INFO("applying a default TTL to payloads allocated without one",
+                     {payload::observability::IntField("default_payload_ttl_ms", static_cast<int64_t>(config.default_payload_ttl_ms()))});
+  }
 
   PAYLOAD_LOG_INFO("resolved tier limits",
                    {payload::observability::IntField("ram_capacity_bytes", static_cast<int64_t>(pressure_state->ram_limit)),

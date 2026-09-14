@@ -181,10 +181,19 @@ class PayloadManager {
   // admission control is applied and behaviour matches the original code.
   std::shared_ptr<payload::tiering::PressureState> pressure_state_;
 
+  // Applied when a caller allocates without stating a TTL. 0 keeps the original
+  // behaviour of "no TTL at all".
+  uint64_t default_payload_ttl_ms_{0};
+
  public:
   // Wired by the factory once the configured tier limits are known.
   void SetPressureState(std::shared_ptr<payload::tiering::PressureState> state) {
     pressure_state_ = std::move(state);
+  }
+
+  // Wired by the factory from RuntimeConfig.default_payload_ttl_ms.
+  void SetDefaultPayloadTtlMs(uint64_t ttl_ms) {
+    default_payload_ttl_ms_ = ttl_ms;
   }
 };
 

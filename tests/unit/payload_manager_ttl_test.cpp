@@ -256,3 +256,67 @@ TEST(PayloadManagerTTL, TtlRoundTripsThroughRepository) {
   ASSERT_TRUE(loaded.has_value());
   EXPECT_EQ(loaded->expires_at_ms, 123456789ULL);
 }
+
+// ---------------------------------------------------------------------------
+// Default TTL for allocations that do not state one.
+//
+// ttl_ms == 0 means "never expires" on the wire, and it is also the default of
+// the client's AllocateWritableBuffer parameter — so a producer that never
+// thinks about expiry silently creates permanent payloads. Downstream, two of
+// three producers took that default and accumulated blobs until the tmpfs
+// exhausted and the next writer took SIGBUS. RuntimeConfig.default_payload_ttl_ms
+// bounds those without needing every producer fixed first.
+// ---------------------------------------------------------------------------
+
+TEST(PayloadManagerDefaultTtl, AppliesToAllocationsWithNoTtl) {
+  Fixture f;
+  f.manager.SetDefaultPayloadTtlMs(60'000);
+
+  const auto desc = f.manager.Allocate(64, TIER_RAM); // no ttl argument
+
+  auto       tx     = f.repo->Begin();
+  const auto record = f.repo->GetPayload(*tx, payload::util::FromProto(desc.payload_id()));
+  ASSERT_TRUE(record.has_value());
+  EXPECT_GT(record->expires_at_ms, 0u) << "a payload allocated without a TTL must inherit the configured default";
+}
+
+TEST(PayloadManagerDefaultTtl, ExplicitTtlWins) {
+  Fixture f;
+  f.manager.SetDefaultPayloadTtlMs(600'000); // 10 minutes
+
+  const auto explicit_desc = f.manager.Allocate(64, TIER_RAM, /*ttl_ms=*/5'000);
+  const auto defaulted     = f.manager.Allocate(64, TIER_RAM); // takes the default
+
+  auto       tx            = f.repo->Begin();
+  const auto explicit_rec  = f.repo->GetPayload(*tx, payload::util::FromProto(explicit_desc.payload_id()));
+  const auto defaulted_rec = f.repo->GetPayload(*tx, payload::util::FromProto(defaulted.payload_id()));
+  ASSERT_TRUE(explicit_rec.has_value());
+  ASSERT_TRUE(defaulted_rec.has_value());
+
+  EXPECT_GT(explicit_rec->expires_at_ms, 0u);
+  EXPECT_LT(explicit_rec->expires_at_ms, defaulted_rec->expires_at_ms)
+      << "a 5s explicit TTL must expire well before the 10min default; the default must not override it";
+}
+
+TEST(PayloadManagerDefaultTtl, UnsetDefaultLeavesPayloadsPermanent) {
+  Fixture f; // no SetDefaultPayloadTtlMs call
+
+  const auto desc = f.manager.Allocate(64, TIER_RAM);
+
+  auto       tx     = f.repo->Begin();
+  const auto record = f.repo->GetPayload(*tx, payload::util::FromProto(desc.payload_id()));
+  ASSERT_TRUE(record.has_value());
+  EXPECT_EQ(record->expires_at_ms, 0u) << "without a configured default the original behaviour must be preserved";
+}
+
+TEST(PayloadManagerDefaultTtl, NoEvictStillSuppressesTheDefault) {
+  Fixture f;
+  f.manager.SetDefaultPayloadTtlMs(60'000);
+
+  const auto desc = f.manager.Allocate(64, TIER_RAM, /*ttl_ms=*/0, /*no_evict=*/true);
+
+  auto       tx     = f.repo->Begin();
+  const auto record = f.repo->GetPayload(*tx, payload::util::FromProto(desc.payload_id()));
+  ASSERT_TRUE(record.has_value());
+  EXPECT_EQ(record->expires_at_ms, 0u) << "no_evict payloads are meant to be permanent; the default must not expire them";
+}

@@ -130,6 +130,22 @@ message StreamConfig {
 // ------------------------------------------------------------------
 
 message RuntimeConfig {
+  // Applied when a client allocates without stating a TTL.
+  //
+  // ttl_ms = 0 on the wire means "never expires", and it is also the default
+  // value of the client's AllocateWritableBuffer parameter — so a producer that
+  // simply does not think about expiry creates payloads that live forever.
+  // Downstream, two of three producers took that default and accumulated blobs
+  // until the tmpfs exhausted and the *next writer* took SIGBUS.
+  //
+  // Setting this gives such payloads a bounded lifetime without requiring every
+  // producer to be fixed first. It never overrides an explicit ttl_ms, and it
+  // never applies to no_evict / EVICTION_PRIORITY_NEVER payloads, which are
+  // meant to be permanent.
+  //
+  // 0 (the default) preserves the original behaviour: no TTL is imposed.
+  uint64 default_payload_ttl_ms = 9;
+
   ServerConfig server = 1;
   DatabaseConfig database = 2;
   StorageConfig storage = 3;
