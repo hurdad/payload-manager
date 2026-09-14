@@ -32,17 +32,23 @@ Browser / HTTP clients
 gRPC-Gateway  (REST → gRPC, embedded Svelte UI, OpenAPI docs)
    |
    v
-gRPC Servers (admin/data/catalog/stream)
+gRPC Servers (admin / catalog / data / ring / stream)
    |
-   v
-Service Layer (lifecycle, placement, leasing, metadata, streams)
-   |
-   v
-Repository API (transaction + persistence abstraction)
-   |
-   +--> Memory
-   +--> PostgreSQL
-
+   +---------------------------------+
+   |                                 |
+   v                                 v
+Service Layer                     Ring Service
+(lifecycle, placement,            (acquire / commit slots,
+ leasing, metadata, streams)       lease / release for readers)
+   |                                 |
+   v                                 v
+Repository (internal/db)          Ring tier (TIER_RAM_RING)
+(transaction + persistence)       N pre-allocated /dev/shm slots
+   |                              per ring, recycled in place
+   +--> Memory                    |
+   +--> PostgreSQL                +--> addressed by position:
+   |                                   (ring_id, slot_idx, generation)
+   v                                   — no PayloadID, no catalog row
 Placement + Tiering + Spill
    |
    +--> GPU (CUDA IPC)
@@ -51,6 +57,13 @@ Placement + Tiering + Spill
    +--> Object storage
    +--> Void (delete on eviction)
 ```
+
+The ring tier sits beside the catalog rather than under it. Every other tier
+holds UUID-addressed payloads that the repository tracks through allocate,
+commit, spill and delete. Ring slots are pre-allocated at startup from static
+config and rotate in place, so they carry no `PayloadID` and no database row —
+producers and consumers refer to them by position, and the generation counter is
+what tells a slow reader its slot was recycled underneath it.
 
 For detailed documentation, see:
 
@@ -255,19 +268,39 @@ The UI is then available at `http://localhost:8080/`.
 ### Regenerate code
 
 ```bash
-# Regenerate Go stubs + OpenAPI from proto definitions
+# Go stubs, OpenAPI (per-service + merged), and Python stubs
 make generate
+
+# Or one half at a time
+scripts/codegen.sh go
+scripts/codegen.sh python
 ```
 
-Requires `buf`, `protoc-gen-go`, `protoc-gen-go-grpc`, `protoc-gen-grpc-gateway`, and `protoc-gen-openapiv2` on `PATH`.
+`scripts/codegen.sh` installs the tools it needs at pinned versions, and takes
+the Go toolchain from `gateway/go.mod` rather than whatever is on `PATH` —
+generated output is committed and CI fails when regeneration disagrees with the
+tree, and the toolchain that compiles `protoc-gen-go-grpc` changes what it
+emits. Building the same plugin version under a different Go rewrote comment
+formatting across 154 lines once already.
+
+Only `go` and `python3` need to be installed. The Python half additionally
+requires the pinned `grpcio-tools` and a configured CMake build, and says so if
+either is missing.
 
 ## Repository layout
 
 - `cmd/`: executable entrypoints (`payload-manager`, `payloadctl`).
 - `internal/`: core runtime, services, storage tiers, DB adapters, lease/tiering/spill logic.
-- `api/`: protobuf definitions and generated interface artifacts.
+- `proto/`: protobuf definitions — the single root for the public API, node-local
+  runtime config, and the vendored googleapis protos.
 - `gateway/`: gRPC-Gateway binary and Svelte UI.
+- `ui/`: Svelte sources and the Playwright end-to-end suite, embedded into the gateway image.
 - `client/`: C++ and Python client surfaces.
+- `config/`: sample runtime configuration files.
+- `docker/`: Dockerfiles and Compose stacks.
+- `observability/`: Grafana, Prometheus, Tempo and Alloy configuration for the local stack.
+- `scripts/`: code generation and tooling entry points.
+- `cmake/`: shared CMake modules.
 - `tests/`: unit and integration coverage.
 - `docs/`: architecture, design, and testing documentation.
 

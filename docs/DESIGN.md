@@ -63,6 +63,13 @@ When pressure rises:
 
 Pressure is monitored independently for GPU, RAM, and disk. Each tier has a configurable capacity limit; when occupancy exceeds the limit, the tiering manager picks a least-recently-used victim from that tier and enqueues a spill task.
 
+`TIER_RAM_RING` is absent from that chain on purpose. Ring slots are pre-allocated
+at startup and recycled in place, so there is nothing to spill and nothing to evict:
+capacity is fixed at `n_slots × slot_size_bytes` and back-pressure is expressed by
+`AcquireRingSlot` failing rather than by moving bytes to a slower tier. A producer
+that finds every slot still leased drops the capture, per the ring's exhaustion
+policy. See [Architecture](./ARCHITECTURE.md#ring-tier-tier_ram_ring).
+
 ### TIER_VOID: discard on eviction
 
 `TIER_VOID` is the terminal tier for ephemeral payloads. When a payload spills to void it is deleted — no bytes are written anywhere.
@@ -80,11 +87,18 @@ For payloads without an explicit `spill_target`:
 
 ## 5. Repository and transaction design
 
-The repository API centralizes consistency boundaries:
+The repository (`internal/db`) centralizes consistency boundaries:
 
-- Services depend on repository contracts, not concrete DB engines.
+- Services depend on the contracts in `internal/db/api`, not on concrete engines.
+- Two implementations satisfy them: `internal/db/memory` and `internal/db/postgres`.
+  The in-memory one is the default when no `database` backend is configured, and is
+  a full implementation rather than a test double — it simply does not survive a
+  restart.
 - Transactions wrap multi-step state updates (payload, metadata, lineage, offsets).
-- Backend parity tests ensure semantics match across implementations.
+- `tests/integration/repository_parity_test.cpp` runs both implementations through
+  the same assertions, which is what keeps their semantics honest. The Postgres
+  schema both the service and that suite create lives in one place,
+  `db::postgres::BootstrapSchema`.
 
 ## 6. Metadata and lineage
 

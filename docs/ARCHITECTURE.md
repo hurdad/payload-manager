@@ -33,12 +33,16 @@ Core domain services live in `internal/service`:
 - `catalog_service`: metadata/catalog retrieval plus tiering advisories (`Prefetch`, `Pin`, `Unpin`).
 - `admin_service`: administrative and operational actions.
 - `stream_service`: stream-oriented APIs and consumer offset behavior.
+- `ring_service`: `TIER_RAM_RING` slot reservation and read leases (`AcquireRingSlot`,
+  `CommitRingSlot`, `MapRing`, `LeaseRingSlot`, `ReleaseRingSlot`).
 
 These services operate on domain abstractions and call into core managers and repository interfaces.
+`ring_service` is the exception: it talks to `internal/ring` and never to the repository, because ring
+slots carry no catalog state.
 
 ### Core orchestration layer
 
-Key responsibilities live in `internal/core`, `internal/lease`, `internal/tiering`, `internal/spill`, `internal/expiration`, and `internal/metadata`:
+Key responsibilities live in `internal/core`, `internal/lease`, `internal/tiering`, `internal/spill`, and `internal/metadata`:
 
 - Payload state transitions and commit semantics.
 - Placement and re-placement decisions.
@@ -81,6 +85,32 @@ description of the schema would only be something to keep in step.
 A common interface allows placement/tiering logic to stay backend-agnostic.
 
 `TIER_VOID` is a sentinel value — not a storage backend. When a payload is spilled to void the tiering layer deletes it rather than moving bytes. See [Design Details](./DESIGN.md#tiervoid-discard-on-eviction).
+
+### Ring tier (`TIER_RAM_RING`)
+
+`internal/ring` is deliberately not one of the stores above. The tiers listed there hold
+UUID-addressed payloads that the repository tracks through allocate, commit, spill and delete.
+A ring holds N POSIX shm slots, pre-allocated at startup from static config
+(`RuntimeConfig.storage.ring`) and rotated in place, with no `PayloadID` and no catalog row.
+
+Slots are position-addressed by `(ring_id, slot_idx, generation)`:
+
+- A producer calls `AcquireRingSlot`, writes into the slot's `/dev/shm` region through its own
+  mmap, and calls `CommitRingSlot`. PM never copies the bytes.
+- A consumer calls `MapRing` once at startup to learn every slot's shm name, then per capture
+  takes a read lease on the `(slot_idx, generation)` carried in the upstream event, reads through
+  its cached pointer, and releases.
+- The generation counter is what makes recycling safe: a consumer that falls behind gets
+  `FAILED_PRECONDITION` at lease time rather than reading bytes the producer has overwritten.
+
+Neither reservation clears on its own — an uncommitted slot stays `WRITING` and a held lease keeps
+the slot's refcount above zero — so an exhausted ring reclaims both lazily, taking back slots held
+past `slot_write_timeout_ms` and leases held past `lease_ttl_ms`. Both are crash safety nets sized
+well above the honest worst case; reclaiming from a process that is merely slow lets a producer
+overwrite bytes a consumer is still reading.
+
+Per-ring slot accounting is reported by the admin `Stats` RPC (`StatsResponse.rings`) and by the
+`payload.ring.*` gauges. See [Metrics](./METRICS.md).
 
 ## 3. Cross-cutting concerns
 
