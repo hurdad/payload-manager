@@ -59,7 +59,7 @@
         "parameters": [
           {
             "name": "tierFilter",
-            "description": "Optional tier filter; TIER_UNSPECIFIED means return all tiers.\n\n - TIER_UNSPECIFIED: Not set; treated as an error in most contexts.\n - TIER_GPU: GPU device memory (fastest, smallest, most volatile).\n - TIER_RAM: Host DRAM / shared-memory segment.\n - TIER_DISK: Local NVMe/SSD/HDD (durable, larger, slower than RAM).\n - TIER_OBJECT: Remote object storage (S3/GCS/Azure; durable, largest).",
+            "description": "Optional tier filter; TIER_UNSPECIFIED means return all tiers.\n\n - TIER_UNSPECIFIED: Not set; treated as an error in most contexts.\n - TIER_GPU: GPU device memory (fastest, smallest, most volatile).\n - TIER_RAM: Host DRAM / shared-memory segment.\n - TIER_DISK: Local NVMe/SSD/HDD (durable, larger, slower than RAM).\n - TIER_OBJECT: Remote object storage (S3/GCS/Azure; durable, largest).\n - TIER_VOID: Discard on eviction: payload is deleted rather than moved.\n - TIER_RAM_RING: Pre-allocated /dev/shm ring of N fixed slots, rotated across",
             "in": "query",
             "required": false,
             "type": "string",
@@ -68,7 +68,9 @@
               "TIER_GPU",
               "TIER_RAM",
               "TIER_DISK",
-              "TIER_OBJECT"
+              "TIER_OBJECT",
+              "TIER_VOID",
+              "TIER_RAM_RING"
             ],
             "default": "TIER_UNSPECIFIED"
           },
@@ -273,6 +275,47 @@
             "required": true,
             "schema": {
               "$ref": "#/definitions/PayloadCatalogServiceCommitPayloadBody"
+            }
+          }
+        ],
+        "tags": [
+          "PayloadCatalogService"
+        ]
+      }
+    },
+    "/v1/payloads/{id.value}/import": {
+      "post": {
+        "summary": "Register an externally-uploaded object-tier payload as DURABLE.",
+        "description": "The client:\n1. Calls AllocatePayload with preferred_tier=TIER_OBJECT and receives\nobject_upload_path in the response.\n2. Uploads payload bytes directly to object_upload_path via Arrow\nfilesystem (no bytes transit gRPC).\n3. Calls ImportPayload to hand ownership to the manager.\n\nThe manager writes the sidecar metadata and transitions the payload\nto PAYLOAD_STATE_DURABLE.",
+        "operationId": "PayloadCatalogService_ImportPayload",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1ImportPayloadResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id.value",
+            "in": "path",
+            "required": true,
+            "type": "string",
+            "format": "byte"
+          },
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/PayloadCatalogServiceImportPayloadBody"
             }
           }
         ],
@@ -660,6 +703,198 @@
         ],
         "tags": [
           "PayloadDataService"
+        ]
+      }
+    },
+    "/v1/ring-leases/{leaseId}": {
+      "delete": {
+        "summary": "Drop the lease, decrement the slot's refcount. When the refcount\nreaches zero the slot is eligible for the producer's next\nAcquireRingSlot. Idempotent: releasing an already-released lease\nis a no-op.",
+        "operationId": "PayloadRingService_ReleaseRingSlot",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "type": "object",
+              "properties": {}
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "leaseId",
+            "in": "path",
+            "required": true,
+            "type": "string",
+            "format": "byte"
+          }
+        ],
+        "tags": [
+          "PayloadRingService"
+        ]
+      }
+    },
+    "/v1/rings/{ringId}/acquire": {
+      "post": {
+        "summary": "Reserve the next available slot in `ring_id`. PM picks the slot\n(round-robin over slots whose refcount has hit zero since they\nwere last committed); the returned (slot_idx, generation) is the\ntriple the producer will write into the downstream event's\nRingSlotRef.",
+        "description": "Fails with RESOURCE_EXHAUSTED when no slot is available (every\nslot is currently leased by at least one consumer) and the ring's\nexhaustion_policy is DROP_NEW. With BLOCK the call waits.",
+        "operationId": "PayloadRingService_AcquireRingSlot",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1AcquireRingSlotResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "ringId",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/PayloadRingServiceAcquireRingSlotBody"
+            }
+          }
+        ],
+        "tags": [
+          "PayloadRingService"
+        ]
+      }
+    },
+    "/v1/rings/{ringId}/commit": {
+      "post": {
+        "summary": "Publish the just-written slot. PM marks the slot ready-for-lease\nso consumers' LeaseRingSlot calls succeed. The producer publishes\nthe downstream domain event (e.g. RadioCaptureEvent) on NATS\ncarrying the RingSlotRef in parallel; consumers see the event\nand call LeaseRingSlot to take the read lease.",
+        "description": "Fails with FAILED_PRECONDITION if (slot_idx, generation) doesn't\nmatch the producer's last AcquireRingSlot \u2014 guards against\ndouble-commit or commits on stale handles.",
+        "operationId": "PayloadRingService_CommitRingSlot",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1CommitRingSlotResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "ringId",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/PayloadRingServiceCommitRingSlotBody"
+            }
+          }
+        ],
+        "tags": [
+          "PayloadRingService"
+        ]
+      }
+    },
+    "/v1/rings/{ringId}/map": {
+      "get": {
+        "summary": "One-time discovery on consumer startup. Returns the ring's slot\ncount + per-slot shm names so the consumer can mmap (and, for GPU\nconsumers, cudaHostRegister + cudaHostGetDevicePointer) every\nslot ahead of the hot path. The returned shm names are stable\nfor the lifetime of the PM process; clients should not poll\nMapRing per-capture.",
+        "description": "Fails with NOT_FOUND if the ring isn't configured in PM's static\nconfig.",
+        "operationId": "PayloadRingService_MapRing",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1MapRingResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "ringId",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          }
+        ],
+        "tags": [
+          "PayloadRingService"
+        ]
+      }
+    },
+    "/v1/rings/{ringId}/slots/{slotIdx}/lease": {
+      "post": {
+        "summary": "Bump the slot's refcount and grant a read lease. Lightweight \u2014\nno bytes cross the wire, only the (ring_id, slot_idx, generation)\ntriple and the returned opaque lease_id.",
+        "description": "Fails with FAILED_PRECONDITION if the generation no longer matches\nthe slot's current generation (consumer was too slow, producer\nalready recycled the slot). The consumer should skip this capture\nand wait for the next event.",
+        "operationId": "PayloadRingService_LeaseRingSlot",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1LeaseRingSlotResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "ringId",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "slotIdx",
+            "in": "path",
+            "required": true,
+            "type": "integer",
+            "format": "int64"
+          },
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/PayloadRingServiceLeaseRingSlotBody"
+            }
+          }
+        ],
+        "tags": [
+          "PayloadRingService"
         ]
       }
     },
@@ -1096,6 +1331,47 @@
         }
       }
     },
+    "v1RingStats": {
+      "type": "object",
+      "properties": {
+        "ringId": {
+          "type": "string"
+        },
+        "slotsTotal": {
+          "type": "integer",
+          "format": "int64",
+          "description": "Configured slot count, and how many of those AcquireRingSlot could\ntake right now. slots_available hitting 0 is what makes a producer\nsee RESOURCE_EXHAUSTED and drop a capture."
+        },
+        "slotsAvailable": {
+          "type": "integer",
+          "format": "int64"
+        },
+        "slotsWriting": {
+          "type": "integer",
+          "format": "int64",
+          "description": "Where the unavailable ones went: held by a producer mid-write, or\npinned by at least one consumer's read lease."
+        },
+        "slotsLeased": {
+          "type": "integer",
+          "format": "int64"
+        },
+        "leasesActive": {
+          "type": "string",
+          "format": "uint64",
+          "description": "Sum of per-slot refcounts \u2014 several consumers may hold the same slot,\nso this can exceed slots_leased."
+        },
+        "slotsReclaimed": {
+          "type": "string",
+          "format": "uint64",
+          "description": "Cumulative count of slots this ring has had to take back from a\nproducer that never committed, i.e. one that died mid-capture.\nMonotonic for the life of the process; any increase is worth an alert."
+        },
+        "slotCapacityBytes": {
+          "type": "string",
+          "format": "uint64"
+        }
+      },
+      "description": "Per-ring slot accounting for TIER_RAM_RING.\n\nRings are not payloads: slots are pre-allocated and recycled in place,\nso the payload counts and tier bytes above never describe them. What an\noperator needs instead is headroom (how many slots can be acquired right\nnow) and whether reservations are being lost."
+    },
     "v1StatsResponse": {
       "type": "object",
       "properties": {
@@ -1130,6 +1406,14 @@
         "bytesObject": {
           "type": "string",
           "format": "uint64"
+        },
+        "rings": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1RingStats"
+          },
+          "description": "One entry per configured ring; empty when no ring tier is configured."
         }
       }
     },
@@ -1176,6 +1460,20 @@
           "description": "Canonical payload identifier.\n\nMUST contain exactly 16 bytes (binary RFC4122 UUID).\nThe server rejects any other length.\n\nThis is intentionally NOT a string to avoid formatting ambiguity."
         }
       }
+    },
+    "PayloadCatalogServiceImportPayloadBody": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "object",
+          "description": "Canonical payload identifier.\n\nMUST contain exactly 16 bytes (binary RFC4122 UUID).\nThe server rejects any other length.\n\nThis is intentionally NOT a string to avoid formatting ambiguity."
+        },
+        "sizeBytes": {
+          "type": "string",
+          "format": "uint64"
+        }
+      },
+      "description": "Register an externally-uploaded object-tier payload with the manager.\nThe client uploads bytes to object_upload_path (from AllocatePayloadResponse)\nthen calls this RPC to transfer ownership. No bytes transit gRPC."
     },
     "PayloadCatalogServicePinBody": {
       "type": "object",
@@ -1290,6 +1588,10 @@
       "properties": {
         "payloadDescriptor": {
           "$ref": "#/definitions/v1PayloadDescriptor"
+        },
+        "objectUploadPath": {
+          "type": "string",
+          "description": "Only set when preferred_tier == TIER_OBJECT.\nClients must upload payload bytes to this URI before calling ImportPayload.\nNo bytes are transmitted via gRPC."
         }
       }
     },
@@ -1392,6 +1694,9 @@
           "format": "uint64"
         }
       }
+    },
+    "v1ImportPayloadResponse": {
+      "type": "object"
     },
     "v1LineageEdge": {
       "type": "object",
@@ -1650,10 +1955,12 @@
         "TIER_GPU",
         "TIER_RAM",
         "TIER_DISK",
-        "TIER_OBJECT"
+        "TIER_OBJECT",
+        "TIER_VOID",
+        "TIER_RAM_RING"
       ],
       "default": "TIER_UNSPECIFIED",
-      "description": "Ordered from fastest \u2192 most durable.\nHigher tiers may not always be available.\n\n - TIER_UNSPECIFIED: Not set; treated as an error in most contexts.\n - TIER_GPU: GPU device memory (fastest, smallest, most volatile).\n - TIER_RAM: Host DRAM / shared-memory segment.\n - TIER_DISK: Local NVMe/SSD/HDD (durable, larger, slower than RAM).\n - TIER_OBJECT: Remote object storage (S3/GCS/Azure; durable, largest)."
+      "description": "Ordered from fastest \u2192 most durable.\nHigher tiers may not always be available.\n\n - TIER_UNSPECIFIED: Not set; treated as an error in most contexts.\n - TIER_GPU: GPU device memory (fastest, smallest, most volatile).\n - TIER_RAM: Host DRAM / shared-memory segment.\n - TIER_DISK: Local NVMe/SSD/HDD (durable, larger, slower than RAM).\n - TIER_OBJECT: Remote object storage (S3/GCS/Azure; durable, largest).\n - TIER_VOID: Discard on eviction: payload is deleted rather than moved.\n - TIER_RAM_RING: Pre-allocated /dev/shm ring of N fixed slots, rotated across"
     },
     "v1UpdatePayloadMetadataResponse": {
       "type": "object",
@@ -1731,6 +2038,115 @@
       "properties": {
         "payloadDescriptor": {
           "$ref": "#/definitions/v1PayloadDescriptor"
+        }
+      }
+    },
+    "PayloadRingServiceAcquireRingSlotBody": {
+      "type": "object"
+    },
+    "PayloadRingServiceCommitRingSlotBody": {
+      "type": "object",
+      "properties": {
+        "slotIdx": {
+          "type": "integer",
+          "format": "int64"
+        },
+        "generation": {
+          "type": "string",
+          "format": "uint64"
+        },
+        "sizeBytes": {
+          "type": "string",
+          "format": "uint64",
+          "description": "How many bytes of capacity were actually written. Surfaces into\nRingSlotRef.size_bytes for downstream consumers."
+        }
+      }
+    },
+    "PayloadRingServiceLeaseRingSlotBody": {
+      "type": "object",
+      "properties": {
+        "generation": {
+          "type": "string",
+          "format": "uint64",
+          "description": "The generation the consumer expects to read. Comes from the\nRingSlotRef carried in the upstream event. PM rejects with\nFAILED_PRECONDITION if the slot has since advanced."
+        }
+      }
+    },
+    "v1AcquireRingSlotResponse": {
+      "type": "object",
+      "properties": {
+        "slotIdx": {
+          "type": "integer",
+          "format": "int64",
+          "description": "The reservation. Producer fills the slot up to size_bytes_written\n(\u2264 capacity_bytes), then calls CommitRingSlot with (slot_idx,\ngeneration, size_bytes_written). The generation here is the one\nassigned to this acquire \u2014 bumps from the slot's previous use."
+        },
+        "generation": {
+          "type": "string",
+          "format": "uint64"
+        },
+        "shmName": {
+          "type": "string",
+          "description": "POSIX shm name for this slot. Producer mmaps + writes; PM does not\ncopy any bytes through gRPC. Names are stable across the slot's\nlifetime \u2014 a producer that holds onto its mmap across calls can\nreuse it."
+        },
+        "capacityBytes": {
+          "type": "string",
+          "format": "uint64",
+          "description": "Slot capacity in bytes. Set at ring creation time; immutable."
+        }
+      }
+    },
+    "v1CommitRingSlotResponse": {
+      "type": "object",
+      "properties": {
+        "committedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server-assigned timestamp the commit landed. Useful for end-to-end\nlatency measurement vs the event's capture_time_ns."
+        }
+      }
+    },
+    "v1LeaseRingSlotResponse": {
+      "type": "object",
+      "properties": {
+        "leaseId": {
+          "type": "string",
+          "format": "byte",
+          "description": "Opaque handle the consumer passes back to ReleaseRingSlot. Carries\nserver-side bookkeeping (which slot, which generation, when the\nlease was granted) \u2014 opaque to the client."
+        },
+        "slotIdx": {
+          "type": "integer",
+          "format": "int64",
+          "description": "For diagnostics / metrics. Matches the request fields."
+        },
+        "generation": {
+          "type": "string",
+          "format": "uint64"
+        }
+      }
+    },
+    "v1MapRingResponse": {
+      "type": "object",
+      "properties": {
+        "nSlots": {
+          "type": "integer",
+          "format": "int64",
+          "description": "N \u2014 the number of pre-allocated slots in this ring. Consumer\nbuilds an N-entry pointer array on startup."
+        },
+        "slotCapacityBytes": {
+          "type": "string",
+          "format": "uint64",
+          "description": "Per-slot capacity. Same for every slot in a ring."
+        },
+        "slotShmNames": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "POSIX shm name per slot, indexed by slot_idx. The consumer\nshm_open + mmap each name, then (for GPU consumers)\ncudaHostRegister + cudaHostGetDevicePointer to build the\nper-slot device-pointer cache."
+        },
+        "backingTier": {
+          "$ref": "#/definitions/v1Tier",
+          "description": "Implementation hint: how the producer's slots get filled. CPU\nproducers mmap the same shm; GPU producers would also need a\nmatching cudaHostRegister. Surfaced so consumers can sanity-check\n(e.g., a GPU consumer paired with a CPU producer is the common\ncase and works; the reverse needs the GPU-producer probe to pass)."
         }
       }
     },

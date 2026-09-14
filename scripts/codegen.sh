@@ -43,20 +43,37 @@ fi
 generate_go() {
   command -v go >/dev/null || { echo "error: go is not installed" >&2; exit 1; }
 
-  # GOTOOLCHAIN makes Go fetch and use exactly this release, whatever is
-  # installed. Forcing 'local' here is what produced the drift.
-  export GOTOOLCHAIN="$GO_TOOLCHAIN"
   export PATH="$(go env GOPATH)/bin:$PATH"
 
-  echo "go toolchain : $GO_TOOLCHAIN (from gateway/go.mod)"
-  go install "google.golang.org/protobuf/cmd/protoc-gen-go@${PROTOC_GEN_GO}"
-  go install "google.golang.org/grpc/cmd/protoc-gen-go-grpc@${PROTOC_GEN_GO_GRPC}"
-  go install "github.com/grpc-ecosystem/grpc-gateway/v2/protoc-gen-grpc-gateway@${GRPC_GATEWAY}"
-  go install "github.com/grpc-ecosystem/grpc-gateway/v2/protoc-gen-openapiv2@${GRPC_GATEWAY}"
-  go install "github.com/bufbuild/buf/cmd/buf@${BUF_VERSION}"
+  # The pin belongs on the plugins, because the toolchain that compiles them
+  # changes the code they emit: the same protoc-gen-go-grpc v1.6.1 built under
+  # Go 1.27 instead of 1.25 rewrote comments across 154 lines. GOTOOLCHAIN
+  # makes Go fetch exactly this release whatever is installed; forcing 'local'
+  # is what produced that drift.
+  echo "go toolchain : $GO_TOOLCHAIN (from gateway/go.mod) — for the plugins"
+  GOTOOLCHAIN="$GO_TOOLCHAIN" go install "google.golang.org/protobuf/cmd/protoc-gen-go@${PROTOC_GEN_GO}"
+  GOTOOLCHAIN="$GO_TOOLCHAIN" go install "google.golang.org/grpc/cmd/protoc-gen-go-grpc@${PROTOC_GEN_GO_GRPC}"
+  GOTOOLCHAIN="$GO_TOOLCHAIN" go install "github.com/grpc-ecosystem/grpc-gateway/v2/protoc-gen-grpc-gateway@${GRPC_GATEWAY}"
+  GOTOOLCHAIN="$GO_TOOLCHAIN" go install "github.com/grpc-ecosystem/grpc-gateway/v2/protoc-gen-openapiv2@${GRPC_GATEWAY}"
+
+  # buf is the driver, not a generator — it hands a request to the plugins
+  # above and writes what they return, so the Go that builds it does not reach
+  # the output. Its own version is pinned, which is the part that matters. It
+  # also requires a newer Go than the plugins do, so it gets GOTOOLCHAIN=auto:
+  # pinning it to the plugin toolchain fails outright with
+  # "buf@v1.73.0 requires go >= 1.26.7". CI sidesteps this by downloading a
+  # prebuilt binary instead of building one.
+  GOTOOLCHAIN=auto go install "github.com/bufbuild/buf/cmd/buf@${BUF_VERSION}"
 
   echo "buf          : $(buf --version)"
   buf generate
+
+  # The per-service swagger files buf emits are not what anything serves; the
+  # gateway's published API doc is the merge of them. It is committed, so
+  # leaving the merge out of this script let it rot — apidocs.swagger.json
+  # described 22 paths and knew nothing about the ring tier, months after the
+  # ring service shipped, because no generation path regenerated it.
+  python3 scripts/merge_swagger.py
   echo "regenerated gateway/gen and gateway/openapi"
 }
 
