@@ -9,9 +9,15 @@ setup(
     py_modules=["payload_manager_client"],
     # Generated protobuf/gRPC stubs under client/python/payload/
     packages=find_namespace_packages(include=["payload.*"]),
+    # Floors are dictated by the generated stubs, not chosen: the *_pb2_grpc
+    # modules raise at import when grpcio is older than the grpcio-tools that
+    # produced them, and the *_pb2 modules call
+    # _runtime_version.ValidateProtobufRuntimeVersion against the protobuf
+    # gencode version. Regenerating with an older toolchain lowers both; the
+    # two numbers must move together with client/python/payload/.
     install_requires=[
-        "grpcio>=1.60",
-        "protobuf>=4.25",
+        "grpcio>=1.75.1",
+        "protobuf>=6.31.1",
         "pyarrow>=14",
     ],
     extras_require={
