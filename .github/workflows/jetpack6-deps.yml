@@ -1,9 +1,9 @@
-name: Jetson deps images
+name: JetPack 6 deps images
 
-# Publishes the dependency image pair that docker/Dockerfile.jetson builds on:
+# Publishes the dependency image pair that docker/Dockerfile.jetpack6 builds on:
 # Abseil, re2, Protobuf, gRPC, OpenTelemetry, the AWS SDK, Arrow and libpqxx,
 # compiled from source for aarch64. That takes hours on Jetson hardware and
-# changes only when docker/Dockerfile.jetson-deps changes, which is why it is
+# changes only when docker/Dockerfile.jetpack6-deps changes, which is why it is
 # not a job in ci.yml — it has a different lifecycle from anything that runs
 # per commit, and ci.yml's whole point is that every per-commit job lives there.
 #
@@ -17,13 +17,13 @@ on:
   push:
     branches: [main]
     paths:
-      - 'docker/Dockerfile.jetson-deps'
-      - '.github/workflows/jetson-deps.yml'
+      - 'docker/Dockerfile.jetpack6-deps'
+      - '.github/workflows/jetpack6-deps.yml'
   pull_request:
     branches: [main]
     paths:
-      - 'docker/Dockerfile.jetson-deps'
-      - '.github/workflows/jetson-deps.yml'
+      - 'docker/Dockerfile.jetpack6-deps'
+      - '.github/workflows/jetpack6-deps.yml'
   workflow_dispatch:
     inputs:
       force:
@@ -35,7 +35,7 @@ on:
 # tag it was producing is content-derived and nothing will reference it again.
 # Left false, a second push would queue behind a build measured in hours.
 concurrency:
-  group: jetson-deps-${{ github.ref }}
+  group: jetpack6-deps-${{ github.ref }}
   cancel-in-progress: true
 
 permissions:
@@ -66,15 +66,15 @@ jobs:
         id: resolve
         run: |
           set -euo pipefail
-          tag="$(sha256sum docker/Dockerfile.jetson-deps | cut -c1-12)"
+          tag="$(sha256sum docker/Dockerfile.jetpack6-deps | cut -c1-12)"
           echo "tag=${tag}" >> "$GITHUB_OUTPUT"
-          echo "dev=ghcr.io/${{ github.repository }}-jetson-deps-dev:${tag}" >> "$GITHUB_OUTPUT"
-          echo "runtime=ghcr.io/${{ github.repository }}-jetson-deps-runtime:${tag}" >> "$GITHUB_OUTPUT"
+          echo "dev=ghcr.io/${{ github.repository }}-jetpack6-deps-dev:${tag}" >> "$GITHUB_OUTPUT"
+          echo "runtime=ghcr.io/${{ github.repository }}-jetpack6-deps-runtime:${tag}" >> "$GITHUB_OUTPUT"
           if [ "${{ inputs.force }}" = "true" ]; then
             echo "exists=false" >> "$GITHUB_OUTPUT"
             echo "Forced rebuild of ${tag}."
           elif docker manifest inspect \
-                 "ghcr.io/${{ github.repository }}-jetson-deps-runtime:${tag}" >/dev/null 2>&1; then
+                 "ghcr.io/${{ github.repository }}-jetpack6-deps-runtime:${tag}" >/dev/null 2>&1; then
             echo "exists=true" >> "$GITHUB_OUTPUT"
             echo "${tag} is already published; nothing to build."
           else
@@ -88,7 +88,7 @@ jobs:
       - name: Build dev image
         if: steps.resolve.outputs.exists != 'true'
         run: |
-          docker build -f docker/Dockerfile.jetson-deps --target dev \
+          docker build -f docker/Dockerfile.jetpack6-deps --target dev \
             --build-arg BUILD_JOBS=2 \
             -t "${{ steps.resolve.outputs.dev }}" .
 
@@ -96,11 +96,11 @@ jobs:
       - name: Build runtime image
         if: steps.resolve.outputs.exists != 'true'
         run: |
-          docker build -f docker/Dockerfile.jetson-deps --target runtime \
+          docker build -f docker/Dockerfile.jetpack6-deps --target runtime \
             --build-arg BUILD_JOBS=2 \
             -t "${{ steps.resolve.outputs.runtime }}" .
 
-      # latest moves, the content tag does not. docker/Dockerfile.jetson defaults
+      # latest moves, the content tag does not. docker/Dockerfile.jetpack6 defaults
       # to latest for humans; ci.yml passes the exact tag.
       - name: Push
         if: steps.resolve.outputs.exists != 'true' && github.event_name != 'pull_request'
@@ -108,12 +108,12 @@ jobs:
           set -euo pipefail
           dev="${{ steps.resolve.outputs.dev }}"
           runtime="${{ steps.resolve.outputs.runtime }}"
-          docker tag "$dev" "ghcr.io/${{ github.repository }}-jetson-deps-dev:latest"
-          docker tag "$runtime" "ghcr.io/${{ github.repository }}-jetson-deps-runtime:latest"
+          docker tag "$dev" "ghcr.io/${{ github.repository }}-jetpack6-deps-dev:latest"
+          docker tag "$runtime" "ghcr.io/${{ github.repository }}-jetpack6-deps-runtime:latest"
           docker push "$dev"
           docker push "$runtime"
-          docker push "ghcr.io/${{ github.repository }}-jetson-deps-dev:latest"
-          docker push "ghcr.io/${{ github.repository }}-jetson-deps-runtime:latest"
+          docker push "ghcr.io/${{ github.repository }}-jetpack6-deps-dev:latest"
+          docker push "ghcr.io/${{ github.repository }}-jetpack6-deps-runtime:latest"
 
       - name: Summary
         run: |

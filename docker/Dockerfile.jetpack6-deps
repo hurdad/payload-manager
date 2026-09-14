@@ -1,11 +1,11 @@
-# Dockerfile.jetson-deps
+# Dockerfile.jetpack6-deps
 #
-# Dependency image for docker/Dockerfile.jetson: Abseil, re2, Protobuf, gRPC,
+# Dependency image for docker/Dockerfile.jetpack6: Abseil, re2, Protobuf, gRPC,
 # OpenTelemetry, the AWS SDK, Arrow and libpqxx, built from source for
 # aarch64 / L4T / JetPack 6 and installed into /usr/local.
 #
 # This is a separate image because building it takes hours on Jetson hardware,
-# and none of it changes when the project's own sources do. docker/Dockerfile.jetson
+# and none of it changes when the project's own sources do. docker/Dockerfile.jetpack6
 # starts FROM the published result, so CI rebuilds the service in minutes.
 #
 # It replaces the third-party ghcr.io/hurdad/docker-jetpack6-dev base the image
@@ -22,11 +22,17 @@
 # release. 12.2.12 is the CUDA that ships with L4T R36.2 / JetPack 6. There is no
 # l4t-cuda:r36.2.0 tag.
 #
-# Build and publish (natively, on a Jetson or an ARM64 host):
-#   docker build -f docker/Dockerfile.jetson-deps \
-#     -t ghcr.io/hurdad/payload-manager-jetson-deps:latest .
+# Named for the JetPack release, not the board: JetPack 6 fixes L4T R36, Ubuntu
+# 22.04 and CUDA 12.2 together, and the base tag plus every distro package name
+# in the runtime stage follows from that. The from-source half is portable as
+# written — a JetPack 7 / Thor variant would reuse it unchanged and differ only
+# in the base tags and the jammy-vs-noble package names.
 #
-# Rebuilt by .github/workflows/jetson-deps.yml whenever this file changes; the
+# Build and publish (natively, on a Jetson or an ARM64 host):
+#   docker build -f docker/Dockerfile.jetpack6-deps \
+#     -t ghcr.io/hurdad/payload-manager-jetpack6-deps:latest .
+#
+# Rebuilt by .github/workflows/jetpack6-deps.yml whenever this file changes; the
 # tag is derived from its contents, so a version bump here publishes a new image
 # and leaves the old one resolvable.
 
@@ -307,7 +313,7 @@ RUN apt-get update \
 # runtime — the shared objects only, on the smaller CUDA base
 # ============================================================
 # Everything the service links and nothing that compiles it. Published as its
-# own image so docker/Dockerfile.jetson's runtime stage is just the binary:
+# own image so docker/Dockerfile.jetpack6's runtime stage is just the binary:
 # pulling this is a few hundred MB instead of the multi-GB dev image.
 FROM nvcr.io/nvidia/l4t-cuda:12.2.12-runtime AS runtime
 

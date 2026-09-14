@@ -1,38 +1,45 @@
-# Dockerfile.jetson
+# Dockerfile.jetpack6
 #
-# payload-manager for NVIDIA Jetson Orin (aarch64 / L4T / JetPack 6), with CUDA
-# and OpenTelemetry enabled.
+# payload-manager for NVIDIA Jetson Orin (aarch64 / L4T R36 / JetPack 6), with
+# CUDA and OpenTelemetry enabled.
+#
+# Named for the JetPack release rather than the board, because that is the axis
+# everything here actually depends on: JetPack 6 fixes L4T R36, Ubuntu 22.04 and
+# CUDA 12.2 together, and every base image tag and distro package name below
+# follows from that trio. A Thor board is JetPack 7 — L4T R38, Ubuntu 24.04,
+# CUDA 13 — and needs its own Dockerfile.jetpack7 pair rather than a flag here.
+# See docker/README.md for what that would involve.
 #
 # No dependency is built here. Abseil, re2, Protobuf, gRPC, OpenTelemetry, the
 # AWS SDK, Arrow and libpqxx come from the pair of images built by
-# docker/Dockerfile.jetson-deps — a dev image carrying headers and the toolchain,
+# docker/Dockerfile.jetpack6-deps — a dev image carrying headers and the toolchain,
 # and a runtime image carrying only the shared objects. Building those from
 # source takes hours on Jetson hardware and none of it changes when this
 # project's sources do, so this file rebuilds in minutes.
 #
-# To change a dependency version, edit docker/Dockerfile.jetson-deps and let
-# .github/workflows/jetson-deps.yml publish a new pair of tags; the two ARGs
+# To change a dependency version, edit docker/Dockerfile.jetpack6-deps and let
+# .github/workflows/jetpack6-deps.yml publish a new pair of tags; the two ARGs
 # below are what select them.
 #
 # Build on a Jetson device:
-#   docker build -f docker/Dockerfile.jetson -t payload-manager:jetson .
+#   docker build -f docker/Dockerfile.jetpack6 -t payload-manager:jetpack6 .
 #
 # Against locally built dependency images rather than the published ones:
-#   docker build -f docker/Dockerfile.jetson-deps --target dev \
-#     -t pm-jetson-deps-dev:local .
-#   docker build -f docker/Dockerfile.jetson-deps --target runtime \
-#     -t pm-jetson-deps-runtime:local .
-#   docker build -f docker/Dockerfile.jetson \
-#     --build-arg DEPS_DEV_IMAGE=pm-jetson-deps-dev:local \
-#     --build-arg DEPS_RUNTIME_IMAGE=pm-jetson-deps-runtime:local \
-#     -t payload-manager:jetson .
+#   docker build -f docker/Dockerfile.jetpack6-deps --target dev \
+#     -t pm-jetpack6-deps-dev:local .
+#   docker build -f docker/Dockerfile.jetpack6-deps --target runtime \
+#     -t pm-jetpack6-deps-runtime:local .
+#   docker build -f docker/Dockerfile.jetpack6 \
+#     --build-arg DEPS_DEV_IMAGE=pm-jetpack6-deps-dev:local \
+#     --build-arg DEPS_RUNTIME_IMAGE=pm-jetpack6-deps-runtime:local \
+#     -t payload-manager:jetpack6 .
 #
 # Cross-building from x86 needs binfmt and a great deal of patience:
 #   docker run --privileged --rm tonistiigi/binfmt --install arm64
-#   docker build --platform linux/arm64 -f docker/Dockerfile.jetson -t payload-manager:jetson .
+#   docker build --platform linux/arm64 -f docker/Dockerfile.jetpack6 -t payload-manager:jetpack6 .
 
-ARG DEPS_DEV_IMAGE=ghcr.io/hurdad/payload-manager-jetson-deps-dev:latest
-ARG DEPS_RUNTIME_IMAGE=ghcr.io/hurdad/payload-manager-jetson-deps-runtime:latest
+ARG DEPS_DEV_IMAGE=ghcr.io/hurdad/payload-manager-jetpack6-deps-dev:latest
+ARG DEPS_RUNTIME_IMAGE=ghcr.io/hurdad/payload-manager-jetpack6-deps-runtime:latest
 
 # ============================================================
 # Stage 1 – builder
@@ -64,18 +71,18 @@ RUN cmake -S ./src -B /workspace/build -G Ninja \
 
 # Tests are not run here: the GPU suites need libcuda.so.1 from the NVIDIA
 # container runtime, which is not present during a build. On-device:
-#   docker build --target builder -t pm:jetson-builder -f docker/Dockerfile.jetson .
-#   docker run --rm --runtime=nvidia pm:jetson-builder \
+#   docker build --target builder -t pm:jetpack6-builder -f docker/Dockerfile.jetpack6 .
+#   docker run --rm --runtime=nvidia pm:jetpack6-builder \
 #     ctest --test-dir /workspace/build --output-on-failure -L unit
 
 # ============================================================
 # Stage 2 – runtime
 # ============================================================
 # The base already carries every shared object the binary links; see
-# docker/Dockerfile.jetson-deps.
+# docker/Dockerfile.jetpack6-deps.
 FROM ${DEPS_RUNTIME_IMAGE} AS runtime
 
-LABEL org.opencontainers.image.title="payload-manager-jetson" \
+LABEL org.opencontainers.image.title="payload-manager-jetpack6" \
       org.opencontainers.image.description="Payload Manager gRPC service for NVIDIA Jetson (L4T/JetPack 6), with CUDA and OpenTelemetry"
 
 WORKDIR /app
