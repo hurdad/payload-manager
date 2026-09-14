@@ -6,7 +6,7 @@ This document captures practical design decisions and operating concepts that co
 
 1. **Control-plane/data-plane separation:** avoid byte shuttling through orchestration.
 2. **Stable read via leases:** clients can safely read while placement may otherwise evolve.
-3. **Backend-agnostic persistence contracts:** same domain behavior across memory/SQLite/PostgreSQL.
+3. **Backend-agnostic persistence contracts:** same domain behavior across memory/PostgreSQL.
 4. **Tier-aware placement:** match payload access patterns and pressure signals to appropriate media.
 5. **Composable services:** admin, catalog, data, and stream concerns remain separable but consistent.
 

@@ -2,7 +2,7 @@
 # the GPU allocate/read example) inside Docker against a CUDA-enabled service.
 #
 # Usage:
-#   docker compose -f docker/docker-compose.gpu.sqlite.yml   -f docker/docker-compose.examples.cuda.yml up --build --exit-code-from cpp-examples
+#   docker compose -f docker/docker-compose.gpu.postgres.yml   -f docker/docker-compose.examples.cuda.yml up --build --exit-code-from cpp-examples
 #   docker compose -f docker/docker-compose.gpu.postgres.yml -f docker/docker-compose.examples.cuda.yml up --build --exit-code-from cpp-examples
 
 services:

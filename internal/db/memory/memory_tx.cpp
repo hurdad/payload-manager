@@ -18,7 +18,7 @@ void MemoryTransaction::Commit() {
 
   // Per-key merge for payloads: apply only the keys this transaction touched
   // so that concurrent transactions on different keys never conflict.
-  // (Mirrors the row-level isolation of the real SQLite/Postgres back-ends.)
+  // (Mirrors the row-level isolation of the real Postgres back-end.)
   for (const auto& id : modified_payload_ids_) {
     auto it = working_.payloads.find(id);
     if (it != working_.payloads.end()) {

@@ -5,7 +5,7 @@
 #
 # Usage:
 #   docker compose \
-#     -f docker/docker-compose.gpu.sqlite.yml \
+#     -f docker/docker-compose.gpu.postgres.yml \
 #     -f docker/docker-compose.observability.yml \
 #     -f docker/docker-compose.minio.yml \
 #     -f docker/docker-compose.minio.init.yml \
@@ -15,6 +15,6 @@
 services:
   payload-manager:
     command:
-      ["./payload-manager", "--config", "/app/conf/runtime-docker-gpu-otel-sqlite-minio.yaml"]
+      ["./payload-manager", "--config", "/app/conf/runtime-docker-gpu-otel-postgres-minio.yaml"]
     volumes:
-      - ../config/runtime-docker-gpu-otel-sqlite-minio.yaml:/app/conf/runtime-docker-gpu-otel-sqlite-minio.yaml:ro
+      - ../config/runtime-docker-gpu-otel-postgres-minio.yaml:/app/conf/runtime-docker-gpu-otel-postgres-minio.yaml:ro

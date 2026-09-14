@@ -2,28 +2,33 @@ server:
   bind_address: "0.0.0.0:50051"
 
 database:
-  sqlite:
-    path: "./data/payload-manager.db"
-    wal_mode: true
+  postgres:
+    connection_uri: "postgresql://payload:payload@postgres:5432/payload_manager"
+    max_connections: 32
 
 storage:
   ram:
     capacity_bytes: 8589934592  # 8 GiB
     use_hugepages: false
+    shm_prefix: "pm"
   disk:
     root_path: "/var/lib/payload-manager/payloads"
     capacity_bytes: 107374182400  # 100 GiB
     fsync: true
+  gpu:
+    devices:
+      - device_id: 0
+        capacity_bytes: 12884901888  # 12 GiB
   object:
-    root_path: "s3://payload-manager-prod"
+    root_path: "s3://payloads"
     filesystem: FILE_SYSTEM_S3
     compression: COMPRESSION_UNCOMPRESSED
     filesystem_options:
       s3:
-        endpoint_override: "s3.us-east-1.amazonaws.com"
-        scheme: "https"
+        endpoint_override: "minio:9000"
+        scheme: "http"
         credentials_kind: S3_CREDENTIALS_KIND_DEFAULT
-        tls_verify_certificates: true
+        tls_verify_certificates: false
 
 spill_workers:
   threads: 4
@@ -34,22 +39,22 @@ leases:
   max_lease: "120s"
 
 logging:
-  level: "warn"
+  level: "info"
   pattern: "%+"
-  include_trace_context: false
+  include_trace_context: true
 
 observability:
   metrics_enabled: true
-  tracing_enabled: false
+  tracing_enabled: true
   logs_enabled: false
-  otlp_endpoint: "localhost:4317"
+  otlp_endpoint: "alloy:4317"
   transport: OTLP_TRANSPORT_GRPC
   metrics:
     request_metrics_enabled: true
     spill_metrics_enabled: true
     tier_occupancy_metrics_enabled: true
-    request_latency_histograms_enabled: false
-    route_labels_enabled: false
+    request_latency_histograms_enabled: true
+    route_labels_enabled: true
     tier_labels_enabled: true
     min_collection_interval_ms: 1000
     collection_interval_ms: 10000

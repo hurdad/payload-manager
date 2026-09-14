@@ -5,7 +5,7 @@ This plan defines how to introduce reliable **unit** and **integration** tests f
 ## 1) Goals and quality gates
 
 - Catch regressions in lifecycle, leasing, placement, and metadata semantics before merge.
-- Verify backend parity (memory, SQLite, PostgreSQL) for repository behavior.
+- Verify backend parity (memory, PostgreSQL) for repository behavior.
 - Validate tier-specific storage contracts (RAM, disk, object, GPU where available).
 - Ensure API compatibility and error semantics at gRPC boundaries.
 
@@ -100,7 +100,7 @@ Cases:
 
 Approach:
 
-- Create a reusable **repository contract test suite** that can be run against memory/sqlite/postgres implementations with the same assertions.
+- Create a reusable **repository contract test suite** that can be run against memory/postgres implementations with the same assertions.
 
 ### Utility modules
 
@@ -123,13 +123,11 @@ Cases:
 Scenarios:
 
 - Run repository contract suite against:
-  - SQLite (embedded, ephemeral db file)
   - PostgreSQL (containerized service)
 - Verify migrations apply cleanly and schema version checks behave as expected.
 
 Focus files:
 
-- `internal/db/sqlite/*`
 - `internal/db/postgres/*`
 - `internal/db/migrations/*`
 
@@ -209,12 +207,12 @@ Initial CMake setup:
 ### Phase 2: Contracts
 
 - Implement repository contract suite once.
-- Run contract suite against memory and SQLite backends.
+- Run contract suite against memory and Postgres backends.
 
 ### Phase 3: Service integration
 
 - Add gRPC integration tests for lifecycle + lease workflow.
-- Add migration tests for SQLite and Postgres.
+- Add migration tests for Postgres.
 
 ### Phase 4: Storage + performance guards
 

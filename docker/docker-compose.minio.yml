@@ -8,7 +8,7 @@
 #
 # Usage (interactive / development stack with bucket pre-creation):
 #   docker compose \
-#     -f docker/docker-compose.sqlite.yml \
+#     -f docker/docker-compose.postgres.yml \
 #     -f docker/docker-compose.minio.yml \
 #     -f docker/docker-compose.minio.init.yml \
 #     up --build

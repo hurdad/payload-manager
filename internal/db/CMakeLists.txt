@@ -57,7 +57,7 @@ target_sources(payload_manager_db PRIVATE
         sql/sql_queries.hpp
         sql/migrations.hpp
 
-        # uuid utilities needed by SQLite repository
+        # uuid utilities needed by the repositories
         ../util/uuid.cpp
         ../util/uuid.hpp
 )
@@ -72,30 +72,6 @@ target_sources(payload_manager_db PRIVATE
 )
 
 target_compile_definitions(payload_manager_db PUBLIC PAYLOAD_DB_MEMORY=1)
-
-# ============================================================
-# SQLite backend (optional)
-# ============================================================
-
-option(PAYLOAD_MANAGER_ENABLE_SQLITE "Enable SQLite backend" ON)
-
-if(PAYLOAD_MANAGER_ENABLE_SQLITE)
-
-    find_package(SQLite3 REQUIRED)
-
-    target_sources(payload_manager_db PRIVATE
-            sqlite/sqlite_db.cpp
-            sqlite/sqlite_tx.cpp
-            sqlite/sqlite_repository.cpp
-    )
-
-    target_link_libraries(payload_manager_db
-            PUBLIC SQLite::SQLite3
-    )
-
-    target_compile_definitions(payload_manager_db PUBLIC PAYLOAD_DB_SQLITE=1)
-
-endif()
 
 # ============================================================
 # Postgres backend (optional)

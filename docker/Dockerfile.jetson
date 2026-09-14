@@ -38,7 +38,6 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         libyaml-cpp-dev \
         libpqxx-dev \
-        libsqlite3-dev \
         libgtest-dev \
     && rm -rf /var/lib/apt/lists/*
 
@@ -80,7 +79,6 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         libyaml-cpp0.7 \
         libpqxx-6.4 \
-        libsqlite3-0 \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=builder /workspace/build/bin/payload-manager ./payload-manager

@@ -13,7 +13,7 @@ namespace payload::db::memory {
 
   Commit uses per-key merging for payloads and metadata so that concurrent
   transactions operating on different keys never conflict.  This matches the
-  row-level isolation behaviour of the real SQLite/Postgres repositories.
+  row-level isolation behaviour of the real Postgres repository.
 */
 
 class MemoryTransaction final : public db::Transaction {

@@ -8,7 +8,7 @@ namespace payload::db {
   Portable DB result codes.
 
   The repository layer must translate backend errors into these.
-  Upper layers should never depend on pqxx/sqlite error types.
+  Upper layers should never depend on pqxx error types.
 */
 
 enum class ErrorCode {

@@ -1,31 +1,31 @@
 # Example runtime config variants
 
 This folder contains example Payload Manager runtime configuration variants across
-GPU usage, database backend, and deployment type.
+GPU usage and deployment type.
+
+The persistent backend is PostgreSQL; the in-memory backend remains available for
+tests and ephemeral runs. (SQLite was removed — see the repository history.)
 
 ## Local / bare-metal
 
-- `runtime-with-gpu.yaml` - GPU-enabled + SQLite backend.
-- `runtime-with-gpu-postgres.yaml` - GPU-enabled + PostgreSQL backend.
-- `runtime-no-gpu.yaml` - no GPU tier + PostgreSQL backend.
-- `runtime-no-gpu-sqlite.yaml` - no GPU tier + SQLite backend.
+- `runtime-with-gpu.yaml` - GPU-enabled.
+- `runtime-with-gpu-postgres.yaml` - GPU-enabled, explicit PostgreSQL settings.
+- `runtime-no-gpu.yaml` - no GPU tier.
 
 ## Docker / container
 
 ### Without OpenTelemetry
 
-- `runtime-docker-sqlite.yaml` - no GPU + SQLite backend.
-- `runtime-docker-postgres.yaml` - no GPU + PostgreSQL backend.
-- `runtime-docker-sqlite-minio.yaml` - no GPU + SQLite backend + MinIO object store.
-- `runtime-docker-gpu-postgres.yaml` - GPU-enabled + PostgreSQL backend.
+- `runtime-docker-postgres.yaml` - no GPU.
+- `runtime-docker-postgres-minio.yaml` - no GPU + MinIO object store.
+- `runtime-docker-gpu-postgres.yaml` - GPU-enabled.
 
 ### With OpenTelemetry
 
-- `runtime-docker-otel-sqlite.yaml` - no GPU + SQLite backend.
-- `runtime-docker-otel-postgres.yaml` - no GPU + PostgreSQL backend.
-- `runtime-docker-gpu-otel-sqlite.yaml` - GPU-enabled + SQLite backend.
-- `runtime-docker-gpu-otel-sqlite-minio.yaml` - GPU-enabled + SQLite backend + MinIO object store.
-- `runtime-docker-gpu-otel-sqlite-stress.yaml` - GPU-enabled + SQLite backend, high-load / stress-test settings.
+- `runtime-docker-otel-postgres.yaml` - no GPU.
+- `runtime-docker-gpu-otel-postgres.yaml` - GPU-enabled.
+- `runtime-docker-gpu-otel-postgres-minio.yaml` - GPU-enabled + MinIO object store.
+- `runtime-docker-gpu-otel-postgres-stress.yaml` - GPU-enabled, high-load / stress-test settings.
 
 Use any variant as a starting point, then update paths, credentials, and
 capacity limits for your deployment.

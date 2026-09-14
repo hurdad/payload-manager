@@ -17,10 +17,6 @@
 #include "internal/db/model/payload_record.hpp"
 #include "internal/util/uuid.hpp"
 
-#if PAYLOAD_DB_SQLITE
-#include "internal/db/sqlite/sqlite_db.hpp"
-#include "internal/db/sqlite/sqlite_repository.hpp"
-#endif
 
 #if PAYLOAD_DB_POSTGRES
 #include "internal/db/postgres/pg_pool.hpp"
@@ -403,51 +399,6 @@ BackendFactory MakeMemoryFactory() {
   };
 }
 
-#if PAYLOAD_DB_SQLITE
-BackendFactory MakeSqliteFactory() {
-  auto db_path = (std::filesystem::temp_directory_path() / ("payload_manager_integration_sqlite_" + std::to_string(NowMs()) + ".db")).string();
-
-  auto make_repo = [db_path]() {
-    auto db = std::make_shared<payload::db::sqlite::SqliteDB>(db_path);
-    db->Exec(
-        "CREATE TABLE IF NOT EXISTS payload (id TEXT PRIMARY KEY, tier INTEGER NOT NULL, state INTEGER NOT NULL, size_bytes INTEGER NOT NULL, "
-        "version INTEGER NOT NULL, expires_at_ms INTEGER, no_evict INTEGER NOT NULL DEFAULT 0, eviction_priority INTEGER NOT NULL DEFAULT 0, "
-        "spill_target INTEGER NOT NULL DEFAULT 0, created_at_ms INTEGER NOT NULL DEFAULT (unixepoch() * 1000), "
-        "min_residency_tier INTEGER NOT NULL DEFAULT 0, require_durable INTEGER NOT NULL DEFAULT 0);");
-    db->Exec(
-        "CREATE TABLE IF NOT EXISTS payload_metadata (id TEXT PRIMARY KEY, json TEXT NOT NULL, schema TEXT, updated_at_ms INTEGER NOT NULL, FOREIGN "
-        "KEY(id) REFERENCES payload(id) ON DELETE CASCADE);");
-    db->Exec(
-        "CREATE TABLE IF NOT EXISTS payload_lineage (parent_id TEXT NOT NULL, child_id TEXT NOT NULL, operation TEXT, role TEXT, parameters TEXT, "
-        "created_at_ms INTEGER NOT NULL, FOREIGN KEY(parent_id) REFERENCES payload(id) ON DELETE CASCADE, FOREIGN KEY(child_id) REFERENCES "
-        "payload(id) ON DELETE CASCADE);");
-    db->Exec(
-        "CREATE TABLE IF NOT EXISTS payload_metadata_events (rowid INTEGER PRIMARY KEY AUTOINCREMENT, id TEXT NOT NULL, data BLOB, schema TEXT, "
-        "source TEXT, version TEXT, ts_ms INTEGER NOT NULL);");
-    db->Exec(
-        "CREATE TABLE IF NOT EXISTS streams (stream_id INTEGER PRIMARY KEY AUTOINCREMENT, namespace TEXT NOT NULL, name TEXT NOT NULL, created_at "
-        "INTEGER NOT NULL DEFAULT (unixepoch() * 1000), retention_max_entries INTEGER, retention_max_age_sec INTEGER, UNIQUE(namespace, name));");
-    db->Exec(
-        "CREATE TABLE IF NOT EXISTS stream_entries (stream_id INTEGER NOT NULL REFERENCES streams(stream_id) ON DELETE CASCADE, offset INTEGER NOT "
-        "NULL, payload_uuid TEXT NOT NULL, event_time INTEGER, append_time INTEGER NOT NULL DEFAULT (unixepoch() * 1000), duration_ns INTEGER, tags "
-        "TEXT, PRIMARY KEY (stream_id, offset));");
-    db->Exec(
-        "CREATE TABLE IF NOT EXISTS stream_consumer_offsets (stream_id INTEGER NOT NULL REFERENCES streams(stream_id) ON DELETE CASCADE, "
-        "consumer_group TEXT NOT NULL, offset INTEGER NOT NULL, updated_at INTEGER NOT NULL DEFAULT (unixepoch() * 1000), PRIMARY KEY (stream_id, "
-        "consumer_group));");
-    return std::make_shared<payload::db::sqlite::SqliteRepository>(std::move(db));
-  };
-
-  return BackendFactory{
-      .name                           = "sqlite",
-      .make_repository                = make_repo,
-      .supports_restart               = []() { return true; },
-      .restart                        = [make_repo](std::shared_ptr<Repository>& repo) { repo = make_repo(); },
-      .cleanup                        = [db_path]() { std::filesystem::remove(db_path); },
-      .supports_parallel_transactions = false,
-  };
-}
-#endif
 
 #if PAYLOAD_DB_POSTGRES
 BackendFactory MakePostgresFactory() {
@@ -521,10 +472,6 @@ void RunBackendSuite(BackendFactory& backend) {
 int main() {
   std::vector<BackendFactory> backends;
   backends.push_back(MakeMemoryFactory());
-
-#if PAYLOAD_DB_SQLITE
-  backends.push_back(MakeSqliteFactory());
-#endif
 
 #if PAYLOAD_DB_POSTGRES
   try {

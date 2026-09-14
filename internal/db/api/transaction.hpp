@@ -12,7 +12,6 @@ namespace payload::db {
   - Rollback() discards all writes
   - Destructor MUST rollback if not committed
 
-  SQLite: BEGIN IMMEDIATE
   Postgres: pqxx::work
   Memory: snapshot copy-on-write
 */

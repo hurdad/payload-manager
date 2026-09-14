@@ -3,7 +3,7 @@
 #
 # Usage (GPU + observability stack):
 #   docker compose \
-#     -f docker/docker-compose.gpu.sqlite.yml \
+#     -f docker/docker-compose.gpu.postgres.yml \
 #     -f docker/docker-compose.observability.yml \
 #     -f docker/docker-compose.stress.yml \
 #     up --build --exit-code-from tier-spill-stress
@@ -11,9 +11,9 @@
 services:
   # Override payload-manager to use the reduced-capacity stress config.
   payload-manager:
-    command: ["./payload-manager", "--config", "/app/conf/runtime-docker-gpu-otel-sqlite-stress.yaml"]
+    command: ["./payload-manager", "--config", "/app/conf/runtime-docker-gpu-otel-postgres-stress.yaml"]
     volumes:
-      - ../config/runtime-docker-gpu-otel-sqlite-stress.yaml:/app/conf/runtime-docker-gpu-otel-sqlite-stress.yaml:ro
+      - ../config/runtime-docker-gpu-otel-postgres-stress.yaml:/app/conf/runtime-docker-gpu-otel-postgres-stress.yaml:ro
 
   tier-spill-stress:
     build:

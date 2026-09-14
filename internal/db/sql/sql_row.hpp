@@ -11,7 +11,6 @@ namespace payload::db::sql {
 
   Backends wrap their result row:
     postgres -> pqxx::row
-    sqlite   -> sqlite3_stmt
 
   Prevents driver types leaking into repository logic.
 */

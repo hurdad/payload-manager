@@ -5,9 +5,8 @@ namespace payload::db::sql {
 /*
   Canonical SQL used by all backends.
 
-  IMPORTANT:
-  These are written in SQLite-compatible SQL subset
-  so they work in both engines.
+  Written against a conservative SQL subset so the memory backend's
+  hand-rolled equivalents stay in step with Postgres.
 */
 
 static constexpr const char* INSERT_PAYLOAD =

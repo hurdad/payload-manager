@@ -2,7 +2,7 @@
 # payload-manager service.
 #
 # Usage:
-#   docker compose -f docker/docker-compose.gpu.sqlite.yml   -f docker/docker-compose.examples.python.cuda.yml up --build --exit-code-from python-examples
+#   docker compose -f docker/docker-compose.gpu.postgres.yml   -f docker/docker-compose.examples.python.cuda.yml up --build --exit-code-from python-examples
 #   docker compose -f docker/docker-compose.gpu.postgres.yml -f docker/docker-compose.examples.python.cuda.yml up --build --exit-code-from python-examples
 
 services:

@@ -29,10 +29,6 @@
 #include "internal/tiering/pressure_state.hpp"
 #include "internal/tiering/tiering_manager.hpp"
 #include "internal/tiering/tiering_policy.hpp"
-#if PAYLOAD_DB_SQLITE
-#include "internal/db/sqlite/sqlite_db.hpp"
-#include "internal/db/sqlite/sqlite_repository.hpp"
-#endif
 #if PAYLOAD_DB_POSTGRES
 #include "internal/db/postgres/pg_pool.hpp"
 #include "internal/db/postgres/pg_repository.hpp"
@@ -44,68 +40,6 @@ using namespace payload;
 
 namespace {
 
-#if PAYLOAD_DB_SQLITE
-// Execute a migration SQL statement, ignoring expected idempotency errors:
-//   "duplicate column"  — ADD COLUMN already applied (no IF NOT EXISTS on older SQLite)
-//   "no such column"    — RENAME COLUMN shim targeting a column already renamed
-// All other errors are re-thrown.
-void TryExecSqlite(const std::shared_ptr<db::sqlite::SqliteDB>& db, const std::string& sql) {
-  try {
-    db->Exec(sql);
-  } catch (const std::runtime_error& e) {
-    const std::string msg = e.what();
-    if (msg.find("duplicate column") == std::string::npos && msg.find("no such column") == std::string::npos) {
-      throw;
-    }
-  }
-}
-
-void BootstrapSqliteSchema(const std::shared_ptr<db::sqlite::SqliteDB>& sqlite_db) {
-  static const std::vector<std::string> kBootstrapSql = {
-      "CREATE TABLE IF NOT EXISTS payload (id BLOB PRIMARY KEY, tier INTEGER NOT NULL, state INTEGER NOT NULL, size_bytes INTEGER NOT NULL, version "
-      "INTEGER NOT NULL, expires_at_ms INTEGER, no_evict INTEGER NOT NULL DEFAULT 0, eviction_priority INTEGER NOT NULL DEFAULT 0, spill_target "
-      "INTEGER NOT NULL DEFAULT 0, created_at_ms INTEGER NOT NULL DEFAULT (unixepoch() * 1000), "
-      "min_residency_tier INTEGER NOT NULL DEFAULT 0, require_durable INTEGER NOT NULL DEFAULT 0);",
-      "CREATE TABLE IF NOT EXISTS payload_metadata (id BLOB PRIMARY KEY, json TEXT NOT NULL, schema TEXT, updated_at_ms INTEGER NOT NULL, FOREIGN "
-      "KEY(id) REFERENCES payload(id) ON DELETE CASCADE);",
-      "CREATE TABLE IF NOT EXISTS payload_lineage (parent_id BLOB NOT NULL, child_id BLOB NOT NULL, operation TEXT, role TEXT, parameters TEXT, "
-      "created_at_ms INTEGER NOT NULL, FOREIGN KEY(parent_id) REFERENCES payload(id) ON DELETE CASCADE, FOREIGN KEY(child_id) REFERENCES payload(id) "
-      "ON DELETE CASCADE);",
-      "CREATE TABLE IF NOT EXISTS payload_metadata_events (rowid INTEGER PRIMARY KEY AUTOINCREMENT, id BLOB NOT NULL, data BLOB, schema TEXT, source "
-      "TEXT, version TEXT, ts_ms INTEGER NOT NULL);",
-      "CREATE TABLE IF NOT EXISTS payload_schema_migrations (version INTEGER PRIMARY KEY, applied_at_ms INTEGER NOT NULL);",
-      "CREATE TABLE IF NOT EXISTS streams (stream_id INTEGER PRIMARY KEY AUTOINCREMENT, namespace TEXT NOT NULL, name TEXT NOT NULL, created_at "
-      "INTEGER NOT NULL DEFAULT (unixepoch() * 1000), retention_max_entries INTEGER, retention_max_age_sec INTEGER, UNIQUE(namespace, name));",
-      "CREATE TABLE IF NOT EXISTS stream_entries (stream_id INTEGER NOT NULL REFERENCES streams(stream_id) ON DELETE CASCADE, offset INTEGER NOT "
-      "NULL, payload_uuid "
-      "BLOB NOT NULL, event_time INTEGER, append_time INTEGER NOT NULL DEFAULT (unixepoch() * 1000), duration_ns INTEGER, tags TEXT, PRIMARY KEY "
-      "(stream_id, offset));",
-      "CREATE TABLE IF NOT EXISTS stream_consumer_offsets (stream_id INTEGER NOT NULL REFERENCES streams(stream_id) ON DELETE CASCADE, "
-      "consumer_group TEXT NOT NULL, "
-      "offset INTEGER NOT NULL, updated_at INTEGER NOT NULL DEFAULT (unixepoch() * 1000), PRIMARY KEY (stream_id, consumer_group));"};
-
-  for (const auto& sql : kBootstrapSql) {
-    sqlite_db->Exec(sql);
-  }
-
-  // Migrate existing databases that predate the eviction policy columns.
-  TryExecSqlite(sqlite_db, "ALTER TABLE payload ADD COLUMN no_evict INTEGER NOT NULL DEFAULT 0;");
-  TryExecSqlite(sqlite_db, "ALTER TABLE payload ADD COLUMN eviction_priority INTEGER NOT NULL DEFAULT 0;");
-  TryExecSqlite(sqlite_db, "ALTER TABLE payload ADD COLUMN spill_target INTEGER NOT NULL DEFAULT 0;");
-  TryExecSqlite(sqlite_db, "ALTER TABLE payload ADD COLUMN created_at_ms INTEGER NOT NULL DEFAULT (unixepoch() * 1000);");
-  // Rename persist → no_evict for databases created before the field was renamed.
-  TryExecSqlite(sqlite_db, "ALTER TABLE payload RENAME COLUMN persist TO no_evict;");
-  // Eviction policy extension: min residency tier and durability requirement.
-  TryExecSqlite(sqlite_db, "ALTER TABLE payload ADD COLUMN min_residency_tier INTEGER NOT NULL DEFAULT 0;");
-  TryExecSqlite(sqlite_db, "ALTER TABLE payload ADD COLUMN require_durable INTEGER NOT NULL DEFAULT 0;");
-
-  sqlite_db->Exec("SELECT id,tier,state,size_bytes,version FROM payload LIMIT 1;");
-  sqlite_db->Exec("SELECT id,json,schema,updated_at_ms FROM payload_metadata LIMIT 1;");
-  sqlite_db->Exec("SELECT id,data,schema,source,version,ts_ms FROM payload_metadata_events LIMIT 1;");
-  sqlite_db->Exec("SELECT parent_id,child_id,operation,role,parameters,created_at_ms FROM payload_lineage LIMIT 1;");
-  sqlite_db->Exec("SELECT version FROM payload_schema_migrations LIMIT 1;");
-}
-#endif
 
 #if PAYLOAD_DB_POSTGRES
 void BootstrapPostgresSchema(const std::string& conninfo) {
@@ -204,16 +138,6 @@ void BootstrapPostgresSchema(const std::string& conninfo) {
 
 std::shared_ptr<db::Repository> BuildRepository(const payload::runtime::config::RuntimeConfig& config) {
   const auto& database = config.database();
-  if (database.has_sqlite()) {
-#if PAYLOAD_DB_SQLITE
-    auto sqlite_db = std::make_shared<db::sqlite::SqliteDB>(database.sqlite().path());
-    BootstrapSqliteSchema(sqlite_db);
-    return std::make_shared<db::sqlite::SqliteRepository>(std::move(sqlite_db));
-#else
-    throw std::runtime_error("sqlite backend requested but not enabled at build time");
-#endif
-  }
-
   if (database.has_postgres()) {
 #if PAYLOAD_DB_POSTGRES
     BootstrapPostgresSchema(database.postgres().connection_uri());

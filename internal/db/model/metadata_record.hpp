@@ -9,7 +9,6 @@ namespace payload::db::model {
 
   Stored as JSON text for portability:
     postgres -> jsonb
-    sqlite   -> text
     memory   -> string
 */
 

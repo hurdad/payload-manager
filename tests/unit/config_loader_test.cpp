@@ -28,9 +28,9 @@ TEST(ConfigLoader, ScalarEscapingForQuotedAndBackslashValues) {
                                    R"(server:
   bind_address: "0.0.0.0:50051"
 database:
-  sqlite:
-    path: "C:\\payload\\\"quoted\"\\db.sqlite"
-    wal_mode: true
+  postgres:
+    connection_uri: "postgresql://payload:p%40ss\\\"quoted\"word@localhost:5432/db"
+    max_connections: 1
 storage:
   ram:
     capacity_bytes: 1
@@ -43,7 +43,7 @@ leases:
 )");
 
   auto config = payload::config::ConfigLoader::LoadFromYaml(yaml_path.string());
-  EXPECT_EQ(config.database().sqlite().path(), "C:\\payload\\\"quoted\"\\db.sqlite");
+  EXPECT_EQ(config.database().postgres().connection_uri(), "postgresql://payload:p%40ss\\\"quoted\"word@localhost:5432/db");
 }
 
 TEST(ConfigLoader, ScalarEscapingForNewlineAndUnicode) {
@@ -51,9 +51,9 @@ TEST(ConfigLoader, ScalarEscapingForNewlineAndUnicode) {
                                    R"(server:
   bind_address: "line1\nline2☃"
 database:
-  sqlite:
-    path: "/tmp/data"
-    wal_mode: false
+  postgres:
+    connection_uri: "postgresql://payload:payload@localhost:5432/db"
+    max_connections: 1
 storage:
   ram:
     capacity_bytes: 1
@@ -75,9 +75,9 @@ TEST(ConfigLoader, UnknownFieldsAreRejected) {
   bind_address: "0.0.0.0:50051"
 unknown_field: 123
 database:
-  sqlite:
-    path: "/tmp/data"
-    wal_mode: false
+  postgres:
+    connection_uri: "postgresql://payload:payload@localhost:5432/db"
+    max_connections: 1
 storage:
   ram:
     capacity_bytes: 1

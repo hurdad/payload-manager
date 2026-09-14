@@ -5,7 +5,7 @@ services:
       dockerfile: docker/Dockerfile.cuda
     restart: unless-stopped
     hostname: payload-manager
-    command: ["./payload-manager", "--config", "/app/conf/runtime-docker-gpu-otel-sqlite.yaml"]
+    command: ["./payload-manager", "--config", "/app/conf/runtime-docker-gpu-otel-postgres.yaml"]
     healthcheck:
       test: ["CMD-SHELL", "bash -c '</dev/tcp/localhost/50051'"]
       interval: 5s
@@ -22,7 +22,7 @@ services:
               count: all
               capabilities: [gpu]
     volumes:
-      - ../config/runtime-docker-gpu-otel-sqlite.yaml:/app/conf/runtime-docker-gpu-otel-sqlite.yaml:ro
+      - ../config/runtime-docker-gpu-otel-postgres.yaml:/app/conf/runtime-docker-gpu-otel-postgres.yaml:ro
       - payload-gateway-gpu-data:/var/lib/payload-manager
 
   payload-gateway:

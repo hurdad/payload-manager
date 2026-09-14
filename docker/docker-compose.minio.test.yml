@@ -1,6 +1,6 @@
 # Object-spill integration test overlay.
 #
-# Layers on top of docker-compose.sqlite.yml + docker-compose.minio.yml.
+# Layers on top of docker-compose.postgres.yml + docker-compose.minio.yml.
 # Runs the object_spill_integration_test against a live payload-manager that
 # has MinIO object storage configured.
 #
@@ -11,7 +11,7 @@
 #
 # Usage:
 #   docker compose \
-#     -f docker/docker-compose.sqlite.yml \
+#     -f docker/docker-compose.postgres.yml \
 #     -f docker/docker-compose.minio.yml \
 #     -f docker/docker-compose.minio.test.yml \
 #     up --build --exit-code-from object-spill-test
@@ -22,13 +22,13 @@ services:
       minio:
         condition: service_healthy
     command:
-      ["./payload-manager", "--config", "/app/conf/runtime-docker-sqlite-minio.yaml"]
+      ["./payload-manager", "--config", "/app/conf/runtime-docker-postgres-minio.yaml"]
     environment:
       AWS_ACCESS_KEY_ID: minioadmin
       AWS_SECRET_ACCESS_KEY: minioadmin
       AWS_DEFAULT_REGION: us-east-1
     volumes:
-      - ../config/runtime-docker-sqlite-minio.yaml:/app/conf/runtime-docker-sqlite-minio.yaml:ro
+      - ../config/runtime-docker-postgres-minio.yaml:/app/conf/runtime-docker-postgres-minio.yaml:ro
 
   object-spill-test:
     build:

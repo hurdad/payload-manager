@@ -28,16 +28,16 @@ docker build -f docker/Dockerfile.payloadctl -t payloadctl:latest .
 
 Base stacks:
 
-- `docker-compose.sqlite.yml`
 - `docker-compose.postgres.yml`
-- `docker-compose.otel.sqlite.yml`
+- `docker-compose.postgres.yml`
 - `docker-compose.otel.postgres.yml`
-- `docker-compose.gpu.sqlite.yml`
+- `docker-compose.otel.postgres.yml`
+- `docker-compose.gpu.postgres.yml`
 - `docker-compose.gpu.postgres.yml`
 
 Gateway stack (self-contained):
 
-- `docker-compose.gateway.yml` — runs `payload-manager` (SQLite) + `payload-gateway` together. The gateway UI is available at `http://localhost:8080/`. Both containers share the same data volume so payload downloads work across all tiers.
+- `docker-compose.gateway.yml` — runs `payload-manager` (Postgres) + `payload-gateway` together. The gateway UI is available at `http://localhost:8080/`. Both containers share the same data volume so payload downloads work across all tiers.
 
 Overlays:
 
@@ -52,14 +52,14 @@ Overlays:
 Run examples from repository root:
 
 ```bash
-# gRPC-Gateway + UI (SQLite)
+# gRPC-Gateway + UI (Postgres)
 docker compose -f docker/docker-compose.gateway.yml up --build
 
-# Plain gRPC only (SQLite)
-docker compose -f docker/docker-compose.sqlite.yml up --build
+# Plain gRPC only (Postgres)
+docker compose -f docker/docker-compose.postgres.yml up --build
 
 # With observability
-docker compose -f docker/docker-compose.otel.sqlite.yml -f docker/docker-compose.observability.yml up --build
+docker compose -f docker/docker-compose.otel.postgres.yml -f docker/docker-compose.observability.yml up --build
 ```
 
 > Note: Compose files set `build.context: ..` and `dockerfile: docker/...` so they can be executed via `-f docker/<file>.yml` while still building from the repository root context.

@@ -28,15 +28,14 @@ message PostgresConfig {
   uint32 max_connections = 2;
 }
 
-message SqliteConfig {
-  string path = 1;
-  bool wal_mode = 2;
-}
-
 message DatabaseConfig {
+  // Tag 2 was SqliteConfig sqlite, removed when the SQLite backend was
+  // dropped. Do not reuse.
+  reserved 2;
+  reserved "sqlite";
+
   oneof backend {
     PostgresConfig postgres = 1;
-    SqliteConfig sqlite = 2;
   }
 }
 

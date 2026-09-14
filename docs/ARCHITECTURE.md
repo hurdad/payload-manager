@@ -54,10 +54,9 @@ Key responsibilities live in `internal/core`, `internal/lease`, `internal/tierin
 Implementations:
 
 - `internal/db/memory`: in-process testing backend.
-- `internal/db/sqlite`: embedded edge deployment backend.
 - `internal/db/postgres`: multi-node catalog backend.
 
-Migrations are maintained separately for SQLite and PostgreSQL under `internal/db/migrations`.
+Migrations live under `internal/db/migrations`.
 
 ### Storage tier abstraction
 

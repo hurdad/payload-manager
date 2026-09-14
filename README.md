@@ -17,7 +17,7 @@ Modern pipelines often spend more time moving bytes through orchestration servic
 - Lease-based read stability for payload access.
 - Lifecycle orchestration (`allocate -> commit -> active -> expire/delete`).
 - Metadata and lineage tracking.
-- Multiple repository backends (memory, SQLite, PostgreSQL).
+- Multiple repository backends (memory, PostgreSQL).
 - gRPC service interfaces for admin, data, catalog, and stream workflows.
 
 ## Architecture at a glance
@@ -38,7 +38,6 @@ Service Layer (lifecycle, placement, leasing, metadata, streams)
 Repository API (transaction + persistence abstraction)
    |
    +--> Memory
-   +--> SQLite
    +--> PostgreSQL
 
 Placement + Tiering + Spill
@@ -68,7 +67,6 @@ cmake --build .
 
 Optional CMake flags:
 
-- `-DPAYLOAD_MANAGER_ENABLE_SQLITE=ON`
 - `-DPAYLOAD_MANAGER_ENABLE_POSTGRES=ON`
 - `-DPAYLOAD_MANAGER_ENABLE_OTEL=ON` (requires `opentelemetry-cpp-dev`)
 - `-DPAYLOAD_MANAGER_ENABLE_ARROW_CUDA=ON` (enables GPU tier runtime support in the service via Arrow CUDA; requires `libarrow-cuda-dev`)
@@ -142,33 +140,21 @@ docker build -f docker/Dockerfile.payloadctl -t payloadctl:latest .
 
 ### Docker Compose
 
-Full compose matrix — pick one backend × feature combination:
+Full compose matrix — pick a feature combination:
 
 | Compose file | Database | OTEL | GPU | Host port |
 |---|---|---|---|---|
-| `docker/docker-compose.sqlite.yml` | SQLite | Off | Off | 50052 |
 | `docker/docker-compose.postgres.yml` | Postgres | Off | Off | 50051 |
-| `docker/docker-compose.otel.sqlite.yml` | SQLite | On | Off | 50054 |
 | `docker/docker-compose.otel.postgres.yml` | Postgres | On | Off | 50055 |
-| `docker/docker-compose.gpu.sqlite.yml` | SQLite | On | On | 50053 |
 | `docker/docker-compose.gpu.postgres.yml` | Postgres | On | On | 50056 |
-| `docker/docker-compose.gateway.yml` | SQLite | Off | Off | 8080 (HTTP) |
+| `docker/docker-compose.gateway.yml` | Postgres | Off | Off | 8080 (HTTP) |
 
 ```bash
-# SQLite, no OTEL
-docker compose -f docker/docker-compose.sqlite.yml up --build
-
 # Postgres, no OTEL
 docker compose -f docker/docker-compose.postgres.yml up --build
 
-# SQLite + OTEL (add observability stack)
-docker compose -f docker/docker-compose.otel.sqlite.yml -f docker/docker-compose.observability.yml up --build
-
 # Postgres + OTEL (add observability stack)
 docker compose -f docker/docker-compose.otel.postgres.yml -f docker/docker-compose.observability.yml up --build
-
-# GPU + SQLite + OTEL (add observability stack)
-docker compose -f docker/docker-compose.gpu.sqlite.yml -f docker/docker-compose.observability.yml up --build
 
 # GPU + Postgres + OTEL (add observability stack)
 docker compose -f docker/docker-compose.gpu.postgres.yml -f docker/docker-compose.observability.yml up --build
@@ -241,7 +227,7 @@ The `gateway/` directory contains a Go binary that bridges REST/HTTP to the gRPC
 ### Quick start (Docker)
 
 ```bash
-# Start payload-manager + gateway (SQLite, no GPU)
+# Start payload-manager + gateway (Postgres, no GPU)
 docker compose -f docker/docker-compose.gateway.yml up --build
 ```
 

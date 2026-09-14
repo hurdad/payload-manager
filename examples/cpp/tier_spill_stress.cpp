@@ -19,7 +19,7 @@
     poll_ms       1000       (stats refresh interval)
 
   The server should be configured with reduced tier limits for a quick run:
-    GPU limit: 2 GiB (config/runtime-docker-gpu-sqlite-stress.yaml)
+    GPU limit: 2 GiB (config/runtime-docker-gpu-otel-postgres-stress.yaml)
     RAM limit: 1 GiB
 */
 
@@ -121,7 +121,7 @@ int main(int argc, char** argv) {
 
   const uint64_t payload_bytes = payload_mb * kMiB;
 
-  // Tier limits matching runtime-docker-gpu-sqlite-stress.yaml defaults.
+  // Tier limits matching runtime-docker-gpu-otel-postgres-stress.yaml defaults.
   // These are only used for display bar scaling — the server enforces its own limits.
   const Limits limits{
       .gpu_bytes  = 2ULL * kGiB,

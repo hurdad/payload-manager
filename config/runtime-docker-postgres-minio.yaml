@@ -2,9 +2,9 @@ server:
   bind_address: "0.0.0.0:50051"
 
 database:
-  sqlite:
-    path: "/var/lib/payload-manager/payload-manager.db"
-    wal_mode: true
+  postgres:
+    connection_uri: "postgresql://payload:payload@postgres:5432/payload_manager"
+    max_connections: 32
 
 storage:
   ram:

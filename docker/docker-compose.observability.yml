@@ -1,7 +1,7 @@
 # Overlay this on top of any base compose file to add the full observability stack:
 #
 #   docker compose -f docker/docker-compose.postgres.yml -f docker/docker-compose.observability.yml up
-#   docker compose -f docker/docker-compose.sqlite.yml   -f docker/docker-compose.observability.yml up
+#   docker compose -f docker/docker-compose.postgres.yml   -f docker/docker-compose.observability.yml up
 #
 # Provides:
 #   - Grafana Alloy  — OTLP receiver (gRPC :4317, HTTP :4318)

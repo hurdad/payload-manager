@@ -31,7 +31,6 @@ RUN apt-get update \
         libgrpc-dev \
         libyaml-cpp-dev \
         libpq-dev \
-        libsqlite3-dev \
         libspdlog-dev \
         libcurl4-openssl-dev \
         protobuf-compiler-grpc \
@@ -106,13 +105,11 @@ RUN sed -i 's/^Components: main$/Components: main universe/' /etc/apt/sources.li
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         ca-certificates \
-        sqlite3 \
         libprotobuf32t64 \
         libgrpc++1.51t64 \
         libgrpc29t64 \
         libyaml-cpp0.8 \
         libpq5 \
-        libsqlite3-0 \
         libspdlog1.15 \
         libcurl4t64 \
         libssl3t64 \

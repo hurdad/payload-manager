@@ -31,7 +31,6 @@ RUN apt-get update \
         libgrpc-dev \
         libyaml-cpp-dev \
         libpq-dev \
-        libsqlite3-dev \
         libspdlog-dev \
         libcurl4-openssl-dev \
         protobuf-compiler-grpc \
