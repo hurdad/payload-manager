@@ -17,6 +17,8 @@ Modern pipelines often spend more time moving bytes through orchestration servic
 ## Core capabilities
 
 - Tier-aware placement across GPU, RAM, disk, object storage, and void (discard-on-eviction).
+- A ring tier (`TIER_RAM_RING`) for steady-rate pipelines: pre-allocated shm slots
+  addressed by position and rewritten in place, with no catalog row per capture.
 - Lease-based read stability for payload access.
 - Lifecycle orchestration (`allocate -> commit -> active -> expire/delete`).
 - Metadata and lineage tracking.
@@ -83,9 +85,16 @@ cmake --build .
 
 Optional CMake flags:
 
-- `-DPAYLOAD_MANAGER_ENABLE_POSTGRES=ON`
-- `-DPAYLOAD_MANAGER_ENABLE_OTEL=ON` (requires `opentelemetry-cpp-dev`)
-- `-DPAYLOAD_MANAGER_ENABLE_ARROW_CUDA=ON` (enables GPU tier runtime support in the service via Arrow CUDA; requires `libarrow-cuda-dev`)
+- `-DPAYLOAD_MANAGER_ENABLE_OTEL=ON|OFF` — **auto-detected**: on when
+  `opentelemetry-cpp-dev` is installed, off when it is not. Pass it explicitly to
+  override. Every published image builds with it on, so a machine that has the
+  package now builds what ships.
+- `-DPAYLOAD_MANAGER_ENABLE_ARROW_CUDA=ON` — off by default; enables the GPU tier
+  in the service via Arrow CUDA, and requires `libarrow-cuda-dev`.
+- `-DPAYLOAD_MANAGER_ENABLE_JEMALLOC=ON` — off by default; links the service
+  against jemalloc. The container images turn this on.
+- `-DPAYLOAD_MANAGER_ENABLE_POSTGRES=OFF` — **on** by default. Turn it off to
+  build without the PostgreSQL backend, leaving only the in-memory catalog.
 
 Client build switch:
 

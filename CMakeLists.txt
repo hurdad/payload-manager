@@ -16,7 +16,32 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 # clang-tidy, IWYU and most IDEs consume this.
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
-option(PAYLOAD_MANAGER_ENABLE_OTEL "Enable OpenTelemetry integration" OFF)
+# Defaults to whatever the machine can build rather than to OFF. Every build
+# that ships or is tested uses ON — the service images, the integration test
+# images and CI's own build-test job all pass it explicitly — so a plain
+# `cmake ..` defaulting to OFF made a developer's local build the only one
+# compiling a different service. That is not cosmetic: otel_interceptor.cpp is
+# entirely behind ENABLE_OTEL, as is most of tracing.cpp, metrics.cpp and
+# logging.cpp, and the observability unit tests are not built without it.
+#
+# Straight ON is not an option either: opentelemetry-cpp is not packaged before
+# Ubuntu 26.04, and `cmake ..` has to keep working there. So the default follows
+# the package, and an explicit -DPAYLOAD_MANAGER_ENABLE_OTEL=ON/OFF still wins —
+# passing -D defines the cache variable, which is what the check below tests.
+if(NOT DEFINED PAYLOAD_MANAGER_ENABLE_OTEL)
+  find_package(opentelemetry-cpp QUIET)
+  if(opentelemetry-cpp_FOUND)
+    set(_payload_otel_default ON)
+    message(STATUS "OpenTelemetry: found, enabling by default")
+  else()
+    set(_payload_otel_default OFF)
+    message(STATUS "OpenTelemetry: not found, building without it "
+                   "(install opentelemetry-cpp-dev, or pass -DPAYLOAD_MANAGER_ENABLE_OTEL=ON to require it)")
+  endif()
+else()
+  set(_payload_otel_default ${PAYLOAD_MANAGER_ENABLE_OTEL})
+endif()
+option(PAYLOAD_MANAGER_ENABLE_OTEL "Enable OpenTelemetry integration" ${_payload_otel_default})
 option(PAYLOAD_MANAGER_BUILD_SERVICE "Build payload-manager service components" ON)
 option(PAYLOAD_MANAGER_BUILD_PAYLOADCTL "Build payloadctl CLI" ON)
 option(PAYLOAD_MANAGER_BUILD_CLIENT "Build C++ client library" ON)
