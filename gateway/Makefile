@@ -1,7 +1,10 @@
 .PHONY: generate build run
 
+# Delegates to scripts/codegen.sh, which pins the Go toolchain from go.mod
+# along with every plugin version. `buf generate` on its own uses whatever Go
+# is installed, and that changes the generated output — see the script.
 generate:
-	buf generate
+	../scripts/codegen.sh go
 
 build:
 	mkdir -p static

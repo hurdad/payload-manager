@@ -133,24 +133,13 @@ jobs:
           go-version-file: gateway/go.mod
           cache-dependency-path: gateway/go.sum
 
-      - uses: bufbuild/buf-setup-action@v1
-        with:
-          version: 1.73.0
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-
-      # Pinned to the versions the committed stubs name in their own headers,
-      # so a diff here means the schema moved — not that the generator did.
-      # grpc-gateway tracks the version gateway/go.mod depends on.
-      - name: Install protoc plugins
-        run: |
-          set -euo pipefail
-          go install google.golang.org/protobuf/cmd/protoc-gen-go@v1.36.11
-          go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@v1.6.1
-          go install github.com/grpc-ecosystem/grpc-gateway/v2/protoc-gen-grpc-gateway@v2.28.0
-          go install github.com/grpc-ecosystem/grpc-gateway/v2/protoc-gen-openapiv2@v2.28.0
-
+      # scripts/codegen.sh owns every pinned version, including the Go toolchain
+      # it reads out of gateway/go.mod. Running it here rather than repeating
+      # the versions means CI and a developer's machine cannot disagree about
+      # what "regenerated" means — which they did: the same plugin built under
+      # a different Go rewrote 154 lines of comments and failed this check.
       - name: Regenerate Go stubs
-        run: buf generate
+        run: scripts/codegen.sh go
 
       # Checks untracked files too: `git diff` alone only sees modifications to
       # tracked files, so a brand-new generated file — exactly what appears
@@ -262,7 +251,10 @@ jobs:
         if: ${{ !cancelled() }}
         run: |
           set -uo pipefail
-          cmake --build build --target sync_python_client
+          # Via the script so its grpcio-tools check runs here too: a version
+          # other than the pinned one fails saying so, rather than quietly
+          # regenerating different output and reporting it as schema drift.
+          scripts/codegen.sh python
           changed=$(git status --porcelain -- client/python)
           if [ -n "$changed" ]; then
             echo "::error::Committed Python stubs are out of date. Run the sync_python_client target and commit the result."
