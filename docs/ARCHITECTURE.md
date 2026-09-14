@@ -14,7 +14,7 @@ Payload Manager provides a control plane for binary payload lifecycle and placem
 - Serves a compiled Svelte single-page application embedded directly in the binary via `embed.FS`.
 - Exposes a merged OpenAPI 2.0 spec at `gateway/openapi/apidocs.swagger.json`.
 - Provides a `GET /v1/payloads/{id}/download` endpoint that spills RAM/GPU payloads to disk on demand and streams the file bytes back to the client.
-- HTTP annotations (`google.api.http`) are defined inline in the proto files under `api/payload/manager/services/v1/`.
+- HTTP annotations (`google.api.http`) are defined inline in the proto files under `proto/payload/manager/services/v1/`.
 - Generated Go stubs live in `gateway/gen/go/`; regenerate with `make generate` (requires `buf` and local `protoc-gen-*` plugins).
 
 The gateway is stateless and can be restarted independently of the payload-manager. It requires read-only access to the disk payload storage path (`DISK_ROOT_PATH`) to serve downloads.
@@ -23,7 +23,7 @@ The gateway is stateless and can be restarted independently of the payload-manag
 
 - **Entrypoints:** `cmd/payload-manager`, `cmd/payloadctl`.
 - **Runtime:** server bootstrap and process wiring in `internal/runtime`.
-- **Transport:** gRPC services under `internal/grpc` implementing API contracts from `api/payload/manager/services/v1`.
+- **Transport:** gRPC services under `internal/grpc` implementing API contracts from `proto/payload/manager/services/v1`.
 
 ### Service layer
 

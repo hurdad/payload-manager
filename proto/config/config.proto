@@ -3,7 +3,7 @@ syntax = "proto3";
 package payload.runtime.config;
 
 import "google/protobuf/duration.proto";
-import "config/arrow/arrow_storage.proto";
+import "arrow/arrow_storage.proto";
 import "config/observability.proto";
 import "payload/manager/core/v1/ring_slot.proto";
 

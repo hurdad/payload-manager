@@ -1,6 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
 
-add_subdirectory(config)
 
 # ================================================================
 # Sources
@@ -68,8 +67,6 @@ set(INTERNAL_SRC
         # observability
         observability/logging.cpp
 
-        # generated config proto
-        ${CONFIG_PROTO_SRCS}
 )
 
 if(PAYLOAD_MANAGER_ENABLE_OTEL)
@@ -87,13 +84,15 @@ endif()
 add_library(payload_manager_internal STATIC ${INTERNAL_SRC})
 add_library(payload_manager::internal ALIAS payload_manager_internal)
 
-add_dependencies(payload_manager_internal payload_manager_internal_config_proto)
-
 target_include_directories(payload_manager_internal
         PUBLIC
         ${CMAKE_CURRENT_SOURCE_DIR}/..
-        ${INTERNAL_GEN_DIR}
 )
+
+# Runtime config stubs. Linking the target rather than compiling its sources
+# here keeps the generated-source ownership in proto/, where the codegen lives,
+# and carries the generated include directory along as a usage requirement.
+target_link_libraries(payload_manager_internal PUBLIC payload_manager::config_proto)
 
 
 # ================================================================

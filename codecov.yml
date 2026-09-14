@@ -33,7 +33,7 @@ ignore:
   - "examples/**"
   - "build/**"
   - "cmake-build-*/**"
-  - "api/third_party/**"      # vendored googleapis protos
+  - "proto/google/**"      # vendored googleapis protos
   - "**/*.pb.h"               # generated protobuf
   - "**/*.pb.cc"
   - "**/*.grpc.pb.h"

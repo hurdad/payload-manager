@@ -60,8 +60,10 @@ set(GENERATED_DIR ${CMAKE_CURRENT_BINARY_DIR}/generated)
 file(MAKE_DIRECTORY ${GENERATED_DIR})
 
 # Vendored googleapis protos — provides google/api/annotations.proto and the
-# google/api/http.proto it imports.  See api/third_party/README.md.
-set(GOOGLEAPIS_PROTO_ROOT ${CMAKE_CURRENT_SOURCE_DIR}/third_party)
+# google/api/http.proto it imports.  See proto/google/README.md.
+# Vendored googleapis protos now sit under the same root as everything else,
+# so they need no separate --proto_path.
+set(GOOGLEAPIS_PROTO_ROOT ${PROTO_ROOT})
 if(NOT EXISTS "${GOOGLEAPIS_PROTO_ROOT}/google/api/annotations.proto")
   message(FATAL_ERROR
     "Vendored googleapis protos are missing from ${GOOGLEAPIS_PROTO_ROOT}.")
@@ -107,7 +109,28 @@ set(GOOGLEAPIS_PROTO_FILES
         google/api/http.proto
 )
 
-set(ALL_DEP_PROTOS ${ALL_PROTO_FILES} ${SERVICE_PROTO_FILES})
+# Node-local runtime configuration. Generated in the same pass as the API
+# protos — one root, one protoc invocation — but compiled into a separate
+# library so the boundary that matters is the one the linker enforces: the
+# C++/Python clients link payload_manager::proto and never see these.
+set(CONFIG_PROTO_FILES
+        config/config.proto
+        config/observability.proto
+)
+
+# Mirrors Arrow's own FileSystem options rather than describing anything about
+# this service, so it sits beside config/ rather than inside it and gets its own
+# library. The `pb.` package prefix keeps the generated C++ types out of the
+# real arrow:: namespace.
+set(ARROW_PROTO_FILES
+        arrow/arrow_storage.proto
+        arrow/arrow_fs_s3.proto
+        arrow/arrow_fs_gcs.proto
+        arrow/arrow_fs_azure.proto
+        arrow/arrow_fs_hdfs.proto
+)
+
+set(ALL_DEP_PROTOS ${ALL_PROTO_FILES} ${SERVICE_PROTO_FILES} ${CONFIG_PROTO_FILES} ${ARROW_PROTO_FILES})
 
 # Absolute dependency paths
 set(PROTO_ABS_FILES)
@@ -124,13 +147,35 @@ set(PROTO_HDRS)
 set(GRPC_SRCS)
 set(GRPC_HDRS)
 
-# protobuf outputs for our own protos
-foreach(PROTO_FILE IN LISTS ALL_DEP_PROTOS)
+# protobuf outputs, split by which library will own them. Everything is
+# generated in one protoc pass; only the compilation is separated.
+set(CONFIG_PROTO_SRCS)
+set(CONFIG_PROTO_HDRS)
+set(ARROW_PROTO_SRCS)
+set(ARROW_PROTO_HDRS)
+
+foreach(PROTO_FILE IN LISTS ALL_PROTO_FILES SERVICE_PROTO_FILES)
   get_filename_component(PROTO_WE ${PROTO_FILE} NAME_WE)
   get_filename_component(PROTO_DIR ${PROTO_FILE} DIRECTORY)
 
   list(APPEND PROTO_SRCS ${GENERATED_DIR}/${PROTO_DIR}/${PROTO_WE}.pb.cc)
   list(APPEND PROTO_HDRS ${GENERATED_DIR}/${PROTO_DIR}/${PROTO_WE}.pb.h)
+endforeach()
+
+foreach(PROTO_FILE IN LISTS CONFIG_PROTO_FILES)
+  get_filename_component(PROTO_WE ${PROTO_FILE} NAME_WE)
+  get_filename_component(PROTO_DIR ${PROTO_FILE} DIRECTORY)
+
+  list(APPEND CONFIG_PROTO_SRCS ${GENERATED_DIR}/${PROTO_DIR}/${PROTO_WE}.pb.cc)
+  list(APPEND CONFIG_PROTO_HDRS ${GENERATED_DIR}/${PROTO_DIR}/${PROTO_WE}.pb.h)
+endforeach()
+
+foreach(PROTO_FILE IN LISTS ARROW_PROTO_FILES)
+  get_filename_component(PROTO_WE ${PROTO_FILE} NAME_WE)
+  get_filename_component(PROTO_DIR ${PROTO_FILE} DIRECTORY)
+
+  list(APPEND ARROW_PROTO_SRCS ${GENERATED_DIR}/${PROTO_DIR}/${PROTO_WE}.pb.cc)
+  list(APPEND ARROW_PROTO_HDRS ${GENERATED_DIR}/${PROTO_DIR}/${PROTO_WE}.pb.h)
 endforeach()
 
 # protobuf outputs for googleapis stubs (needed by the generated service headers)
@@ -293,8 +338,11 @@ add_custom_command(
 # Generate protobuf C++ sources
 # ------------------------------------------------------------------------------
 
+# One invocation covers the API protos and the runtime-config protos; they are
+# split into separate libraries afterwards, not separate codegen passes.
 add_custom_command(
-        OUTPUT ${PROTO_SRCS} ${PROTO_HDRS}
+        OUTPUT ${PROTO_SRCS} ${PROTO_HDRS} ${CONFIG_PROTO_SRCS} ${CONFIG_PROTO_HDRS}
+               ${ARROW_PROTO_SRCS} ${ARROW_PROTO_HDRS}
         COMMAND ${PROTOC}
         --proto_path=${PROTO_ROOT}
         ${_PROTOC_WELLKNOWN_ARGS}
@@ -368,6 +416,10 @@ add_custom_target(generate_protos ALL
         ${GOOGLEAPIS_HDRS}
         ${PROTO_SRCS}
         ${PROTO_HDRS}
+        ${CONFIG_PROTO_SRCS}
+        ${CONFIG_PROTO_HDRS}
+        ${ARROW_PROTO_SRCS}
+        ${ARROW_PROTO_HDRS}
         ${GRPC_SRCS}
         ${GRPC_HDRS}
         ${PY_PROTO_SRCS}
@@ -465,3 +517,36 @@ if(ENABLE_PYTHON_PROTO)
   )
   unset(_py_client_dir)
 endif()
+
+# ------------------------------------------------------------------------------
+# Runtime configuration stubs.
+#
+# Generated in the same pass as the API protos — one root, one protoc call — but
+# kept in their own library. That separation is the one that matters: the C++ and
+# Python clients link payload_manager::proto, never this, so the link graph is
+# what actually keeps node-local configuration out of their reach. A directory
+# name could not enforce that.
+# ------------------------------------------------------------------------------
+add_library(payload_manager_arrow_proto ${ARROW_PROTO_SRCS})
+add_library(payload_manager::arrow_proto ALIAS payload_manager_arrow_proto)
+add_dependencies(payload_manager_arrow_proto generate_protos)
+target_include_directories(payload_manager_arrow_proto
+        PUBLIC
+        $<BUILD_INTERFACE:${GENERATED_DIR}>
+        $<BUILD_INTERFACE:${PROTO_ROOT}>
+)
+target_link_libraries(payload_manager_arrow_proto PUBLIC protobuf::libprotobuf)
+
+add_library(payload_manager_config_proto ${CONFIG_PROTO_SRCS})
+add_library(payload_manager::config_proto ALIAS payload_manager_config_proto)
+
+add_dependencies(payload_manager_config_proto generate_protos)
+
+target_include_directories(payload_manager_config_proto
+        PUBLIC
+        $<BUILD_INTERFACE:${GENERATED_DIR}>
+        $<BUILD_INTERFACE:${PROTO_ROOT}>
+)
+
+# config.proto imports arrow/arrow_storage.proto.
+target_link_libraries(payload_manager_config_proto PUBLIC protobuf::libprotobuf payload_manager::arrow_proto)

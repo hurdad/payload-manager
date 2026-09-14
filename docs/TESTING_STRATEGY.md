@@ -145,7 +145,7 @@ Focus files:
 
 - `internal/grpc/*`
 - `internal/service/*`
-- `api/payload/manager/services/v1/*.proto`
+- `proto/payload/manager/services/v1/*.proto`
 
 ### Storage adapter integration
 

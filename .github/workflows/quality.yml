@@ -78,7 +78,7 @@ jobs:
             --exclude '.*/build/.*' \
             --exclude '.*/tests/.*' \
             --exclude '.*\.pb\.(h|cc)$' \
-            --exclude '.*/api/third_party/.*' \
+            --exclude '.*/proto/google/.*' \
             --xml-pretty --output coverage.xml \
             --print-summary
 
@@ -134,13 +134,11 @@ jobs:
         uses: actions/checkout@v4
 
       # clang-tidy needs compile_commands.json plus every generated header.
-      # There are two codegen targets: generate_protos for the api/ protos and
-      # payload_manager_internal_config_proto for internal/config/*.proto.
+      # One proto root, one codegen target.
       - name: Configure and generate protos
         run: |
           cmake -S . -B build -G Ninja -DPAYLOAD_MANAGER_ENABLE_OTEL=ON -DBUILD_TESTING=ON
           cmake --build build --target generate_protos
-          cmake --build build --target payload_manager_internal_config_proto
 
       # Drive the file list from compile_commands.json rather than git, so we
       # only analyse translation units that are actually in this build

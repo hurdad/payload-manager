@@ -23,7 +23,7 @@ target_link_libraries(payload_manager_db
 )
 
 # Every TU here transitively includes the generated *.grpc.pb.h, via
-# internal/util/uuid.hpp -> api/payload/manager/v1.hpp. Linking the proto
+# internal/util/uuid.hpp -> proto/payload/manager/v1.hpp. Linking the proto
 # target alone gives no build-order edge to the gRPC codegen step; today it
 # only works by way of payload_manager_proto's own dependency on
 # generate_protos. State the edge explicitly so a parallel clean build cannot

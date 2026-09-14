@@ -220,7 +220,7 @@ else()
     COMMENT "Skipping format check because clang-format is unavailable")
 endif()
 
-add_subdirectory(api)
+add_subdirectory(proto)
 
 if(PAYLOAD_MANAGER_BUILD_SERVICE)
   add_subdirectory(internal/db)

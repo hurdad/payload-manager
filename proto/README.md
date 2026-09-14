@@ -1,6 +1,28 @@
-# Payload Manager API
+# Protobuf definitions
 
-This directory contains the **public network contract** for the Payload Manager.
+Every `.proto` in this project lives under this one root, so there is a single
+`--proto_path`, a single protoc invocation and a single generated directory.
+
+| Subtree | Package | Audience |
+|---|---|---|
+| `payload/manager/**` | `payload.manager.*` | **Public.** The network contract; clients link `payload_manager::proto`. |
+| `config/**` | `payload.runtime.config` | **Node-local.** Runtime configuration; compiled into `payload_manager::config_proto`. |
+| `arrow/**` | `pb.arrow.*` | Mirrors Arrow's own FileSystem options; `payload_manager::arrow_proto`. Not specific to this service, hence beside `config/` rather than inside it. The `pb.` prefix keeps the generated C++ types out of the real `arrow::` namespace. |
+| `google/api/**` | `google.api` | Vendored googleapis, for the `google.api.http` method annotations. |
+
+The public/private split is enforced by the **link graph**, not by directory
+naming: the C++ and Python clients link `payload_manager::proto` and never
+`payload_manager::config_proto`, so a client cannot reach runtime configuration
+even by including a header. A folder name could not make that guarantee.
+
+All three libraries are produced by the same codegen target (`generate_protos`);
+only the compilation is separated.
+
+---
+
+## The public API
+
+`payload/manager/**` is the **public network contract** for the Payload Manager.
 
 It defines:
 
@@ -9,8 +31,8 @@ It defines:
 * metadata catalog interfaces
 * administrative inspection APIs
 
-This API is versioned and backward-compatibility matters.  
-Anything outside `/api` is considered internal and may change freely.
+This API is versioned and backward-compatibility matters.
+Anything outside `payload/manager/**` is internal and may change freely.
 
 ---
 
@@ -135,7 +157,7 @@ Clients must treat previously acquired descriptors as unusable.
 ## File Layout
 
 ```
-api/payload/manager/
+proto/payload/manager/
 
 core/v1/
   id.proto

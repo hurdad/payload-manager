@@ -11,7 +11,7 @@
 #include <string>
 #include <utility>
 
-#include "config/arrow/arrow_storage.pb.h"
+#include "arrow/arrow_storage.pb.h"
 
 namespace payload::storage::common {
 
