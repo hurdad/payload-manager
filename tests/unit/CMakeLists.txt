@@ -42,6 +42,7 @@ payload_manager_add_unit_test(payload_manager_unit_tiering_manager_stop tiering_
 payload_manager_add_unit_test(payload_manager_unit_data_service_best_effort data_service_best_effort_test.cpp "data;lease")
 payload_manager_add_unit_test(payload_manager_unit_storage_sidecar storage_sidecar_test.cpp "storage;sidecar;disk")
 payload_manager_add_unit_test(payload_manager_unit_ram_orphan_purge ram_orphan_purge_test.cpp "storage;ram;shm")
+payload_manager_add_unit_test(payload_manager_unit_ring_service ring_service_test.cpp "ring;storage;shm")
 
 # New tests covering previously missing scenarios
 payload_manager_add_unit_test(payload_manager_unit_lease_manager lease_manager_test.cpp "lease")

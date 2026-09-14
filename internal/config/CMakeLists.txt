@@ -28,6 +28,11 @@ else()
 endif()
 
 set(INTERNAL_PROTO_ROOT ${CMAKE_CURRENT_SOURCE_DIR}/..)
+# config.proto imports api/payload/manager/core/v1/ring_slot.proto for
+# RingExhaustionPolicy. protoc needs that root to resolve the import; only the
+# files named on the command line are generated, so the api stubs are not
+# duplicated here — they come from payload_manager::proto as usual.
+set(API_PROTO_ROOT ${CMAKE_CURRENT_SOURCE_DIR}/../../api)
 set(INTERNAL_GEN_DIR ${CMAKE_CURRENT_BINARY_DIR}/../generated)
 file(MAKE_DIRECTORY ${INTERNAL_GEN_DIR})
 
@@ -60,7 +65,7 @@ endif()
 
 add_custom_command(
         OUTPUT ${CONFIG_PROTO_SRCS} ${CONFIG_PROTO_HDRS}
-        COMMAND ${PROTOC} --proto_path=${INTERNAL_PROTO_ROOT} ${_CONFIG_WELLKNOWN_ARGS} --cpp_out=${INTERNAL_GEN_DIR} ${CONFIG_PROTO_FILES}
+        COMMAND ${PROTOC} --proto_path=${INTERNAL_PROTO_ROOT} --proto_path=${API_PROTO_ROOT} ${_CONFIG_WELLKNOWN_ARGS} --cpp_out=${INTERNAL_GEN_DIR} ${CONFIG_PROTO_FILES}
         DEPENDS ${CONFIG_PROTO_ABS}
         WORKING_DIRECTORY ${INTERNAL_PROTO_ROOT}
         COMMENT "Generating internal config protobufs"
@@ -70,6 +75,10 @@ add_custom_command(
 add_custom_target(payload_manager_internal_config_proto
         DEPENDS ${CONFIG_PROTO_SRCS} ${CONFIG_PROTO_HDRS}
 )
+
+# The generated config headers #include ring_slot.pb.h, so the api codegen has
+# to have run first.
+add_dependencies(payload_manager_internal_config_proto generate_protos)
 
 set(INTERNAL_GEN_DIR ${INTERNAL_GEN_DIR} PARENT_SCOPE)
 set(CONFIG_PROTO_SRCS ${CONFIG_PROTO_SRCS} PARENT_SCOPE)

@@ -45,6 +45,13 @@ set(INTERNAL_SRC
         # spill + tiering
         spill/spill_scheduler.cpp
         spill/spill_worker.cpp
+
+        # TIER_RAM_RING: pre-allocated shm slots rotated across captures
+        ring/ring.cpp
+        ring/ring_lease_table.cpp
+        ring/ring_tier_manager.cpp
+        service/ring_service.cpp
+        grpc/ring_server.cpp
         tiering/tiering_manager.cpp
         tiering/tiering_policy.cpp
         # storage

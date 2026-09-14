@@ -1,0 +1,63 @@
+syntax = "proto3";
+package payload.manager.core.v1;
+
+/*
+  Position-addressed reference to a single TIER_RAM_RING slot.
+
+  Unlike PayloadID (a 16-byte UUID minted per payload by the catalog
+  service), a RingSlotRef identifies a slot by its (ring_id, slot_idx)
+  position in a pre-allocated ring; the producer reuses slots across
+  captures by incrementing the per-slot generation.
+
+  Carried in event protos in place of (or alongside) payload_id when
+  the producer wrote into a ring tier. Consumers extract the ref, call
+  LeaseRingSlot to bump the slot's refcount, read via their previously-
+  mapped slot pointer for that index, then ReleaseRingSlot.
+*/
+message RingSlotRef {
+  // Operator-named ring (e.g. "radio_iq"). Discovered by the consumer
+  // via MapRing on startup; the same ring_id appears on every event
+  // produced into this ring.
+  string ring_id = 1;
+
+  // Index of the slot within the ring's N pre-allocated slots, 0..N-1.
+  // The consumer's MapRing response listed the shm name of each slot
+  // in this same index order, so slot_idx is also the index into the
+  // consumer's pre-registered device-pointer array.
+  uint32 slot_idx = 2;
+
+  // Bumps every time the producer rewrites this slot. Lets the consumer
+  // detect a stale lease (consumer was slow, producer already recycled
+  // the slot underneath it); PM rejects LeaseRingSlot with FAILED_PRECONDITION
+  // when the requested generation no longer matches the slot's current
+  // generation.
+  uint64 generation = 3;
+
+  // Bytes actually written this cycle. May be smaller than the slot's
+  // capacity_bytes (e.g. partial captures, decimated outputs). Consumers
+  // size their reads from this field rather than the slot capacity.
+  uint64 size_bytes = 4;
+}
+
+/*
+  Slot exhaustion policy for the producer side of a ring.
+
+  When AcquireRingSlot finds no slot available — every slot's refcount
+  > 0 because consumers haven't released them — the ring's configured
+  policy decides what happens.
+*/
+enum RingExhaustionPolicy {
+  RING_EXHAUSTION_POLICY_UNSPECIFIED = 0;
+
+  // Producer's AcquireRingSlot fails immediately with RESOURCE_EXHAUSTED.
+  // Producer logs + metric, skips the capture cycle. Recommended default
+  // for hardware-paced producers (e.g. radio at a fixed cycle rate) that
+  // can't stall upstream. New samples are lost; in-flight slots are
+  // protected.
+  RING_EXHAUSTION_POLICY_DROP_NEW = 1;
+
+  // Producer's AcquireRingSlot blocks until a slot's refcount drops to
+  // zero. Use only when stalling the producer is preferable to losing a
+  // capture (rare). Risks back-pressure into the hardware sampler.
+  RING_EXHAUSTION_POLICY_BLOCK = 2;
+}

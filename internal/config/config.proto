@@ -5,6 +5,7 @@ package payload.runtime.config;
 import "google/protobuf/duration.proto";
 import "config/arrow/arrow_storage.proto";
 import "config/observability.proto";
+import "payload/manager/core/v1/ring_slot.proto";
 
 /*
   Payload Manager Runtime Configuration
@@ -29,11 +30,6 @@ message PostgresConfig {
 }
 
 message DatabaseConfig {
-  // Tag 2 was SqliteConfig sqlite, removed when the SQLite backend was
-  // dropped. Do not reuse.
-  reserved 2;
-  reserved "sqlite";
-
   oneof backend {
     PostgresConfig postgres = 1;
   }
@@ -87,15 +83,50 @@ message GpuTierConfig {
   repeated GpuDeviceConfig devices = 1;
 }
 
-message StorageConfig {
-  // Tag 5 is reserved for the TIER_RAM_RING configuration, which shares this
-  // number downstream. Do not reuse it for anything else.
-  reserved 5;
+// One ring within the TIER_RAM_RING tier. The service pre-allocates n_slots
+// POSIX shm regions of slot_size_bytes at startup and never frees them;
+// producers and consumers work through PayloadRingService.
+//
+// Unlike the UUID-addressed RAM tier there is no per-capture allocation, so
+// there is no allocation churn to leak and no TTL to forget. Slot names are
+// deterministic and the writable open unlinks before creating, so a stale
+// segment from a crashed process is replaced rather than accumulated — which
+// also matters for correctness, since reusing a stale segment would inherit its
+// old ftruncate size if slot_size_bytes changed between restarts.
+message RingDefinition {
+  // Operator-facing ring name, used as the ring_id in PayloadRingService RPCs
+  // and embedded in RingSlotRef. Prefer a stable, descriptive name.
+  string ring_id = 1;
 
+  // Number of pre-allocated slots. Sized to absorb consumer jitter: the
+  // producer can be up to (n_slots - 1) cycles ahead of the slowest consumer
+  // before AcquireRingSlot starts hitting the exhaustion policy. 4-8 is a
+  // reasonable default for steady-rate pipelines.
+  uint32 n_slots = 2;
+
+  // Per-slot capacity, sized to the largest payload the producer expects.
+  uint64 slot_size_bytes = 3;
+
+  // What happens when AcquireRingSlot finds every slot still leased.
+  // NOTE: only DROP_NEW is implemented; BLOCK is accepted but behaves as
+  // DROP_NEW. See internal/ring/ring.hpp.
+  payload.manager.core.v1.RingExhaustionPolicy exhaustion_policy = 4;
+
+  // POSIX shm name prefix. Slots are named /<shm_prefix>-ring-<ring_id>-slot<i>.
+  // Defaults to RamTierConfig.shm_prefix when empty.
+  string shm_prefix = 5;
+}
+
+message RingTierConfig {
+  repeated RingDefinition rings = 1;
+}
+
+message StorageConfig {
   RamTierConfig ram = 1;
   DiskTierConfig disk = 2;
   pb.arrow.storage.ObjectStorageConfig object = 3;
   GpuTierConfig gpu = 4;
+  RingTierConfig ring = 5;
 }
 
 // ------------------------------------------------------------------

@@ -14,6 +14,7 @@
 #include "internal/grpc/admin_server.hpp"
 #include "internal/grpc/catalog_server.hpp"
 #include "internal/grpc/data_server.hpp"
+#include "internal/grpc/ring_server.hpp"
 #include "internal/grpc/stream_server.hpp"
 #include "internal/lease/lease_manager.hpp"
 #include "internal/lineage/lineage_graph.hpp"
@@ -22,6 +23,7 @@
 #include "internal/service/admin_service.hpp"
 #include "internal/service/catalog_service.hpp"
 #include "internal/service/data_service.hpp"
+#include "internal/service/ring_service.hpp"
 #include "internal/service/service_context.hpp"
 #include "internal/service/stream_service.hpp"
 #include "internal/spill/spill_scheduler.hpp"
@@ -307,12 +309,33 @@ Application Build(const payload::runtime::config::RuntimeConfig& config) {
   // memory — so clamp down and say so loudly rather than failing later and
   // somewhere else. The eviction threshold is derived from the limit, so it
   // follows automatically.
+  //
+  // Ring slots live on the same tmpfs and are allocated in full at startup, so
+  // they must come out of the budget before the RAM tier claims any of it.
+  // Computed from config rather than from the built manager because the rings
+  // are constructed later — and because an unserviceable ring configuration
+  // should be refused before anything is allocated.
+  uint64_t ring_total_bytes = 0;
+  for (const auto& ring : config.storage().ring().rings()) {
+    ring_total_bytes += static_cast<uint64_t>(ring.n_slots()) * ring.slot_size_bytes();
+  }
+
   if (const auto shm_total = storage::RamArrowStore::ShmTotalBytes(); shm_total.has_value()) {
-    if (pressure_state->ram_limit != std::numeric_limits<uint64_t>::max() && pressure_state->ram_limit > *shm_total) {
-      PAYLOAD_LOG_WARN("configured RAM capacity exceeds the tmpfs backing /dev/shm; clamping",
+    if (ring_total_bytes > *shm_total) {
+      // Not clampable: the rings alone cannot fit, so every slot cannot be
+      // created. Dying here beats SIGBUSing a producer on its first write.
+      throw std::runtime_error("ring tier requires " + std::to_string(ring_total_bytes) + " bytes but the tmpfs backing /dev/shm is only " +
+                               std::to_string(*shm_total) + " bytes; reduce n_slots or slot_size_bytes, or raise the container's shm_size");
+    }
+
+    const uint64_t ram_budget = *shm_total - ring_total_bytes;
+    if (pressure_state->ram_limit != std::numeric_limits<uint64_t>::max() && pressure_state->ram_limit > ram_budget) {
+      PAYLOAD_LOG_WARN("configured RAM capacity exceeds the tmpfs left after ring reservations; clamping",
                        {payload::observability::IntField("configured_bytes", static_cast<int64_t>(pressure_state->ram_limit)),
-                        payload::observability::IntField("tmpfs_bytes", static_cast<int64_t>(*shm_total))});
-      pressure_state->ram_limit = *shm_total;
+                        payload::observability::IntField("tmpfs_bytes", static_cast<int64_t>(*shm_total)),
+                        payload::observability::IntField("ring_reserved_bytes", static_cast<int64_t>(ring_total_bytes)),
+                        payload::observability::IntField("ram_budget_bytes", static_cast<int64_t>(ram_budget))});
+      pressure_state->ram_limit = ram_budget;
     }
   }
 
@@ -331,7 +354,8 @@ Application Build(const payload::runtime::config::RuntimeConfig& config) {
                     payload::observability::IntField("disk_capacity_bytes", static_cast<int64_t>(pressure_state->disk_limit)),
                     payload::observability::IntField("disk_evict_at_bytes", static_cast<int64_t>(pressure_state->DiskEvictThreshold())),
                     payload::observability::IntField("gpu_capacity_bytes", static_cast<int64_t>(pressure_state->gpu_limit)),
-                    payload::observability::IntField("gpu_evict_at_bytes", static_cast<int64_t>(pressure_state->GpuEvictThreshold()))});
+                    payload::observability::IntField("gpu_evict_at_bytes", static_cast<int64_t>(pressure_state->GpuEvictThreshold())),
+                    payload::observability::IntField("ring_reserved_bytes", static_cast<int64_t>(ring_total_bytes))});
 
   auto tiering_policy = std::make_shared<tiering::TieringPolicy>(
       metadata_cache,
@@ -388,12 +412,29 @@ Application Build(const payload::runtime::config::RuntimeConfig& config) {
   // ------------------------------------------------------------------
   // gRPC servers
   // ------------------------------------------------------------------
+  // ------------------------------------------------------------------
+  // Ring tier (TIER_RAM_RING)
+  //
+  // Slots share the tmpfs with the UUID-addressed RAM tier, and are named
+  // /<prefix>-ring-<ring_id>-slot<i> so they cannot collide with /<prefix>-<uuid>.
+  // RingTierManager::Build is a no-op when no rings are configured.
+  // ------------------------------------------------------------------
+  const std::string ring_default_prefix = !config.storage().ram().shm_prefix().empty() ? config.storage().ram().shm_prefix() : "pm";
+  auto              ring_manager        = ring::RingTierManager::Build(config.storage().ring(), ring_default_prefix);
+  auto              ring_lease_table    = std::make_shared<ring::RingLeaseTable>();
+  auto              ring_service        = std::make_shared<service::RingService>(ring_manager.get(), ring_lease_table.get());
+
   app.grpc_services.push_back(std::make_unique<grpc::DataServer>(data_service));
+  app.grpc_services.push_back(std::make_unique<grpc::RingServer>(ring_service));
   app.grpc_services.push_back(std::make_unique<grpc::CatalogServer>(catalog_service));
   app.grpc_services.push_back(std::make_unique<grpc::AdminServer>(admin_service));
   const uint32_t poll_ms       = config.stream().subscribe_poll_interval_ms();
   const auto     poll_interval = poll_ms > 0 ? std::chrono::milliseconds(poll_ms) : grpc::StreamServer::kDefaultPollInterval;
   app.grpc_services.push_back(std::make_unique<grpc::StreamServer>(stream_service, poll_interval));
+
+  // RingService holds non-owning pointers into these, so they must outlive it.
+  app.ring_manager     = std::move(ring_manager);
+  app.ring_lease_table = std::move(ring_lease_table);
 
   // Keep ownership of workers so they live for process lifetime.
   // TieringManager is stopped first so it stops enqueuing new tasks before

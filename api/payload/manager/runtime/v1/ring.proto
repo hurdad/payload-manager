@@ -1,0 +1,104 @@
+syntax = "proto3";
+package payload.manager.runtime.v1;
+
+import "google/protobuf/timestamp.proto";
+import "payload/manager/core/v1/types.proto";
+
+/*
+  Wire messages for PayloadRingService. Producer ops (AcquireRingSlot /
+  CommitRingSlot) and consumer ops (MapRing / LeaseRingSlot /
+  ReleaseRingSlot) share the same service so a single client can play
+  either role for different rings (iq-conditioner is both — reads
+  ring1, writes ring2).
+*/
+
+// --- Producer side ----------------------------------------------------
+
+message AcquireRingSlotRequest {
+  string ring_id = 1;
+}
+
+message AcquireRingSlotResponse {
+  // The reservation. Producer fills the slot up to size_bytes_written
+  // (≤ capacity_bytes), then calls CommitRingSlot with (slot_idx,
+  // generation, size_bytes_written). The generation here is the one
+  // assigned to this acquire — bumps from the slot's previous use.
+  uint32 slot_idx   = 1;
+  uint64 generation = 2;
+
+  // POSIX shm name for this slot. Producer mmaps + writes; PM does not
+  // copy any bytes through gRPC. Names are stable across the slot's
+  // lifetime — a producer that holds onto its mmap across calls can
+  // reuse it.
+  string shm_name = 3;
+
+  // Slot capacity in bytes. Set at ring creation time; immutable.
+  uint64 capacity_bytes = 4;
+}
+
+message CommitRingSlotRequest {
+  string ring_id    = 1;
+  uint32 slot_idx   = 2;
+  uint64 generation = 3;
+  // How many bytes of capacity were actually written. Surfaces into
+  // RingSlotRef.size_bytes for downstream consumers.
+  uint64 size_bytes = 4;
+}
+
+message CommitRingSlotResponse {
+  // Server-assigned timestamp the commit landed. Useful for end-to-end
+  // latency measurement vs the event's capture_time_ns.
+  google.protobuf.Timestamp committed_at = 1;
+}
+
+// --- Consumer side ----------------------------------------------------
+
+message MapRingRequest {
+  string ring_id = 1;
+}
+
+message MapRingResponse {
+  // N — the number of pre-allocated slots in this ring. Consumer
+  // builds an N-entry pointer array on startup.
+  uint32 n_slots = 1;
+
+  // Per-slot capacity. Same for every slot in a ring.
+  uint64 slot_capacity_bytes = 2;
+
+  // POSIX shm name per slot, indexed by slot_idx. The consumer
+  // shm_open + mmap each name, then (for GPU consumers)
+  // cudaHostRegister + cudaHostGetDevicePointer to build the
+  // per-slot device-pointer cache.
+  repeated string slot_shm_names = 3;
+
+  // Implementation hint: how the producer's slots get filled. CPU
+  // producers mmap the same shm; GPU producers would also need a
+  // matching cudaHostRegister. Surfaced so consumers can sanity-check
+  // (e.g., a GPU consumer paired with a CPU producer is the common
+  // case and works; the reverse needs the GPU-producer probe to pass).
+  payload.manager.core.v1.Tier backing_tier = 4;
+}
+
+message LeaseRingSlotRequest {
+  string ring_id    = 1;
+  uint32 slot_idx   = 2;
+  // The generation the consumer expects to read. Comes from the
+  // RingSlotRef carried in the upstream event. PM rejects with
+  // FAILED_PRECONDITION if the slot has since advanced.
+  uint64 generation = 3;
+}
+
+message LeaseRingSlotResponse {
+  // Opaque handle the consumer passes back to ReleaseRingSlot. Carries
+  // server-side bookkeeping (which slot, which generation, when the
+  // lease was granted) — opaque to the client.
+  bytes lease_id = 1;
+
+  // For diagnostics / metrics. Matches the request fields.
+  uint32 slot_idx   = 2;
+  uint64 generation = 3;
+}
+
+message ReleaseRingSlotRequest {
+  bytes lease_id = 1;
+}

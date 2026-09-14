@@ -1,0 +1,122 @@
+syntax = "proto3";
+package payload.manager.services.v1;
+
+import "google/api/annotations.proto";
+import "google/protobuf/empty.proto";
+import "payload/manager/runtime/v1/ring.proto";
+
+/*
+  PayloadRingService — TIER_RAM_RING data-plane RPCs.
+
+  The ring tier is position-addressed (slot_idx in a ring) rather than
+  UUID-addressed. Producers acquire a slot, write into the
+  PM-allocated /dev/shm region, and commit. Consumers map the ring
+  once at startup (learning every slot's shm name + capacity), and
+  per capture lease the slot index carried in the upstream domain
+  event, reading via their cached pointer.
+
+  Distinct from PayloadCatalogService/PayloadDataService because the
+  ring tier has no per-call allocate / commit / promote / spill /
+  metadata lifecycle — slots are pre-allocated at ring-definition
+  time and recycled in place. Combining the APIs would either
+  bifurcate the existing UUID-shaped messages with ring-only fields
+  or force ring callers to set meaningless UUIDs.
+
+  Ring definitions themselves are static config (see
+  RuntimeConfig.storage.ring_tier in
+  config/service/v1/payload_manager.proto) — PM creates the slots at
+  startup, this service only manages slot reservation / lease state.
+*/
+
+service PayloadRingService {
+  // --- Producer ---
+
+  /*
+    Reserve the next available slot in `ring_id`. PM picks the slot
+    (round-robin over slots whose refcount has hit zero since they
+    were last committed); the returned (slot_idx, generation) is the
+    triple the producer will write into the downstream event's
+    RingSlotRef.
+
+    Fails with RESOURCE_EXHAUSTED when no slot is available (every
+    slot is currently leased by at least one consumer) and the ring's
+    exhaustion_policy is DROP_NEW. With BLOCK the call waits.
+  */
+  rpc AcquireRingSlot(payload.manager.runtime.v1.AcquireRingSlotRequest)
+      returns (payload.manager.runtime.v1.AcquireRingSlotResponse) {
+    option (google.api.http) = {
+      post: "/v1/rings/{ring_id}/acquire"
+      body: "*"
+    };
+  }
+
+  /*
+    Publish the just-written slot. PM marks the slot ready-for-lease
+    so consumers' LeaseRingSlot calls succeed. The producer publishes
+    the downstream domain event (e.g. RadioCaptureEvent) on NATS
+    carrying the RingSlotRef in parallel; consumers see the event
+    and call LeaseRingSlot to take the read lease.
+
+    Fails with FAILED_PRECONDITION if (slot_idx, generation) doesn't
+    match the producer's last AcquireRingSlot — guards against
+    double-commit or commits on stale handles.
+  */
+  rpc CommitRingSlot(payload.manager.runtime.v1.CommitRingSlotRequest)
+      returns (payload.manager.runtime.v1.CommitRingSlotResponse) {
+    option (google.api.http) = {
+      post: "/v1/rings/{ring_id}/commit"
+      body: "*"
+    };
+  }
+
+  // --- Consumer ---
+
+  /*
+    One-time discovery on consumer startup. Returns the ring's slot
+    count + per-slot shm names so the consumer can mmap (and, for GPU
+    consumers, cudaHostRegister + cudaHostGetDevicePointer) every
+    slot ahead of the hot path. The returned shm names are stable
+    for the lifetime of the PM process; clients should not poll
+    MapRing per-capture.
+
+    Fails with NOT_FOUND if the ring isn't configured in PM's static
+    config.
+  */
+  rpc MapRing(payload.manager.runtime.v1.MapRingRequest)
+      returns (payload.manager.runtime.v1.MapRingResponse) {
+    option (google.api.http) = {
+      get: "/v1/rings/{ring_id}/map"
+    };
+  }
+
+  /*
+    Bump the slot's refcount and grant a read lease. Lightweight —
+    no bytes cross the wire, only the (ring_id, slot_idx, generation)
+    triple and the returned opaque lease_id.
+
+    Fails with FAILED_PRECONDITION if the generation no longer matches
+    the slot's current generation (consumer was too slow, producer
+    already recycled the slot). The consumer should skip this capture
+    and wait for the next event.
+  */
+  rpc LeaseRingSlot(payload.manager.runtime.v1.LeaseRingSlotRequest)
+      returns (payload.manager.runtime.v1.LeaseRingSlotResponse) {
+    option (google.api.http) = {
+      post: "/v1/rings/{ring_id}/slots/{slot_idx}/lease"
+      body: "*"
+    };
+  }
+
+  /*
+    Drop the lease, decrement the slot's refcount. When the refcount
+    reaches zero the slot is eligible for the producer's next
+    AcquireRingSlot. Idempotent: releasing an already-released lease
+    is a no-op.
+  */
+  rpc ReleaseRingSlot(payload.manager.runtime.v1.ReleaseRingSlotRequest)
+      returns (google.protobuf.Empty) {
+    option (google.api.http) = {
+      delete: "/v1/ring-leases/{lease_id}"
+    };
+  }
+}

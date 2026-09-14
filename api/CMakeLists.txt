@@ -76,7 +76,9 @@ set(ALL_PROTO_FILES
         payload/manager/core/v1/types.proto
         payload/manager/core/v1/policy.proto
         payload/manager/core/v1/placement.proto
+        payload/manager/core/v1/ring_slot.proto
         payload/manager/runtime/v1/lease.proto
+        payload/manager/runtime/v1/ring.proto
         payload/manager/runtime/v1/lifecycle.proto
         payload/manager/runtime/v1/tiering.proto
         payload/manager/runtime/v1/stream.proto
@@ -96,6 +98,7 @@ set(SERVICE_PROTO_FILES
         payload/manager/services/v1/payload_catalog_service.proto
         payload/manager/services/v1/payload_stream_service.proto
         payload/manager/services/v1/payload_admin_service.proto
+        payload/manager/services/v1/payload_ring_service.proto
 )
 
 # googleapis protos needed by the service stubs (google/api/annotations.pb.h)

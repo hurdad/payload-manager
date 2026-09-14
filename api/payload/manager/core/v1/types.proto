@@ -12,6 +12,11 @@ enum Tier {
   TIER_DISK = 3;        // Local NVMe/SSD/HDD (durable, larger, slower than RAM).
   TIER_OBJECT = 4;      // Remote object storage (S3/GCS/Azure; durable, largest).
   TIER_VOID = 5;        // Discard on eviction: payload is deleted rather than moved.
+  TIER_RAM_RING = 6;    // Pre-allocated /dev/shm ring of N fixed slots, rotated across
+                        // captures. Producers acquire a slot, write, commit; consumers
+                        // map the ring once at startup (no per-capture mmap or
+                        // cudaHostRegister) and lease the indicated slot per cycle.
+                        // See payload/manager/services/v1/payload_ring_service.proto.
 }
 
 /*
