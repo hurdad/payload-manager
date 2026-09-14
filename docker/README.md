@@ -8,7 +8,9 @@ This directory contains all Docker build and Docker Compose assets for Payload M
 - `Dockerfile.cuda` — payload-manager image with GPU + OpenTelemetry support.
 - `Dockerfile.payloadctl` — `payloadctl` CLI image.
 - `Dockerfile.gateway` — multi-stage image: Node UI build → Go gateway build → distroless runtime. Embeds the compiled Svelte UI into the gateway binary.
-- `Dockerfile.test` — integration test image used by Compose overlays.
+- `Dockerfile.test` — integration test image (`payload_manager_integration_api`), used by Compose overlays.
+- `Dockerfile.test.minio` — object-tier spill test image (`payload_manager_integration_object_spill`), used by `docker-compose.minio.test.yml`.
+- `Dockerfile.e2e` — Playwright image for the UI end-to-end suite, used by `docker-compose.e2e.yml` and `docker-compose.e2e.cuda.yml`.
 - `Dockerfile.examples.cpp` — C++ examples image.
 - `Dockerfile.examples.python` — Python examples image.
 - `Dockerfile.examples.cuda` — CUDA C++ examples image.
@@ -23,6 +25,17 @@ docker build -f docker/Dockerfile.payloadctl -t payloadctl:latest .
 ```
 
 ## OpenTelemetry
+
+The two integration test images build with OpenTelemetry on, matching the
+service images. That is not cosmetic: `internal/runtime/server.cpp` installs
+`OtelServerInterceptorFactory` whenever `ENABLE_OTEL` is defined, with no config
+gate, so an OTEL-off build would put the integration suite against a gRPC server
+whose request path has no interceptor in it — a shape that no longer ships
+anywhere. `otel_interceptor.cpp` and most of `tracing.cpp`, `metrics.cpp` and
+`logging.cpp` sit behind the same guard.
+
+`Dockerfile.examples.*` build with it off, correctly: those are client programs
+(`BUILD_SERVICE=OFF`, `BUILD_CLIENT=ON`) and never start a server.
 
 There is no separate `-otel` image. OpenTelemetry is compiled into
 `Dockerfile` and `Dockerfile.cuda` unconditionally, and is inert until

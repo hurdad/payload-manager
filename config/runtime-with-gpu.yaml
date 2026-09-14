@@ -2,9 +2,12 @@ server:
   bind_address: "0.0.0.0:50051"
 
 database:
-  postgres:
-    connection_uri: "postgresql://payload:payload@localhost:5432/payload_manager"
-    max_connections: 32
+  # In-memory catalog: nothing to install, and the whole service runs from this
+  # file alone. Payload references do not survive a restart, so this is for
+  # local work and demos — runtime-with-gpu-postgres.yaml is the same
+  # deployment backed by PostgreSQL. Naming the backend explicitly matters:
+  # an absent database block also selects memory, silently.
+  memory: {}
 
 storage:
   ram:

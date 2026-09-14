@@ -178,7 +178,7 @@ service image has OpenTelemetry compiled in, and it stays inert until
 |---|---|---|---|---|
 | `docker/docker-compose.postgres.yml` | Postgres | Off | Off | 50051 |
 | `docker/docker-compose.otel.postgres.yml` | Postgres | On | Off | 50055 |
-| `docker/docker-compose.gpu.postgres.yml` | Postgres | On | On | 50056 |
+| `docker/docker-compose.gpu.postgres.yml` | Postgres | Off | On | 50056 |
 | `docker/docker-compose.gateway.yml` | Postgres | Off | Off | 8080 (HTTP) |
 
 ```bash
@@ -188,8 +188,10 @@ docker compose -f docker/docker-compose.postgres.yml up --build
 # Postgres + OTEL (add observability stack)
 docker compose -f docker/docker-compose.otel.postgres.yml -f docker/docker-compose.observability.yml up --build
 
-# GPU + Postgres + OTEL (add observability stack)
-docker compose -f docker/docker-compose.gpu.postgres.yml -f docker/docker-compose.observability.yml up --build
+# GPU + Postgres. Its config does not enable observability, so the overlay
+# below has nothing to receive — use docker-compose.gateway.gpu.yml or the
+# minio.gpu stack for a GPU deployment that does.
+docker compose -f docker/docker-compose.gpu.postgres.yml up --build
 ```
 
 The `docker/docker-compose.observability.yml` overlay adds Grafana Alloy (OTLP receiver), Prometheus, Grafana (`:3000`), and Tempo. It should only be layered on OTEL-enabled compose files.

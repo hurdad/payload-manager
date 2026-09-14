@@ -32,6 +32,7 @@ RUN apt-get update \
         libyaml-cpp-dev \
         libpqxx-dev \
         libspdlog-dev \
+        opentelemetry-cpp-dev \
         libcurl4-openssl-dev \
         protobuf-compiler-grpc \
         python3 \
@@ -55,7 +56,13 @@ RUN apt-get update \
 COPY . ./src
 
 RUN cmake -S ./src -B /workspace/build -G Ninja -DCMAKE_BUILD_TYPE=Release \
-    -DPAYLOAD_MANAGER_ENABLE_OTEL=OFF \
+    # Matches the service images. Not cosmetic: internal/runtime/server.cpp
+    # installs OtelServerInterceptorFactory whenever ENABLE_OTEL is defined,
+    # with no config gate, so an OTEL=OFF build puts these tests against a gRPC
+    # server whose request path has no interceptor in it — one that no longer
+    # ships anywhere. otel_interceptor.cpp and most of tracing.cpp, metrics.cpp
+    # and logging.cpp are behind the same guard.
+    -DPAYLOAD_MANAGER_ENABLE_OTEL=ON \
     -DBUILD_TESTING=ON \
     -DPAYLOAD_MANAGER_BUILD_SERVICE=ON \
     -DPAYLOAD_MANAGER_BUILD_CLIENT=ON \
@@ -88,6 +95,7 @@ RUN apt-get update \
         libgrpc++1.51t64 \
         libgrpc29t64 \
         libspdlog1.15 \
+        opentelemetry-cpp \
         libssl3t64 \
         zlib1g \
         liblz4-1 \

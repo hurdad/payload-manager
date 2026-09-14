@@ -6,21 +6,32 @@ GPU usage and deployment type.
 The persistent backend is PostgreSQL; the in-memory backend remains available for
 tests and ephemeral runs. (SQLite was removed — see the repository history.)
 
+OpenTelemetry is compiled into every service image, so the headings below are
+about what each file *configures*, not which image it needs. A file with
+`metrics_enabled` and `tracing_enabled` unset exports nothing and starts no
+exporter; setting either without an `otlp_endpoint` assumes a collector on
+localhost and logs a warning saying so.
+
 ## Local / bare-metal
 
-- `runtime-with-gpu.yaml` - GPU-enabled.
-- `runtime-with-gpu-postgres.yaml` - GPU-enabled, explicit PostgreSQL settings.
-- `runtime-no-gpu.yaml` - no GPU tier.
+- `runtime-with-gpu.yaml` - GPU-enabled, in-memory catalog. Runs from this file
+  alone with nothing to install; payload references do not survive a restart.
+- `runtime-with-gpu-postgres.yaml` - the same deployment backed by PostgreSQL.
+- `runtime-no-gpu.yaml` - no GPU tier, PostgreSQL.
+
+Every file here names its `database` backend explicitly. An absent `database`
+block also selects the in-memory catalog, which behaves correctly right up until
+the first restart, so it is worth saying which one you meant.
 
 ## Docker / container
 
-### Without OpenTelemetry
+### Observability not configured
 
 - `runtime-docker-postgres.yaml` - no GPU.
 - `runtime-docker-postgres-minio.yaml` - no GPU + MinIO object store.
 - `runtime-docker-gpu-postgres.yaml` - GPU-enabled.
 
-### With OpenTelemetry
+### Observability configured (OTLP to `alloy:4317`)
 
 - `runtime-docker-otel-postgres.yaml` - no GPU.
 - `runtime-docker-gpu-otel-postgres.yaml` - GPU-enabled.
