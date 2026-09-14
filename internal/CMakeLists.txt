@@ -214,13 +214,20 @@ if(PAYLOAD_MANAGER_ENABLE_ARROW_CUDA)
             storage/gpu/cuda_arrow_store.cpp
     )
 
-    # Detect valid CUDA targets (in-source vendored build or installed package)
+    # Detect valid CUDA targets, preferring shared for the same reason the core
+    # Arrow target does: static arrow_cuda pulls in Arrow::arrow_static, which
+    # drags libarrow_bundled_dependencies.a (google-cloud-cpp) into the link,
+    # and its Abseil references go unresolved under Ubuntu's default
+    # --as-needed. Picking the static target first is what broke the CUDA build
+    # while the non-CUDA one was fine.
     foreach(_arrow_cuda_target IN ITEMS
-            ArrowCUDA::arrow_cuda_static
-            arrow_cuda_static
+            ArrowCUDA::arrow_cuda_shared
+            arrow_cuda_shared
             ArrowCUDA::arrow_cuda
             Arrow::arrow_cuda
-            arrow_cuda)
+            arrow_cuda
+            ArrowCUDA::arrow_cuda_static
+            arrow_cuda_static)
         if(TARGET ${_arrow_cuda_target})
             list(APPEND _payload_manager_arrow_cuda_targets ${_arrow_cuda_target})
             break()

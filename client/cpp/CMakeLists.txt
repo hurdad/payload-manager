@@ -28,12 +28,17 @@ endif()
 set(_payload_manager_client_arrow_cuda_targets)
 
 if(PAYLOAD_MANAGER_CLIENT_ENABLE_CUDA)
+    # Prefer shared: static arrow_cuda pulls Arrow::arrow_static and with it
+    # libarrow_bundled_dependencies.a, whose Abseil references go unresolved
+    # under Ubuntu's default --as-needed.
     foreach(_arrow_cuda_target IN ITEMS
-            ArrowCUDA::arrow_cuda_static
-            arrow_cuda_static
+            ArrowCUDA::arrow_cuda_shared
+            arrow_cuda_shared
             ArrowCUDA::arrow_cuda
             Arrow::arrow_cuda
-            arrow_cuda)
+            arrow_cuda
+            ArrowCUDA::arrow_cuda_static
+            arrow_cuda_static)
         if(TARGET ${_arrow_cuda_target})
             list(APPEND _payload_manager_client_arrow_cuda_targets ${_arrow_cuda_target})
             break()
