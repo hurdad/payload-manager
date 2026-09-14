@@ -56,8 +56,11 @@ near the cause.
 
 On a Jetson the GPU is integrated and addressing is unified, so the equivalent of
 a GPU handoff is the ring tier: a consumer maps the `TIER_RAM_RING` `/dev/shm`
-segment and calls `cudaHostRegister` on it to get a device-visible pointer. No
-CUDA IPC is involved, and it is the same code path the x86 build uses.
+segment and registers it with CUDA to get a device-visible pointer to the same
+physical pages. No CUDA IPC is involved, and it is the same code path the x86
+build uses. The C++ client implements this — `RingConsumer::Options::register_for_gpu`
+gives you `Lease::dev_va` next to `Lease::host_va` — see
+[GPU access on integrated-GPU hardware](../docs/ARCHITECTURE.md#gpu-access-on-integrated-gpu-hardware-jetson).
 
 There is no Jetson-specific Dockerfile. There was one, building Abseil, re2,
 Protobuf, gRPC, OpenTelemetry, the AWS SDK, Arrow and libpqxx from source against

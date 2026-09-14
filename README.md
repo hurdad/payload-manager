@@ -233,6 +233,28 @@ Current GPU client runtime status:
 - Python client: GPU descriptor read/write runtime handling is implemented when installed with CUDA extras and Arrow CUDA dependencies are available.
 - Result: Both C++ and Python clients can use GPU descriptors at runtime in CUDA-capable environments.
 
+### Jetson and other integrated GPUs
+
+The GPU tier does **not** work on Jetson. It hands consumers a CUDA IPC handle, and CUDA IPC is
+unsupported on Tegra — worse, it fails one-sided, so the producer's `cudaIpcGetMemHandle`
+succeeds and only the consumer's `cudaIpcOpenMemHandle` fails. The Jetson images therefore build
+with `PAYLOAD_MANAGER_ENABLE_ARROW_CUDA=OFF`.
+
+Use the ring tier instead. A Jetson's GPU is integrated and addressing unified, so host memory is
+device memory: the C++ client registers a ring slot's shm mapping with CUDA once and hands back a
+device pointer alongside the host one, with no copy and no IPC handle.
+
+```cpp
+RingConsumer consumer(&client, RingConsumer::Options{.register_for_gpu = true});
+auto lease = consumer.LeaseAndOpen(ref.ring_id(), ref.slot_idx(),
+                                   ref.generation(), ref.size_bytes());
+LaunchKernel(lease->dev_va, lease->size_bytes);   // same pages as lease->host_va
+```
+
+Requires `-DPAYLOAD_MANAGER_CLIENT_ENABLE_CUDA=ON`; without it the flag is ignored and `dev_va`
+stays null. Full details, including the L4T `cudaHostRegister` mapping-permission quirk, are in
+[GPU access on integrated-GPU hardware](docs/ARCHITECTURE.md#gpu-access-on-integrated-gpu-hardware-jetson).
+
 ## Gateway and UI
 
 The `gateway/` directory contains a Go binary that bridges REST/HTTP to the gRPC backend and serves an embedded Svelte web UI.

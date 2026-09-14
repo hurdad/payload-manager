@@ -112,6 +112,63 @@ overwrite bytes a consumer is still reading.
 Per-ring slot accounting is reported by the admin `Stats` RPC (`StatsResponse.rings`) and by the
 `payload.ring.*` gauges. See [Metrics](./METRICS.md).
 
+#### GPU access on integrated-GPU hardware (Jetson)
+
+On a discrete GPU the GPU tier hands a consumer a CUDA IPC handle and the consumer maps device
+memory directly. That mechanism does not exist on Tegra. CUDA IPC is unsupported there, and it
+fails one-sided, which is the part worth knowing: the producing side succeeds and only the
+consumer fails. Measured on an Orin (sm_87, `integrated=1`, JetPack 6 / CUDA 12.2.12), two
+processes:
+
+```
+producer: cudaIpcGetMemHandle  -> cudaSuccess
+consumer: cudaIpcOpenMemHandle -> cudaErrorInvalidValue ("invalid argument")
+```
+
+So `CudaArrowStore::ExportIPC` returns a handle and the server looks healthy, while the consumer
+fails inside `arrow::cuda::CudaIpcMemHandle::FromBuffer` with an error that points nowhere near
+the cause. The GPU tier is therefore not usable on Jetson and the Jetson images build with
+`PAYLOAD_MANAGER_ENABLE_ARROW_CUDA=OFF`.
+
+The ring tier replaces it, and on this hardware it is arguably the better mechanism rather than a
+consolation. A Jetson's GPU is integrated and its addressing unified, so host memory *is* device
+memory — there is nothing to copy and no handle to pass. A ring slot is a POSIX shm segment the
+consumer already mmaps; registering that mapping with CUDA yields a device pointer to the same
+physical pages the producer wrote.
+
+The C++ client does this already. Set `register_for_gpu` on the consumer and read `dev_va` from
+the lease:
+
+```cpp
+RingConsumer consumer(&client, RingConsumer::Options{
+    .register_for_gpu = true,       // cudaHostRegister + cudaHostGetDevicePointer, once per slot
+    .log_prefix       = "spectral ring",
+});
+
+auto lease = consumer.LeaseAndOpen(ref.ring_id(), ref.slot_idx(),
+                                   ref.generation(), ref.size_bytes());
+if (!lease) return;                 // stale generation — the slot was recycled
+
+LaunchKernel(lease->dev_va, lease->size_bytes);   // device pointer, zero copy
+// lease->host_va is the same bytes from the CPU side
+```
+
+Details that matter:
+
+- `register_for_gpu` requires the client to be built with `-DPAYLOAD_MANAGER_CLIENT_ENABLE_CUDA=ON`.
+  Without it the flag is ignored entirely, no CUDA symbol is referenced, and `dev_va` stays null.
+- Registration happens **once per slot**, when the ring is first mapped — not per lease. The
+  per-capture cost is the lease RPC, not a CUDA call.
+- A CUDA-enabled consumer maps slots `PROT_READ|PROT_WRITE` even though it only reads, because
+  L4T R36's `cudaHostRegister` rejects a read-only mapping with `invalid argument`. Read-only
+  discipline then comes from the consumer, not from the kernel. A non-CUDA build keeps the
+  enforced read-only mapping.
+- The generation check still applies: a consumer that falls behind gets no lease rather than a
+  device pointer to bytes the producer has overwritten.
+
+This path is not Jetson-specific — it works anywhere — but on a discrete GPU it crosses PCIe and
+the GPU tier is the better choice. On integrated hardware it is the only one that works.
+
 ## 3. Cross-cutting concerns
 
 - **Configuration:** protobuf-backed config loading in `internal/config`.
