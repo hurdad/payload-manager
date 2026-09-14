@@ -33,6 +33,7 @@ RUN apt-get update \
         libpqxx-dev \
         libspdlog-dev \
         libjemalloc-dev \
+        opentelemetry-cpp-dev \
         libcurl4-openssl-dev \
         protobuf-compiler-grpc \
         libssl-dev \
@@ -51,9 +52,16 @@ RUN apt-get update \
 
 COPY . ./src
 
+# OTEL is compiled in unconditionally; there is no separate -otel image any
+# more. It is inert until configured: observability.metrics_enabled and
+# .tracing_enabled are plain proto3 bools defaulting to false, and
+# InitializeMetrics/InitializeTracing return before constructing an exporter,
+# so an unconfigured deployment starts no threads and opens no connections.
+# The cost of carrying it is 553 KB of binary and 3.9 MB of image — 1.6% —
+# against a separate image, tag, build job and compose variant to keep in step.
 RUN cmake -S ./src -B /workspace/build -G Ninja -DCMAKE_BUILD_TYPE=Release \
     -DPAYLOAD_MANAGER_ENABLE_JEMALLOC=ON \
-    -DPAYLOAD_MANAGER_ENABLE_OTEL=OFF \
+    -DPAYLOAD_MANAGER_ENABLE_OTEL=ON \
     -DBUILD_TESTING=ON \
     -DPAYLOAD_MANAGER_BUILD_SERVICE=ON \
     -DPAYLOAD_MANAGER_BUILD_CLIENT=OFF \
@@ -68,7 +76,7 @@ RUN cmake -S ./src -B /workspace/build -G Ninja -DCMAKE_BUILD_TYPE=Release \
 FROM ubuntu:26.04 AS runtime
 
 LABEL org.opencontainers.image.title="payload-manager" \
-      org.opencontainers.image.description="Payload Manager gRPC service"
+      org.opencontainers.image.description="Payload Manager gRPC service with OpenTelemetry"
 
 ENV DEBIAN_FRONTEND=noninteractive
 WORKDIR /app
@@ -96,6 +104,7 @@ RUN apt-get update \
         libpq5 \
         libspdlog1.15 \
         libjemalloc2 \
+        opentelemetry-cpp \
         libcurl4t64 \
         libssl3t64 \
         zlib1g \

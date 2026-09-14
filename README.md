@@ -135,8 +135,7 @@ All Dockerfiles and Compose manifests now live under [`docker/`](docker/README.m
 
 | Dockerfile | OTEL | GPU | Use |
 |---|---|---|---|
-| `docker/Dockerfile` | Off | Off | Lightweight production image |
-| `docker/Dockerfile.otel` | On | Off | Production image with OpenTelemetry |
+| `docker/Dockerfile` | On | Off | Production image |
 | `docker/Dockerfile.cuda` | On | On | GPU-capable image with OpenTelemetry |
 | `docker/Dockerfile.gateway` | — | — | gRPC-Gateway + embedded Svelte UI |
 
@@ -145,11 +144,8 @@ and `linux/arm64`), so the same tag serves an x86 server and a Jetson. CUDA is
 amd64 only — see [Architectures](docker/README.md#architectures).
 
 ```bash
-# No-OTEL image (default)
+# Production image (OpenTelemetry compiled in, inert until configured)
 docker build -f docker/Dockerfile -t payload-manager:latest .
-
-# OTEL-enabled image
-docker build -f docker/Dockerfile.otel -t payload-manager:otel .
 
 # GPU + OTEL image
 docker build -f docker/Dockerfile.cuda -t payload-manager:cuda .

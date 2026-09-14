@@ -4,8 +4,7 @@ This directory contains all Docker build and Docker Compose assets for Payload M
 
 ## Dockerfiles
 
-- `Dockerfile` — default payload-manager image (no OpenTelemetry, no GPU).
-- `Dockerfile.otel` — payload-manager image with OpenTelemetry support.
+- `Dockerfile` — payload-manager image. OpenTelemetry is compiled in; no GPU.
 - `Dockerfile.cuda` — payload-manager image with GPU + OpenTelemetry support.
 - `Dockerfile.payloadctl` — `payloadctl` CLI image.
 - `Dockerfile.gateway` — multi-stage image: Node UI build → Go gateway build → distroless runtime. Embeds the compiled Svelte UI into the gateway binary.
@@ -19,14 +18,34 @@ Build examples from repository root:
 
 ```bash
 docker build -f docker/Dockerfile -t payload-manager:latest .
-docker build -f docker/Dockerfile.otel -t payload-manager:otel .
 docker build -f docker/Dockerfile.cuda -t payload-manager:cuda .
 docker build -f docker/Dockerfile.payloadctl -t payloadctl:latest .
 ```
 
+## OpenTelemetry
+
+There is no separate `-otel` image. OpenTelemetry is compiled into
+`Dockerfile` and `Dockerfile.cuda` unconditionally, and is inert until
+configured: `observability.metrics_enabled` and `observability.tracing_enabled`
+are plain proto3 bools defaulting to false, and `InitializeMetrics` /
+`InitializeTracing` return before constructing an exporter, so an unconfigured
+deployment starts no threads and opens no connections.
+
+Carrying it costs 553 KB of binary and 3.9 MB of image — 1.6%, because both
+variants were already dominated by the shared Arrow, gRPC and protobuf runtime.
+That did not justify a second image, tag, pair of build jobs and compose
+variant to keep in step.
+
+There is no `-otel` tag any more. `ghcr.io/hurdad/payload-manager` is the
+service image, with or without observability configured.
+
+When `metrics_enabled` or `tracing_enabled` is set with no `otlp_endpoint`, the
+service assumes a collector on localhost and logs a warning saying so — without
+it the export fails on a loop with nothing in the log tying it back to config.
+
 ## Architectures
 
-`Dockerfile`, `Dockerfile.otel`, `Dockerfile.payloadctl` and `Dockerfile.gateway`
+`Dockerfile`, `Dockerfile.payloadctl` and `Dockerfile.gateway`
 publish as multi-arch tags covering `linux/amd64` and `linux/arm64`, so a single
 pull resolves itself:
 

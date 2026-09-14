@@ -17,7 +17,7 @@ services:
   payload-manager:
     build:
       context: ..
-      dockerfile: docker/Dockerfile.otel
+      dockerfile: docker/Dockerfile
     restart: unless-stopped
     hostname: payload-manager
     depends_on:

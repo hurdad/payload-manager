@@ -546,12 +546,6 @@ jobs:
             arch: amd64
             platform: linux/amd64
             runner: ubuntu-latest
-          - name: otel
-            file: docker/Dockerfile.otel
-            suffix: "-otel"
-            arch: amd64
-            platform: linux/amd64
-            runner: ubuntu-latest
           - name: cuda
             file: docker/Dockerfile.cuda
             suffix: "-cuda"
@@ -572,18 +566,12 @@ jobs:
             runner: ubuntu-latest
 
           # Native arm64 on the self-hosted board. No cuda entry — see above.
-          # docker/Dockerfile and docker/Dockerfile.otel run ctest in their
+          # docker/Dockerfile runs ctest in its
           # builder stages, so these also give the suite a native arm64 run,
           # which nothing else in this pipeline does.
           - name: payload-manager
             file: docker/Dockerfile
             suffix: ""
-            arch: arm64
-            platform: linux/arm64
-            runner: [self-hosted, ARM64]
-          - name: otel
-            file: docker/Dockerfile.otel
-            suffix: "-otel"
             arch: arm64
             platform: linux/arm64
             runner: [self-hosted, ARM64]
@@ -707,8 +695,6 @@ jobs:
         include:
           - name: payload-manager
             suffix: ""
-          - name: otel
-            suffix: "-otel"
           - name: cuda
             suffix: "-cuda"
           - name: payloadctl

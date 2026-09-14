@@ -1,3 +1,4 @@
+#include "internal/observability/logging.hpp"
 #include "internal/observability/spans.hpp"
 
 #ifdef ENABLE_OTEL
@@ -45,7 +46,16 @@ std::string ResolveEndpoint(const OtlpConfig& config) {
   }
 
   if (endpoint.empty()) {
-    return config.transport == OtlpTransport::kHttpProtobuf ? "http://localhost:4318/v1/traces" : "localhost:4317";
+    const bool http = config.transport == OtlpTransport::kHttpProtobuf;
+    const char* fallback = http ? "http://localhost:4318/v1/traces" : "localhost:4317";
+    // Reached only when the operator switched this on, so silence would be
+    // the wrong default: tracing_enabled is true and no endpoint was given,
+    // and a collector on localhost is a guess. Without this line the export
+    // fails on a loop with nothing in the log tying it back to config.
+    LogWarn("observability.tracing_enabled is set but no OTLP endpoint is configured; assuming a local collector",
+            {{"signal", "traces"}, {"assumed_endpoint", fallback},
+             {"hint", "set observability.otlp_endpoint or OTEL_EXPORTER_OTLP_ENDPOINT"}});
+    return fallback;
   }
 
   if (config.transport == OtlpTransport::kHttpProtobuf && endpoint.find("/v1/") == std::string::npos) {
