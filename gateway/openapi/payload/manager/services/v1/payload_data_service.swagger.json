@@ -383,10 +383,12 @@
         "TIER_GPU",
         "TIER_RAM",
         "TIER_DISK",
-        "TIER_OBJECT"
+        "TIER_OBJECT",
+        "TIER_VOID",
+        "TIER_RAM_RING"
       ],
       "default": "TIER_UNSPECIFIED",
-      "description": "Ordered from fastest → most durable.\nHigher tiers may not always be available.\n\n - TIER_UNSPECIFIED: Not set; treated as an error in most contexts.\n - TIER_GPU: GPU device memory (fastest, smallest, most volatile).\n - TIER_RAM: Host DRAM / shared-memory segment.\n - TIER_DISK: Local NVMe/SSD/HDD (durable, larger, slower than RAM).\n - TIER_OBJECT: Remote object storage (S3/GCS/Azure; durable, largest)."
+      "description": "Ordered from fastest → most durable.\nHigher tiers may not always be available.\n\n - TIER_UNSPECIFIED: Not set; treated as an error in most contexts.\n - TIER_GPU: GPU device memory (fastest, smallest, most volatile).\n - TIER_RAM: Host DRAM / shared-memory segment.\n - TIER_DISK: Local NVMe/SSD/HDD (durable, larger, slower than RAM).\n - TIER_OBJECT: Remote object storage (S3/GCS/Azure; durable, largest).\n - TIER_VOID: Discard on eviction: payload is deleted rather than moved.\n - TIER_RAM_RING: Pre-allocated /dev/shm ring of N fixed slots, rotated across"
     }
   }
 }

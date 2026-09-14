@@ -28,7 +28,7 @@ var File_payload_manager_services_v1_payload_catalog_service_proto protoreflect.
 
 const file_payload_manager_services_v1_payload_catalog_service_proto_rawDesc = "" +
 	"\n" +
-	"9payload/manager/services/v1/payload_catalog_service.proto\x12\x1bpayload.manager.services.v1\x1a\x1cgoogle/api/annotations.proto\x1a\x1bgoogle/protobuf/empty.proto\x1a*payload/manager/runtime/v1/lifecycle.proto\x1a(payload/manager/runtime/v1/tiering.proto\x1a(payload/manager/catalog/v1/catalog.proto\x1a(payload/manager/catalog/v1/lineage.proto2\xdc\x0e\n" +
+	"9payload/manager/services/v1/payload_catalog_service.proto\x12\x1bpayload.manager.services.v1\x1a\x1cgoogle/api/annotations.proto\x1a\x1bgoogle/protobuf/empty.proto\x1a*payload/manager/runtime/v1/lifecycle.proto\x1a(payload/manager/runtime/v1/tiering.proto\x1a(payload/manager/catalog/v1/catalog.proto\x1a(payload/manager/catalog/v1/lineage.proto2\xfe\x0f\n" +
 	"\x15PayloadCatalogService\x12\x93\x01\n" +
 	"\x0fAllocatePayload\x122.payload.manager.runtime.v1.AllocatePayloadRequest\x1a3.payload.manager.runtime.v1.AllocatePayloadResponse\"\x17\x82\xd3\xe4\x93\x02\x11:\x01*\"\f/v1/payloads\x12\x9f\x01\n" +
 	"\rCommitPayload\x120.payload.manager.runtime.v1.CommitPayloadRequest\x1a1.payload.manager.runtime.v1.CommitPayloadResponse\")\x82\xd3\xe4\x93\x02#:\x01*\"\x1e/v1/payloads/{id.value}/commit\x12l\n" +
@@ -44,7 +44,8 @@ const file_payload_manager_services_v1_payload_catalog_service_proto_rawDesc = "
 	"GetLineage\x12-.payload.manager.catalog.v1.GetLineageRequest\x1a..payload.manager.catalog.v1.GetLineageResponse\"'\x82\xd3\xe4\x93\x02!\x12\x1f/v1/payloads/{id.value}/lineage\x12\xb9\x01\n" +
 	"\x15UpdatePayloadMetadata\x128.payload.manager.catalog.v1.UpdatePayloadMetadataRequest\x1a9.payload.manager.catalog.v1.UpdatePayloadMetadataResponse\"+\x82\xd3\xe4\x93\x02%:\x01*\x1a /v1/payloads/{id.value}/metadata\x12\xcf\x01\n" +
 	"\x1aAppendPayloadMetadataEvent\x12=.payload.manager.catalog.v1.AppendPayloadMetadataEventRequest\x1a>.payload.manager.catalog.v1.AppendPayloadMetadataEventResponse\"2\x82\xd3\xe4\x93\x02,:\x01*\"'/v1/payloads/{id.value}/metadata/events\x12\x87\x01\n" +
-	"\fListPayloads\x12/.payload.manager.runtime.v1.ListPayloadsRequest\x1a0.payload.manager.runtime.v1.ListPayloadsResponse\"\x14\x82\xd3\xe4\x93\x02\x0e\x12\f/v1/payloadsB\xae\x02\n" +
+	"\fListPayloads\x12/.payload.manager.runtime.v1.ListPayloadsRequest\x1a0.payload.manager.runtime.v1.ListPayloadsResponse\"\x14\x82\xd3\xe4\x93\x02\x0e\x12\f/v1/payloads\x12\x9f\x01\n" +
+	"\rImportPayload\x120.payload.manager.runtime.v1.ImportPayloadRequest\x1a1.payload.manager.runtime.v1.ImportPayloadResponse\")\x82\xd3\xe4\x93\x02#:\x01*\"\x1e/v1/payloads/{id.value}/importB\xae\x02\n" +
 	"\x1fcom.payload.manager.services.v1B\x1aPayloadCatalogServiceProtoP\x01Z`github.com/payload-manager/payload-manager/gateway/gen/go/payload/manager/services/v1;servicesv1\xa2\x02\x03PMS\xaa\x02\x1bPayload.Manager.Services.V1\xca\x02\x1bPayload\\Manager\\Services\\V1\xe2\x02'Payload\\Manager\\Services\\V1\\GPBMetadata\xea\x02\x1ePayload::Manager::Services::V1b\x06proto3"
 
 var file_payload_manager_services_v1_payload_catalog_service_proto_goTypes = []any{
@@ -61,15 +62,17 @@ var file_payload_manager_services_v1_payload_catalog_service_proto_goTypes = []a
 	(*v11.UpdatePayloadMetadataRequest)(nil),       // 10: payload.manager.catalog.v1.UpdatePayloadMetadataRequest
 	(*v11.AppendPayloadMetadataEventRequest)(nil),  // 11: payload.manager.catalog.v1.AppendPayloadMetadataEventRequest
 	(*v1.ListPayloadsRequest)(nil),                 // 12: payload.manager.runtime.v1.ListPayloadsRequest
-	(*v1.AllocatePayloadResponse)(nil),             // 13: payload.manager.runtime.v1.AllocatePayloadResponse
-	(*v1.CommitPayloadResponse)(nil),               // 14: payload.manager.runtime.v1.CommitPayloadResponse
-	(*emptypb.Empty)(nil),                          // 15: google.protobuf.Empty
-	(*v1.PromoteResponse)(nil),                     // 16: payload.manager.runtime.v1.PromoteResponse
-	(*v1.SpillResponse)(nil),                       // 17: payload.manager.runtime.v1.SpillResponse
-	(*v11.GetLineageResponse)(nil),                 // 18: payload.manager.catalog.v1.GetLineageResponse
-	(*v11.UpdatePayloadMetadataResponse)(nil),      // 19: payload.manager.catalog.v1.UpdatePayloadMetadataResponse
-	(*v11.AppendPayloadMetadataEventResponse)(nil), // 20: payload.manager.catalog.v1.AppendPayloadMetadataEventResponse
-	(*v1.ListPayloadsResponse)(nil),                // 21: payload.manager.runtime.v1.ListPayloadsResponse
+	(*v1.ImportPayloadRequest)(nil),                // 13: payload.manager.runtime.v1.ImportPayloadRequest
+	(*v1.AllocatePayloadResponse)(nil),             // 14: payload.manager.runtime.v1.AllocatePayloadResponse
+	(*v1.CommitPayloadResponse)(nil),               // 15: payload.manager.runtime.v1.CommitPayloadResponse
+	(*emptypb.Empty)(nil),                          // 16: google.protobuf.Empty
+	(*v1.PromoteResponse)(nil),                     // 17: payload.manager.runtime.v1.PromoteResponse
+	(*v1.SpillResponse)(nil),                       // 18: payload.manager.runtime.v1.SpillResponse
+	(*v11.GetLineageResponse)(nil),                 // 19: payload.manager.catalog.v1.GetLineageResponse
+	(*v11.UpdatePayloadMetadataResponse)(nil),      // 20: payload.manager.catalog.v1.UpdatePayloadMetadataResponse
+	(*v11.AppendPayloadMetadataEventResponse)(nil), // 21: payload.manager.catalog.v1.AppendPayloadMetadataEventResponse
+	(*v1.ListPayloadsResponse)(nil),                // 22: payload.manager.runtime.v1.ListPayloadsResponse
+	(*v1.ImportPayloadResponse)(nil),               // 23: payload.manager.runtime.v1.ImportPayloadResponse
 }
 var file_payload_manager_services_v1_payload_catalog_service_proto_depIdxs = []int32{
 	0,  // 0: payload.manager.services.v1.PayloadCatalogService.AllocatePayload:input_type -> payload.manager.runtime.v1.AllocatePayloadRequest
@@ -85,21 +88,23 @@ var file_payload_manager_services_v1_payload_catalog_service_proto_depIdxs = []i
 	10, // 10: payload.manager.services.v1.PayloadCatalogService.UpdatePayloadMetadata:input_type -> payload.manager.catalog.v1.UpdatePayloadMetadataRequest
 	11, // 11: payload.manager.services.v1.PayloadCatalogService.AppendPayloadMetadataEvent:input_type -> payload.manager.catalog.v1.AppendPayloadMetadataEventRequest
 	12, // 12: payload.manager.services.v1.PayloadCatalogService.ListPayloads:input_type -> payload.manager.runtime.v1.ListPayloadsRequest
-	13, // 13: payload.manager.services.v1.PayloadCatalogService.AllocatePayload:output_type -> payload.manager.runtime.v1.AllocatePayloadResponse
-	14, // 14: payload.manager.services.v1.PayloadCatalogService.CommitPayload:output_type -> payload.manager.runtime.v1.CommitPayloadResponse
-	15, // 15: payload.manager.services.v1.PayloadCatalogService.Delete:output_type -> google.protobuf.Empty
-	16, // 16: payload.manager.services.v1.PayloadCatalogService.Promote:output_type -> payload.manager.runtime.v1.PromoteResponse
-	17, // 17: payload.manager.services.v1.PayloadCatalogService.Spill:output_type -> payload.manager.runtime.v1.SpillResponse
-	15, // 18: payload.manager.services.v1.PayloadCatalogService.Prefetch:output_type -> google.protobuf.Empty
-	15, // 19: payload.manager.services.v1.PayloadCatalogService.Pin:output_type -> google.protobuf.Empty
-	15, // 20: payload.manager.services.v1.PayloadCatalogService.Unpin:output_type -> google.protobuf.Empty
-	15, // 21: payload.manager.services.v1.PayloadCatalogService.AddLineage:output_type -> google.protobuf.Empty
-	18, // 22: payload.manager.services.v1.PayloadCatalogService.GetLineage:output_type -> payload.manager.catalog.v1.GetLineageResponse
-	19, // 23: payload.manager.services.v1.PayloadCatalogService.UpdatePayloadMetadata:output_type -> payload.manager.catalog.v1.UpdatePayloadMetadataResponse
-	20, // 24: payload.manager.services.v1.PayloadCatalogService.AppendPayloadMetadataEvent:output_type -> payload.manager.catalog.v1.AppendPayloadMetadataEventResponse
-	21, // 25: payload.manager.services.v1.PayloadCatalogService.ListPayloads:output_type -> payload.manager.runtime.v1.ListPayloadsResponse
-	13, // [13:26] is the sub-list for method output_type
-	0,  // [0:13] is the sub-list for method input_type
+	13, // 13: payload.manager.services.v1.PayloadCatalogService.ImportPayload:input_type -> payload.manager.runtime.v1.ImportPayloadRequest
+	14, // 14: payload.manager.services.v1.PayloadCatalogService.AllocatePayload:output_type -> payload.manager.runtime.v1.AllocatePayloadResponse
+	15, // 15: payload.manager.services.v1.PayloadCatalogService.CommitPayload:output_type -> payload.manager.runtime.v1.CommitPayloadResponse
+	16, // 16: payload.manager.services.v1.PayloadCatalogService.Delete:output_type -> google.protobuf.Empty
+	17, // 17: payload.manager.services.v1.PayloadCatalogService.Promote:output_type -> payload.manager.runtime.v1.PromoteResponse
+	18, // 18: payload.manager.services.v1.PayloadCatalogService.Spill:output_type -> payload.manager.runtime.v1.SpillResponse
+	16, // 19: payload.manager.services.v1.PayloadCatalogService.Prefetch:output_type -> google.protobuf.Empty
+	16, // 20: payload.manager.services.v1.PayloadCatalogService.Pin:output_type -> google.protobuf.Empty
+	16, // 21: payload.manager.services.v1.PayloadCatalogService.Unpin:output_type -> google.protobuf.Empty
+	16, // 22: payload.manager.services.v1.PayloadCatalogService.AddLineage:output_type -> google.protobuf.Empty
+	19, // 23: payload.manager.services.v1.PayloadCatalogService.GetLineage:output_type -> payload.manager.catalog.v1.GetLineageResponse
+	20, // 24: payload.manager.services.v1.PayloadCatalogService.UpdatePayloadMetadata:output_type -> payload.manager.catalog.v1.UpdatePayloadMetadataResponse
+	21, // 25: payload.manager.services.v1.PayloadCatalogService.AppendPayloadMetadataEvent:output_type -> payload.manager.catalog.v1.AppendPayloadMetadataEventResponse
+	22, // 26: payload.manager.services.v1.PayloadCatalogService.ListPayloads:output_type -> payload.manager.runtime.v1.ListPayloadsResponse
+	23, // 27: payload.manager.services.v1.PayloadCatalogService.ImportPayload:output_type -> payload.manager.runtime.v1.ImportPayloadResponse
+	14, // [14:28] is the sub-list for method output_type
+	0,  // [0:14] is the sub-list for method input_type
 	0,  // [0:0] is the sub-list for extension type_name
 	0,  // [0:0] is the sub-list for extension extendee
 	0,  // [0:0] is the sub-list for field type_name

@@ -68,6 +68,47 @@
         }
       }
     },
+    "v1RingStats": {
+      "type": "object",
+      "properties": {
+        "ringId": {
+          "type": "string"
+        },
+        "slotsTotal": {
+          "type": "integer",
+          "format": "int64",
+          "description": "Configured slot count, and how many of those AcquireRingSlot could\ntake right now. slots_available hitting 0 is what makes a producer\nsee RESOURCE_EXHAUSTED and drop a capture."
+        },
+        "slotsAvailable": {
+          "type": "integer",
+          "format": "int64"
+        },
+        "slotsWriting": {
+          "type": "integer",
+          "format": "int64",
+          "description": "Where the unavailable ones went: held by a producer mid-write, or\npinned by at least one consumer's read lease."
+        },
+        "slotsLeased": {
+          "type": "integer",
+          "format": "int64"
+        },
+        "leasesActive": {
+          "type": "string",
+          "format": "uint64",
+          "description": "Sum of per-slot refcounts — several consumers may hold the same slot,\nso this can exceed slots_leased."
+        },
+        "slotsReclaimed": {
+          "type": "string",
+          "format": "uint64",
+          "description": "Cumulative count of slots this ring has had to take back from a\nproducer that never committed, i.e. one that died mid-capture.\nMonotonic for the life of the process; any increase is worth an alert."
+        },
+        "slotCapacityBytes": {
+          "type": "string",
+          "format": "uint64"
+        }
+      },
+      "description": "Per-ring slot accounting for TIER_RAM_RING.\n\nRings are not payloads: slots are pre-allocated and recycled in place,\nso the payload counts and tier bytes above never describe them. What an\noperator needs instead is headroom (how many slots can be acquired right\nnow) and whether reservations are being lost."
+    },
     "v1StatsResponse": {
       "type": "object",
       "properties": {
@@ -102,6 +143,14 @@
         "bytesObject": {
           "type": "string",
           "format": "uint64"
+        },
+        "rings": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1RingStats"
+          },
+          "description": "One entry per configured ring; empty when no ring tier is configured."
         }
       }
     }

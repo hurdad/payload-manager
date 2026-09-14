@@ -103,8 +103,12 @@ func (x *AllocatePayloadRequest) GetEvictionPolicy() *v1.EvictionPolicy {
 type AllocatePayloadResponse struct {
 	state             protoimpl.MessageState `protogen:"open.v1"`
 	PayloadDescriptor *v1.PayloadDescriptor  `protobuf:"bytes,1,opt,name=payload_descriptor,json=payloadDescriptor,proto3" json:"payload_descriptor,omitempty"`
-	unknownFields     protoimpl.UnknownFields
-	sizeCache         protoimpl.SizeCache
+	// Only set when preferred_tier == TIER_OBJECT.
+	// Clients must upload payload bytes to this URI before calling ImportPayload.
+	// No bytes are transmitted via gRPC.
+	ObjectUploadPath string `protobuf:"bytes,2,opt,name=object_upload_path,json=objectUploadPath,proto3" json:"object_upload_path,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *AllocatePayloadResponse) Reset() {
@@ -144,6 +148,104 @@ func (x *AllocatePayloadResponse) GetPayloadDescriptor() *v1.PayloadDescriptor {
 	return nil
 }
 
+func (x *AllocatePayloadResponse) GetObjectUploadPath() string {
+	if x != nil {
+		return x.ObjectUploadPath
+	}
+	return ""
+}
+
+// Register an externally-uploaded object-tier payload with the manager.
+// The client uploads bytes to object_upload_path (from AllocatePayloadResponse)
+// then calls this RPC to transfer ownership. No bytes transit gRPC.
+type ImportPayloadRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Id            *v1.PayloadID          `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	SizeBytes     uint64                 `protobuf:"varint,2,opt,name=size_bytes,json=sizeBytes,proto3" json:"size_bytes,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ImportPayloadRequest) Reset() {
+	*x = ImportPayloadRequest{}
+	mi := &file_payload_manager_runtime_v1_lifecycle_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ImportPayloadRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ImportPayloadRequest) ProtoMessage() {}
+
+func (x *ImportPayloadRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_payload_manager_runtime_v1_lifecycle_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ImportPayloadRequest.ProtoReflect.Descriptor instead.
+func (*ImportPayloadRequest) Descriptor() ([]byte, []int) {
+	return file_payload_manager_runtime_v1_lifecycle_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *ImportPayloadRequest) GetId() *v1.PayloadID {
+	if x != nil {
+		return x.Id
+	}
+	return nil
+}
+
+func (x *ImportPayloadRequest) GetSizeBytes() uint64 {
+	if x != nil {
+		return x.SizeBytes
+	}
+	return 0
+}
+
+type ImportPayloadResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ImportPayloadResponse) Reset() {
+	*x = ImportPayloadResponse{}
+	mi := &file_payload_manager_runtime_v1_lifecycle_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ImportPayloadResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ImportPayloadResponse) ProtoMessage() {}
+
+func (x *ImportPayloadResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_payload_manager_runtime_v1_lifecycle_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ImportPayloadResponse.ProtoReflect.Descriptor instead.
+func (*ImportPayloadResponse) Descriptor() ([]byte, []int) {
+	return file_payload_manager_runtime_v1_lifecycle_proto_rawDescGZIP(), []int{3}
+}
+
 type CommitPayloadRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Id            *v1.PayloadID          `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
@@ -153,7 +255,7 @@ type CommitPayloadRequest struct {
 
 func (x *CommitPayloadRequest) Reset() {
 	*x = CommitPayloadRequest{}
-	mi := &file_payload_manager_runtime_v1_lifecycle_proto_msgTypes[2]
+	mi := &file_payload_manager_runtime_v1_lifecycle_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -165,7 +267,7 @@ func (x *CommitPayloadRequest) String() string {
 func (*CommitPayloadRequest) ProtoMessage() {}
 
 func (x *CommitPayloadRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_payload_manager_runtime_v1_lifecycle_proto_msgTypes[2]
+	mi := &file_payload_manager_runtime_v1_lifecycle_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -178,7 +280,7 @@ func (x *CommitPayloadRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CommitPayloadRequest.ProtoReflect.Descriptor instead.
 func (*CommitPayloadRequest) Descriptor() ([]byte, []int) {
-	return file_payload_manager_runtime_v1_lifecycle_proto_rawDescGZIP(), []int{2}
+	return file_payload_manager_runtime_v1_lifecycle_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *CommitPayloadRequest) GetId() *v1.PayloadID {
@@ -197,7 +299,7 @@ type CommitPayloadResponse struct {
 
 func (x *CommitPayloadResponse) Reset() {
 	*x = CommitPayloadResponse{}
-	mi := &file_payload_manager_runtime_v1_lifecycle_proto_msgTypes[3]
+	mi := &file_payload_manager_runtime_v1_lifecycle_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -209,7 +311,7 @@ func (x *CommitPayloadResponse) String() string {
 func (*CommitPayloadResponse) ProtoMessage() {}
 
 func (x *CommitPayloadResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_payload_manager_runtime_v1_lifecycle_proto_msgTypes[3]
+	mi := &file_payload_manager_runtime_v1_lifecycle_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -222,7 +324,7 @@ func (x *CommitPayloadResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CommitPayloadResponse.ProtoReflect.Descriptor instead.
 func (*CommitPayloadResponse) Descriptor() ([]byte, []int) {
-	return file_payload_manager_runtime_v1_lifecycle_proto_rawDescGZIP(), []int{3}
+	return file_payload_manager_runtime_v1_lifecycle_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *CommitPayloadResponse) GetPayloadDescriptor() *v1.PayloadDescriptor {
@@ -243,7 +345,7 @@ type DeleteRequest struct {
 
 func (x *DeleteRequest) Reset() {
 	*x = DeleteRequest{}
-	mi := &file_payload_manager_runtime_v1_lifecycle_proto_msgTypes[4]
+	mi := &file_payload_manager_runtime_v1_lifecycle_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -255,7 +357,7 @@ func (x *DeleteRequest) String() string {
 func (*DeleteRequest) ProtoMessage() {}
 
 func (x *DeleteRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_payload_manager_runtime_v1_lifecycle_proto_msgTypes[4]
+	mi := &file_payload_manager_runtime_v1_lifecycle_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -268,7 +370,7 @@ func (x *DeleteRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteRequest.ProtoReflect.Descriptor instead.
 func (*DeleteRequest) Descriptor() ([]byte, []int) {
-	return file_payload_manager_runtime_v1_lifecycle_proto_rawDescGZIP(), []int{4}
+	return file_payload_manager_runtime_v1_lifecycle_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *DeleteRequest) GetId() *v1.PayloadID {
@@ -301,7 +403,7 @@ type PayloadSummary struct {
 
 func (x *PayloadSummary) Reset() {
 	*x = PayloadSummary{}
-	mi := &file_payload_manager_runtime_v1_lifecycle_proto_msgTypes[5]
+	mi := &file_payload_manager_runtime_v1_lifecycle_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -313,7 +415,7 @@ func (x *PayloadSummary) String() string {
 func (*PayloadSummary) ProtoMessage() {}
 
 func (x *PayloadSummary) ProtoReflect() protoreflect.Message {
-	mi := &file_payload_manager_runtime_v1_lifecycle_proto_msgTypes[5]
+	mi := &file_payload_manager_runtime_v1_lifecycle_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -326,7 +428,7 @@ func (x *PayloadSummary) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PayloadSummary.ProtoReflect.Descriptor instead.
 func (*PayloadSummary) Descriptor() ([]byte, []int) {
-	return file_payload_manager_runtime_v1_lifecycle_proto_rawDescGZIP(), []int{5}
+	return file_payload_manager_runtime_v1_lifecycle_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *PayloadSummary) GetId() *v1.PayloadID {
@@ -393,7 +495,7 @@ type ListPayloadsRequest struct {
 
 func (x *ListPayloadsRequest) Reset() {
 	*x = ListPayloadsRequest{}
-	mi := &file_payload_manager_runtime_v1_lifecycle_proto_msgTypes[6]
+	mi := &file_payload_manager_runtime_v1_lifecycle_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -405,7 +507,7 @@ func (x *ListPayloadsRequest) String() string {
 func (*ListPayloadsRequest) ProtoMessage() {}
 
 func (x *ListPayloadsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_payload_manager_runtime_v1_lifecycle_proto_msgTypes[6]
+	mi := &file_payload_manager_runtime_v1_lifecycle_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -418,7 +520,7 @@ func (x *ListPayloadsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListPayloadsRequest.ProtoReflect.Descriptor instead.
 func (*ListPayloadsRequest) Descriptor() ([]byte, []int) {
-	return file_payload_manager_runtime_v1_lifecycle_proto_rawDescGZIP(), []int{6}
+	return file_payload_manager_runtime_v1_lifecycle_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *ListPayloadsRequest) GetTierFilter() v1.Tier {
@@ -455,7 +557,7 @@ type ListPayloadsResponse struct {
 
 func (x *ListPayloadsResponse) Reset() {
 	*x = ListPayloadsResponse{}
-	mi := &file_payload_manager_runtime_v1_lifecycle_proto_msgTypes[7]
+	mi := &file_payload_manager_runtime_v1_lifecycle_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -467,7 +569,7 @@ func (x *ListPayloadsResponse) String() string {
 func (*ListPayloadsResponse) ProtoMessage() {}
 
 func (x *ListPayloadsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_payload_manager_runtime_v1_lifecycle_proto_msgTypes[7]
+	mi := &file_payload_manager_runtime_v1_lifecycle_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -480,7 +582,7 @@ func (x *ListPayloadsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListPayloadsResponse.ProtoReflect.Descriptor instead.
 func (*ListPayloadsResponse) Descriptor() ([]byte, []int) {
-	return file_payload_manager_runtime_v1_lifecycle_proto_rawDescGZIP(), []int{7}
+	return file_payload_manager_runtime_v1_lifecycle_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *ListPayloadsResponse) GetPayloads() []*PayloadSummary {
@@ -515,9 +617,15 @@ const file_payload_manager_runtime_v1_lifecycle_proto_rawDesc = "" +
 	"\x0epreferred_tier\x18\x02 \x01(\x0e2\x1d.payload.manager.core.v1.TierR\rpreferredTier\x12\x15\n" +
 	"\x06ttl_ms\x18\x03 \x01(\x04R\x05ttlMs\x12\x19\n" +
 	"\bno_evict\x18\x04 \x01(\bR\anoEvict\x12P\n" +
-	"\x0feviction_policy\x18\x05 \x01(\v2'.payload.manager.core.v1.EvictionPolicyR\x0eevictionPolicy\"t\n" +
+	"\x0feviction_policy\x18\x05 \x01(\v2'.payload.manager.core.v1.EvictionPolicyR\x0eevictionPolicy\"\xa2\x01\n" +
 	"\x17AllocatePayloadResponse\x12Y\n" +
-	"\x12payload_descriptor\x18\x01 \x01(\v2*.payload.manager.core.v1.PayloadDescriptorR\x11payloadDescriptor\"J\n" +
+	"\x12payload_descriptor\x18\x01 \x01(\v2*.payload.manager.core.v1.PayloadDescriptorR\x11payloadDescriptor\x12,\n" +
+	"\x12object_upload_path\x18\x02 \x01(\tR\x10objectUploadPath\"i\n" +
+	"\x14ImportPayloadRequest\x122\n" +
+	"\x02id\x18\x01 \x01(\v2\".payload.manager.core.v1.PayloadIDR\x02id\x12\x1d\n" +
+	"\n" +
+	"size_bytes\x18\x02 \x01(\x04R\tsizeBytes\"\x17\n" +
+	"\x15ImportPayloadResponse\"J\n" +
 	"\x14CommitPayloadRequest\x122\n" +
 	"\x02id\x18\x01 \x01(\v2\".payload.manager.core.v1.PayloadIDR\x02id\"r\n" +
 	"\x15CommitPayloadResponse\x12Y\n" +
@@ -559,39 +667,42 @@ func file_payload_manager_runtime_v1_lifecycle_proto_rawDescGZIP() []byte {
 	return file_payload_manager_runtime_v1_lifecycle_proto_rawDescData
 }
 
-var file_payload_manager_runtime_v1_lifecycle_proto_msgTypes = make([]protoimpl.MessageInfo, 8)
+var file_payload_manager_runtime_v1_lifecycle_proto_msgTypes = make([]protoimpl.MessageInfo, 10)
 var file_payload_manager_runtime_v1_lifecycle_proto_goTypes = []any{
 	(*AllocatePayloadRequest)(nil),  // 0: payload.manager.runtime.v1.AllocatePayloadRequest
 	(*AllocatePayloadResponse)(nil), // 1: payload.manager.runtime.v1.AllocatePayloadResponse
-	(*CommitPayloadRequest)(nil),    // 2: payload.manager.runtime.v1.CommitPayloadRequest
-	(*CommitPayloadResponse)(nil),   // 3: payload.manager.runtime.v1.CommitPayloadResponse
-	(*DeleteRequest)(nil),           // 4: payload.manager.runtime.v1.DeleteRequest
-	(*PayloadSummary)(nil),          // 5: payload.manager.runtime.v1.PayloadSummary
-	(*ListPayloadsRequest)(nil),     // 6: payload.manager.runtime.v1.ListPayloadsRequest
-	(*ListPayloadsResponse)(nil),    // 7: payload.manager.runtime.v1.ListPayloadsResponse
-	(v1.Tier)(0),                    // 8: payload.manager.core.v1.Tier
-	(*v1.EvictionPolicy)(nil),       // 9: payload.manager.core.v1.EvictionPolicy
-	(*v1.PayloadDescriptor)(nil),    // 10: payload.manager.core.v1.PayloadDescriptor
-	(*v1.PayloadID)(nil),            // 11: payload.manager.core.v1.PayloadID
-	(v1.PayloadState)(0),            // 12: payload.manager.core.v1.PayloadState
+	(*ImportPayloadRequest)(nil),    // 2: payload.manager.runtime.v1.ImportPayloadRequest
+	(*ImportPayloadResponse)(nil),   // 3: payload.manager.runtime.v1.ImportPayloadResponse
+	(*CommitPayloadRequest)(nil),    // 4: payload.manager.runtime.v1.CommitPayloadRequest
+	(*CommitPayloadResponse)(nil),   // 5: payload.manager.runtime.v1.CommitPayloadResponse
+	(*DeleteRequest)(nil),           // 6: payload.manager.runtime.v1.DeleteRequest
+	(*PayloadSummary)(nil),          // 7: payload.manager.runtime.v1.PayloadSummary
+	(*ListPayloadsRequest)(nil),     // 8: payload.manager.runtime.v1.ListPayloadsRequest
+	(*ListPayloadsResponse)(nil),    // 9: payload.manager.runtime.v1.ListPayloadsResponse
+	(v1.Tier)(0),                    // 10: payload.manager.core.v1.Tier
+	(*v1.EvictionPolicy)(nil),       // 11: payload.manager.core.v1.EvictionPolicy
+	(*v1.PayloadDescriptor)(nil),    // 12: payload.manager.core.v1.PayloadDescriptor
+	(*v1.PayloadID)(nil),            // 13: payload.manager.core.v1.PayloadID
+	(v1.PayloadState)(0),            // 14: payload.manager.core.v1.PayloadState
 }
 var file_payload_manager_runtime_v1_lifecycle_proto_depIdxs = []int32{
-	8,  // 0: payload.manager.runtime.v1.AllocatePayloadRequest.preferred_tier:type_name -> payload.manager.core.v1.Tier
-	9,  // 1: payload.manager.runtime.v1.AllocatePayloadRequest.eviction_policy:type_name -> payload.manager.core.v1.EvictionPolicy
-	10, // 2: payload.manager.runtime.v1.AllocatePayloadResponse.payload_descriptor:type_name -> payload.manager.core.v1.PayloadDescriptor
-	11, // 3: payload.manager.runtime.v1.CommitPayloadRequest.id:type_name -> payload.manager.core.v1.PayloadID
-	10, // 4: payload.manager.runtime.v1.CommitPayloadResponse.payload_descriptor:type_name -> payload.manager.core.v1.PayloadDescriptor
-	11, // 5: payload.manager.runtime.v1.DeleteRequest.id:type_name -> payload.manager.core.v1.PayloadID
-	11, // 6: payload.manager.runtime.v1.PayloadSummary.id:type_name -> payload.manager.core.v1.PayloadID
-	8,  // 7: payload.manager.runtime.v1.PayloadSummary.tier:type_name -> payload.manager.core.v1.Tier
-	12, // 8: payload.manager.runtime.v1.PayloadSummary.state:type_name -> payload.manager.core.v1.PayloadState
-	8,  // 9: payload.manager.runtime.v1.ListPayloadsRequest.tier_filter:type_name -> payload.manager.core.v1.Tier
-	5,  // 10: payload.manager.runtime.v1.ListPayloadsResponse.payloads:type_name -> payload.manager.runtime.v1.PayloadSummary
-	11, // [11:11] is the sub-list for method output_type
-	11, // [11:11] is the sub-list for method input_type
-	11, // [11:11] is the sub-list for extension type_name
-	11, // [11:11] is the sub-list for extension extendee
-	0,  // [0:11] is the sub-list for field type_name
+	10, // 0: payload.manager.runtime.v1.AllocatePayloadRequest.preferred_tier:type_name -> payload.manager.core.v1.Tier
+	11, // 1: payload.manager.runtime.v1.AllocatePayloadRequest.eviction_policy:type_name -> payload.manager.core.v1.EvictionPolicy
+	12, // 2: payload.manager.runtime.v1.AllocatePayloadResponse.payload_descriptor:type_name -> payload.manager.core.v1.PayloadDescriptor
+	13, // 3: payload.manager.runtime.v1.ImportPayloadRequest.id:type_name -> payload.manager.core.v1.PayloadID
+	13, // 4: payload.manager.runtime.v1.CommitPayloadRequest.id:type_name -> payload.manager.core.v1.PayloadID
+	12, // 5: payload.manager.runtime.v1.CommitPayloadResponse.payload_descriptor:type_name -> payload.manager.core.v1.PayloadDescriptor
+	13, // 6: payload.manager.runtime.v1.DeleteRequest.id:type_name -> payload.manager.core.v1.PayloadID
+	13, // 7: payload.manager.runtime.v1.PayloadSummary.id:type_name -> payload.manager.core.v1.PayloadID
+	10, // 8: payload.manager.runtime.v1.PayloadSummary.tier:type_name -> payload.manager.core.v1.Tier
+	14, // 9: payload.manager.runtime.v1.PayloadSummary.state:type_name -> payload.manager.core.v1.PayloadState
+	10, // 10: payload.manager.runtime.v1.ListPayloadsRequest.tier_filter:type_name -> payload.manager.core.v1.Tier
+	7,  // 11: payload.manager.runtime.v1.ListPayloadsResponse.payloads:type_name -> payload.manager.runtime.v1.PayloadSummary
+	12, // [12:12] is the sub-list for method output_type
+	12, // [12:12] is the sub-list for method input_type
+	12, // [12:12] is the sub-list for extension type_name
+	12, // [12:12] is the sub-list for extension extendee
+	0,  // [0:12] is the sub-list for field type_name
 }
 
 func init() { file_payload_manager_runtime_v1_lifecycle_proto_init() }
@@ -605,7 +716,7 @@ func file_payload_manager_runtime_v1_lifecycle_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_payload_manager_runtime_v1_lifecycle_proto_rawDesc), len(file_payload_manager_runtime_v1_lifecycle_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   8,
+			NumMessages:   10,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

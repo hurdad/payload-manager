@@ -1,5 +1,25 @@
 version: v2
 modules:
-  - path: api
+  # Single proto root. This tracked api/ until the roots were consolidated
+  # into proto/, which is when `buf generate` silently stopped producing
+  # anything — the module matched no .proto files, so the Go stubs froze at
+  # whatever was last generated and quietly fell behind the schema.
+  - path: proto
+    excludes:
+      # The googleapis protos are vendored here for the C++ build, which
+      # resolves them locally and hard-errors if they go missing. buf takes
+      # them from the pinned buf.build dep below instead, so that the Go
+      # stubs keep importing the canonical
+      # google.golang.org/genproto/googleapis/api package rather than a
+      # second local copy of it. Listing them in both places is an error.
+      - proto/google
+      # Node-local runtime configuration and Arrow storage settings. These
+      # are deliberately not part of the client-facing API: the C++ build
+      # keeps them in their own libraries that no client links, and the
+      # Python generation lists only the public protos. The gateway is a
+      # client, so generating Go bindings for them here would reintroduce
+      # exactly the reach that separation exists to prevent.
+      - proto/config
+      - proto/arrow
 deps:
   - buf.build/googleapis/googleapis

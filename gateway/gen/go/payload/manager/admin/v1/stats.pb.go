@@ -60,6 +60,122 @@ func (*StatsRequest) Descriptor() ([]byte, []int) {
 	return file_payload_manager_admin_v1_stats_proto_rawDescGZIP(), []int{0}
 }
 
+// Per-ring slot accounting for TIER_RAM_RING.
+//
+// Rings are not payloads: slots are pre-allocated and recycled in place,
+// so the payload counts and tier bytes above never describe them. What an
+// operator needs instead is headroom (how many slots can be acquired right
+// now) and whether reservations are being lost.
+type RingStats struct {
+	state  protoimpl.MessageState `protogen:"open.v1"`
+	RingId string                 `protobuf:"bytes,1,opt,name=ring_id,json=ringId,proto3" json:"ring_id,omitempty"`
+	// Configured slot count, and how many of those AcquireRingSlot could
+	// take right now. slots_available hitting 0 is what makes a producer
+	// see RESOURCE_EXHAUSTED and drop a capture.
+	SlotsTotal     uint32 `protobuf:"varint,2,opt,name=slots_total,json=slotsTotal,proto3" json:"slots_total,omitempty"`
+	SlotsAvailable uint32 `protobuf:"varint,3,opt,name=slots_available,json=slotsAvailable,proto3" json:"slots_available,omitempty"`
+	// Where the unavailable ones went: held by a producer mid-write, or
+	// pinned by at least one consumer's read lease.
+	SlotsWriting uint32 `protobuf:"varint,4,opt,name=slots_writing,json=slotsWriting,proto3" json:"slots_writing,omitempty"`
+	SlotsLeased  uint32 `protobuf:"varint,5,opt,name=slots_leased,json=slotsLeased,proto3" json:"slots_leased,omitempty"`
+	// Sum of per-slot refcounts — several consumers may hold the same slot,
+	// so this can exceed slots_leased.
+	LeasesActive uint64 `protobuf:"varint,6,opt,name=leases_active,json=leasesActive,proto3" json:"leases_active,omitempty"`
+	// Cumulative count of slots this ring has had to take back from a
+	// producer that never committed, i.e. one that died mid-capture.
+	// Monotonic for the life of the process; any increase is worth an alert.
+	SlotsReclaimed    uint64 `protobuf:"varint,7,opt,name=slots_reclaimed,json=slotsReclaimed,proto3" json:"slots_reclaimed,omitempty"`
+	SlotCapacityBytes uint64 `protobuf:"varint,8,opt,name=slot_capacity_bytes,json=slotCapacityBytes,proto3" json:"slot_capacity_bytes,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
+}
+
+func (x *RingStats) Reset() {
+	*x = RingStats{}
+	mi := &file_payload_manager_admin_v1_stats_proto_msgTypes[1]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RingStats) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RingStats) ProtoMessage() {}
+
+func (x *RingStats) ProtoReflect() protoreflect.Message {
+	mi := &file_payload_manager_admin_v1_stats_proto_msgTypes[1]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RingStats.ProtoReflect.Descriptor instead.
+func (*RingStats) Descriptor() ([]byte, []int) {
+	return file_payload_manager_admin_v1_stats_proto_rawDescGZIP(), []int{1}
+}
+
+func (x *RingStats) GetRingId() string {
+	if x != nil {
+		return x.RingId
+	}
+	return ""
+}
+
+func (x *RingStats) GetSlotsTotal() uint32 {
+	if x != nil {
+		return x.SlotsTotal
+	}
+	return 0
+}
+
+func (x *RingStats) GetSlotsAvailable() uint32 {
+	if x != nil {
+		return x.SlotsAvailable
+	}
+	return 0
+}
+
+func (x *RingStats) GetSlotsWriting() uint32 {
+	if x != nil {
+		return x.SlotsWriting
+	}
+	return 0
+}
+
+func (x *RingStats) GetSlotsLeased() uint32 {
+	if x != nil {
+		return x.SlotsLeased
+	}
+	return 0
+}
+
+func (x *RingStats) GetLeasesActive() uint64 {
+	if x != nil {
+		return x.LeasesActive
+	}
+	return 0
+}
+
+func (x *RingStats) GetSlotsReclaimed() uint64 {
+	if x != nil {
+		return x.SlotsReclaimed
+	}
+	return 0
+}
+
+func (x *RingStats) GetSlotCapacityBytes() uint64 {
+	if x != nil {
+		return x.SlotCapacityBytes
+	}
+	return 0
+}
+
 type StatsResponse struct {
 	state          protoimpl.MessageState `protogen:"open.v1"`
 	PayloadsGpu    uint64                 `protobuf:"varint,1,opt,name=payloads_gpu,json=payloadsGpu,proto3" json:"payloads_gpu,omitempty"`
@@ -70,13 +186,15 @@ type StatsResponse struct {
 	BytesRam       uint64                 `protobuf:"varint,5,opt,name=bytes_ram,json=bytesRam,proto3" json:"bytes_ram,omitempty"`
 	BytesDisk      uint64                 `protobuf:"varint,6,opt,name=bytes_disk,json=bytesDisk,proto3" json:"bytes_disk,omitempty"`
 	BytesObject    uint64                 `protobuf:"varint,8,opt,name=bytes_object,json=bytesObject,proto3" json:"bytes_object,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	// One entry per configured ring; empty when no ring tier is configured.
+	Rings         []*RingStats `protobuf:"bytes,9,rep,name=rings,proto3" json:"rings,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *StatsResponse) Reset() {
 	*x = StatsResponse{}
-	mi := &file_payload_manager_admin_v1_stats_proto_msgTypes[1]
+	mi := &file_payload_manager_admin_v1_stats_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -88,7 +206,7 @@ func (x *StatsResponse) String() string {
 func (*StatsResponse) ProtoMessage() {}
 
 func (x *StatsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_payload_manager_admin_v1_stats_proto_msgTypes[1]
+	mi := &file_payload_manager_admin_v1_stats_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -101,7 +219,7 @@ func (x *StatsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StatsResponse.ProtoReflect.Descriptor instead.
 func (*StatsResponse) Descriptor() ([]byte, []int) {
-	return file_payload_manager_admin_v1_stats_proto_rawDescGZIP(), []int{1}
+	return file_payload_manager_admin_v1_stats_proto_rawDescGZIP(), []int{2}
 }
 
 func (x *StatsResponse) GetPayloadsGpu() uint64 {
@@ -160,12 +278,29 @@ func (x *StatsResponse) GetBytesObject() uint64 {
 	return 0
 }
 
+func (x *StatsResponse) GetRings() []*RingStats {
+	if x != nil {
+		return x.Rings
+	}
+	return nil
+}
+
 var File_payload_manager_admin_v1_stats_proto protoreflect.FileDescriptor
 
 const file_payload_manager_admin_v1_stats_proto_rawDesc = "" +
 	"\n" +
 	"$payload/manager/admin/v1/stats.proto\x12\x18payload.manager.admin.v1\"\x0e\n" +
-	"\fStatsRequest\"\x9f\x02\n" +
+	"\fStatsRequest\"\xb4\x02\n" +
+	"\tRingStats\x12\x17\n" +
+	"\aring_id\x18\x01 \x01(\tR\x06ringId\x12\x1f\n" +
+	"\vslots_total\x18\x02 \x01(\rR\n" +
+	"slotsTotal\x12'\n" +
+	"\x0fslots_available\x18\x03 \x01(\rR\x0eslotsAvailable\x12#\n" +
+	"\rslots_writing\x18\x04 \x01(\rR\fslotsWriting\x12!\n" +
+	"\fslots_leased\x18\x05 \x01(\rR\vslotsLeased\x12#\n" +
+	"\rleases_active\x18\x06 \x01(\x04R\fleasesActive\x12'\n" +
+	"\x0fslots_reclaimed\x18\a \x01(\x04R\x0eslotsReclaimed\x12.\n" +
+	"\x13slot_capacity_bytes\x18\b \x01(\x04R\x11slotCapacityBytes\"\xda\x02\n" +
 	"\rStatsResponse\x12!\n" +
 	"\fpayloads_gpu\x18\x01 \x01(\x04R\vpayloadsGpu\x12!\n" +
 	"\fpayloads_ram\x18\x02 \x01(\x04R\vpayloadsRam\x12#\n" +
@@ -175,7 +310,8 @@ const file_payload_manager_admin_v1_stats_proto_rawDesc = "" +
 	"\tbytes_ram\x18\x05 \x01(\x04R\bbytesRam\x12\x1d\n" +
 	"\n" +
 	"bytes_disk\x18\x06 \x01(\x04R\tbytesDisk\x12!\n" +
-	"\fbytes_object\x18\b \x01(\x04R\vbytesObjectB\x89\x02\n" +
+	"\fbytes_object\x18\b \x01(\x04R\vbytesObject\x129\n" +
+	"\x05rings\x18\t \x03(\v2#.payload.manager.admin.v1.RingStatsR\x05ringsB\x89\x02\n" +
 	"\x1ccom.payload.manager.admin.v1B\n" +
 	"StatsProtoP\x01ZZgithub.com/payload-manager/payload-manager/gateway/gen/go/payload/manager/admin/v1;adminv1\xa2\x02\x03PMA\xaa\x02\x18Payload.Manager.Admin.V1\xca\x02\x18Payload\\Manager\\Admin\\V1\xe2\x02$Payload\\Manager\\Admin\\V1\\GPBMetadata\xea\x02\x1bPayload::Manager::Admin::V1b\x06proto3"
 
@@ -191,17 +327,19 @@ func file_payload_manager_admin_v1_stats_proto_rawDescGZIP() []byte {
 	return file_payload_manager_admin_v1_stats_proto_rawDescData
 }
 
-var file_payload_manager_admin_v1_stats_proto_msgTypes = make([]protoimpl.MessageInfo, 2)
+var file_payload_manager_admin_v1_stats_proto_msgTypes = make([]protoimpl.MessageInfo, 3)
 var file_payload_manager_admin_v1_stats_proto_goTypes = []any{
 	(*StatsRequest)(nil),  // 0: payload.manager.admin.v1.StatsRequest
-	(*StatsResponse)(nil), // 1: payload.manager.admin.v1.StatsResponse
+	(*RingStats)(nil),     // 1: payload.manager.admin.v1.RingStats
+	(*StatsResponse)(nil), // 2: payload.manager.admin.v1.StatsResponse
 }
 var file_payload_manager_admin_v1_stats_proto_depIdxs = []int32{
-	0, // [0:0] is the sub-list for method output_type
-	0, // [0:0] is the sub-list for method input_type
-	0, // [0:0] is the sub-list for extension type_name
-	0, // [0:0] is the sub-list for extension extendee
-	0, // [0:0] is the sub-list for field type_name
+	1, // 0: payload.manager.admin.v1.StatsResponse.rings:type_name -> payload.manager.admin.v1.RingStats
+	1, // [1:1] is the sub-list for method output_type
+	1, // [1:1] is the sub-list for method input_type
+	1, // [1:1] is the sub-list for extension type_name
+	1, // [1:1] is the sub-list for extension extendee
+	0, // [0:1] is the sub-list for field type_name
 }
 
 func init() { file_payload_manager_admin_v1_stats_proto_init() }
@@ -215,7 +353,7 @@ func file_payload_manager_admin_v1_stats_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_payload_manager_admin_v1_stats_proto_rawDesc), len(file_payload_manager_admin_v1_stats_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   2,
+			NumMessages:   3,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

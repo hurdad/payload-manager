@@ -37,7 +37,7 @@
         "parameters": [
           {
             "name": "tierFilter",
-            "description": "Optional tier filter; TIER_UNSPECIFIED means return all tiers.\n\n - TIER_UNSPECIFIED: Not set; treated as an error in most contexts.\n - TIER_GPU: GPU device memory (fastest, smallest, most volatile).\n - TIER_RAM: Host DRAM / shared-memory segment.\n - TIER_DISK: Local NVMe/SSD/HDD (durable, larger, slower than RAM).\n - TIER_OBJECT: Remote object storage (S3/GCS/Azure; durable, largest).",
+            "description": "Optional tier filter; TIER_UNSPECIFIED means return all tiers.\n\n - TIER_UNSPECIFIED: Not set; treated as an error in most contexts.\n - TIER_GPU: GPU device memory (fastest, smallest, most volatile).\n - TIER_RAM: Host DRAM / shared-memory segment.\n - TIER_DISK: Local NVMe/SSD/HDD (durable, larger, slower than RAM).\n - TIER_OBJECT: Remote object storage (S3/GCS/Azure; durable, largest).\n - TIER_VOID: Discard on eviction: payload is deleted rather than moved.\n - TIER_RAM_RING: Pre-allocated /dev/shm ring of N fixed slots, rotated across",
             "in": "query",
             "required": false,
             "type": "string",
@@ -46,7 +46,9 @@
               "TIER_GPU",
               "TIER_RAM",
               "TIER_DISK",
-              "TIER_OBJECT"
+              "TIER_OBJECT",
+              "TIER_VOID",
+              "TIER_RAM_RING"
             ],
             "default": "TIER_UNSPECIFIED"
           },
@@ -251,6 +253,47 @@
             "required": true,
             "schema": {
               "$ref": "#/definitions/PayloadCatalogServiceCommitPayloadBody"
+            }
+          }
+        ],
+        "tags": [
+          "PayloadCatalogService"
+        ]
+      }
+    },
+    "/v1/payloads/{id.value}/import": {
+      "post": {
+        "summary": "Register an externally-uploaded object-tier payload as DURABLE.",
+        "description": "The client:\n1. Calls AllocatePayload with preferred_tier=TIER_OBJECT and receives\nobject_upload_path in the response.\n2. Uploads payload bytes directly to object_upload_path via Arrow\nfilesystem (no bytes transit gRPC).\n3. Calls ImportPayload to hand ownership to the manager.\n\nThe manager writes the sidecar metadata and transitions the payload\nto PAYLOAD_STATE_DURABLE.",
+        "operationId": "PayloadCatalogService_ImportPayload",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1ImportPayloadResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id.value",
+            "in": "path",
+            "required": true,
+            "type": "string",
+            "format": "byte"
+          },
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/PayloadCatalogServiceImportPayloadBody"
             }
           }
         ],
@@ -585,6 +628,20 @@
         }
       }
     },
+    "PayloadCatalogServiceImportPayloadBody": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "object",
+          "description": "Canonical payload identifier.\n\nMUST contain exactly 16 bytes (binary RFC4122 UUID).\nThe server rejects any other length.\n\nThis is intentionally NOT a string to avoid formatting ambiguity."
+        },
+        "sizeBytes": {
+          "type": "string",
+          "format": "uint64"
+        }
+      },
+      "description": "Register an externally-uploaded object-tier payload with the manager.\nThe client uploads bytes to object_upload_path (from AllocatePayloadResponse)\nthen calls this RPC to transfer ownership. No bytes transit gRPC."
+    },
     "PayloadCatalogServicePinBody": {
       "type": "object",
       "properties": {
@@ -726,6 +783,10 @@
       "properties": {
         "payloadDescriptor": {
           "$ref": "#/definitions/v1PayloadDescriptor"
+        },
+        "objectUploadPath": {
+          "type": "string",
+          "description": "Only set when preferred_tier == TIER_OBJECT.\nClients must upload payload bytes to this URI before calling ImportPayload.\nNo bytes are transmitted via gRPC."
         }
       }
     },
@@ -828,6 +889,9 @@
           "format": "uint64"
         }
       }
+    },
+    "v1ImportPayloadResponse": {
+      "type": "object"
     },
     "v1LineageEdge": {
       "type": "object",
@@ -1086,10 +1150,12 @@
         "TIER_GPU",
         "TIER_RAM",
         "TIER_DISK",
-        "TIER_OBJECT"
+        "TIER_OBJECT",
+        "TIER_VOID",
+        "TIER_RAM_RING"
       ],
       "default": "TIER_UNSPECIFIED",
-      "description": "Ordered from fastest → most durable.\nHigher tiers may not always be available.\n\n - TIER_UNSPECIFIED: Not set; treated as an error in most contexts.\n - TIER_GPU: GPU device memory (fastest, smallest, most volatile).\n - TIER_RAM: Host DRAM / shared-memory segment.\n - TIER_DISK: Local NVMe/SSD/HDD (durable, larger, slower than RAM).\n - TIER_OBJECT: Remote object storage (S3/GCS/Azure; durable, largest)."
+      "description": "Ordered from fastest → most durable.\nHigher tiers may not always be available.\n\n - TIER_UNSPECIFIED: Not set; treated as an error in most contexts.\n - TIER_GPU: GPU device memory (fastest, smallest, most volatile).\n - TIER_RAM: Host DRAM / shared-memory segment.\n - TIER_DISK: Local NVMe/SSD/HDD (durable, larger, slower than RAM).\n - TIER_OBJECT: Remote object storage (S3/GCS/Azure; durable, largest).\n - TIER_VOID: Discard on eviction: payload is deleted rather than moved.\n - TIER_RAM_RING: Pre-allocated /dev/shm ring of N fixed slots, rotated across"
     },
     "v1UpdatePayloadMetadataResponse": {
       "type": "object",

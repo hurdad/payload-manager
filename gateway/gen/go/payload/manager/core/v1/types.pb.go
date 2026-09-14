@@ -31,6 +31,8 @@ const (
 	Tier_TIER_RAM         Tier = 2 // Host DRAM / shared-memory segment.
 	Tier_TIER_DISK        Tier = 3 // Local NVMe/SSD/HDD (durable, larger, slower than RAM).
 	Tier_TIER_OBJECT      Tier = 4 // Remote object storage (S3/GCS/Azure; durable, largest).
+	Tier_TIER_VOID        Tier = 5 // Discard on eviction: payload is deleted rather than moved.
+	Tier_TIER_RAM_RING    Tier = 6 // Pre-allocated /dev/shm ring of N fixed slots, rotated across
 )
 
 // Enum value maps for Tier.
@@ -41,6 +43,8 @@ var (
 		2: "TIER_RAM",
 		3: "TIER_DISK",
 		4: "TIER_OBJECT",
+		5: "TIER_VOID",
+		6: "TIER_RAM_RING",
 	}
 	Tier_value = map[string]int32{
 		"TIER_UNSPECIFIED": 0,
@@ -48,6 +52,8 @@ var (
 		"TIER_RAM":         2,
 		"TIER_DISK":        3,
 		"TIER_OBJECT":      4,
+		"TIER_VOID":        5,
+		"TIER_RAM_RING":    6,
 	}
 )
 
@@ -206,13 +212,15 @@ var File_payload_manager_core_v1_types_proto protoreflect.FileDescriptor
 
 const file_payload_manager_core_v1_types_proto_rawDesc = "" +
 	"\n" +
-	"#payload/manager/core/v1/types.proto\x12\x17payload.manager.core.v1*X\n" +
+	"#payload/manager/core/v1/types.proto\x12\x17payload.manager.core.v1*z\n" +
 	"\x04Tier\x12\x14\n" +
 	"\x10TIER_UNSPECIFIED\x10\x00\x12\f\n" +
 	"\bTIER_GPU\x10\x01\x12\f\n" +
 	"\bTIER_RAM\x10\x02\x12\r\n" +
 	"\tTIER_DISK\x10\x03\x12\x0f\n" +
-	"\vTIER_OBJECT\x10\x04*\x89\x02\n" +
+	"\vTIER_OBJECT\x10\x04\x12\r\n" +
+	"\tTIER_VOID\x10\x05\x12\x11\n" +
+	"\rTIER_RAM_RING\x10\x06*\x89\x02\n" +
 	"\fPayloadState\x12\x1d\n" +
 	"\x19PAYLOAD_STATE_UNSPECIFIED\x10\x00\x12\x1b\n" +
 	"\x17PAYLOAD_STATE_ALLOCATED\x10\x01\x12\x18\n" +

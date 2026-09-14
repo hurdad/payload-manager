@@ -35,54 +35,80 @@ const (
 	PayloadCatalogService_UpdatePayloadMetadata_FullMethodName      = "/payload.manager.services.v1.PayloadCatalogService/UpdatePayloadMetadata"
 	PayloadCatalogService_AppendPayloadMetadataEvent_FullMethodName = "/payload.manager.services.v1.PayloadCatalogService/AppendPayloadMetadataEvent"
 	PayloadCatalogService_ListPayloads_FullMethodName               = "/payload.manager.services.v1.PayloadCatalogService/ListPayloads"
+	PayloadCatalogService_ImportPayload_FullMethodName              = "/payload.manager.services.v1.PayloadCatalogService/ImportPayload"
 )
 
 // PayloadCatalogServiceClient is the client API for PayloadCatalogService service.
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type PayloadCatalogServiceClient interface {
-	// Allocate reserves placement but the payload is invisible to readers
-	// until CommitPayload succeeds.
+	//
+	//Allocate reserves placement but the payload is invisible to readers
+	//until CommitPayload succeeds.
 	AllocatePayload(ctx context.Context, in *v1.AllocatePayloadRequest, opts ...grpc.CallOption) (*v1.AllocatePayloadResponse, error)
-	// Marks payload immutable and readable.
-	// After this point the payload must never change.
+	//
+	//Marks payload immutable and readable.
+	//After this point the payload must never change.
 	CommitPayload(ctx context.Context, in *v1.CommitPayloadRequest, opts ...grpc.CallOption) (*v1.CommitPayloadResponse, error)
-	// Deletes payload placement and metadata.
 	//
-	// If force=true:
-	// - active leases are invalidated immediately
-	// - future reads must fail
+	//Deletes payload placement and metadata.
+	//
+	//If force=true:
+	//- active leases are invalidated immediately
+	//- future reads must fail
 	Delete(ctx context.Context, in *v1.DeleteRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
-	// Requests movement to a higher tier (RAM/GPU/etc).
+	//
+	//Requests movement to a higher tier (RAM/GPU/etc).
 	Promote(ctx context.Context, in *v1.PromoteRequest, opts ...grpc.CallOption) (*v1.PromoteResponse, error)
-	// Requests durable storage (usually disk/object storage).
 	//
-	// BLOCKING policy waits until durable or failure.
+	//Requests durable storage (usually disk/object storage).
+	//
+	//BLOCKING policy waits until durable or failure.
 	Spill(ctx context.Context, in *v1.SpillRequest, opts ...grpc.CallOption) (*v1.SpillResponse, error)
-	// Hint to move payload bytes to a faster tier.
 	//
-	// Best-effort and idempotent.
+	//Hint to move payload bytes to a faster tier.
+	//
+	//Best-effort and idempotent.
 	Prefetch(ctx context.Context, in *v1.PrefetchRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
-	// Best-effort advisory that blocks spill while active.
 	//
-	// Pin duration is in milliseconds. duration_ms=0 means indefinite pin until Unpin.
+	//Best-effort advisory that blocks spill while active.
+	//
+	//Pin duration is in milliseconds. duration_ms=0 means indefinite pin until Unpin.
 	Pin(ctx context.Context, in *v1.PinRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
-	// Removes an existing pin.
 	//
-	// Idempotent: unpinning an unpinned payload is a no-op.
+	//Removes an existing pin.
+	//
+	//Idempotent: unpinning an unpinned payload is a no-op.
 	Unpin(ctx context.Context, in *v1.UnpinRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
-	// Records descriptive relationships between payloads.
 	//
-	// Does NOT enforce execution order.
+	//Records descriptive relationships between payloads.
+	//
+	//Does NOT enforce execution order.
 	AddLineage(ctx context.Context, in *v11.AddLineageRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	GetLineage(ctx context.Context, in *v11.GetLineageRequest, opts ...grpc.CallOption) (*v11.GetLineageResponse, error)
-	// Updates current metadata view.
+	//
+	//Updates current metadata view.
 	UpdatePayloadMetadata(ctx context.Context, in *v11.UpdatePayloadMetadataRequest, opts ...grpc.CallOption) (*v11.UpdatePayloadMetadataResponse, error)
-	// Appends immutable metadata history event.
+	//
+	//Appends immutable metadata history event.
 	AppendPayloadMetadataEvent(ctx context.Context, in *v11.AppendPayloadMetadataEventRequest, opts ...grpc.CallOption) (*v11.AppendPayloadMetadataEventResponse, error)
-	// Returns a summary row for every payload known to the service.
-	// Optionally filtered by tier.
+	//
+	//Returns a summary row for every payload known to the service.
+	//Optionally filtered by tier.
 	ListPayloads(ctx context.Context, in *v1.ListPayloadsRequest, opts ...grpc.CallOption) (*v1.ListPayloadsResponse, error)
+	//
+	//Register an externally-uploaded object-tier payload as DURABLE.
+	//
+	//The client:
+	//1. Calls AllocatePayload with preferred_tier=TIER_OBJECT and receives
+	//object_upload_path in the response.
+	//2. Uploads payload bytes directly to object_upload_path via Arrow
+	//filesystem (no bytes transit gRPC).
+	//3. Calls ImportPayload to hand ownership to the manager.
+	//
+	//The manager writes the sidecar metadata and transitions the payload
+	//to PAYLOAD_STATE_DURABLE.
+	ImportPayload(ctx context.Context, in *v1.ImportPayloadRequest, opts ...grpc.CallOption) (*v1.ImportPayloadResponse, error)
 }
 
 type payloadCatalogServiceClient struct {
@@ -223,52 +249,87 @@ func (c *payloadCatalogServiceClient) ListPayloads(ctx context.Context, in *v1.L
 	return out, nil
 }
 
+func (c *payloadCatalogServiceClient) ImportPayload(ctx context.Context, in *v1.ImportPayloadRequest, opts ...grpc.CallOption) (*v1.ImportPayloadResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(v1.ImportPayloadResponse)
+	err := c.cc.Invoke(ctx, PayloadCatalogService_ImportPayload_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // PayloadCatalogServiceServer is the server API for PayloadCatalogService service.
 // All implementations must embed UnimplementedPayloadCatalogServiceServer
 // for forward compatibility.
 type PayloadCatalogServiceServer interface {
-	// Allocate reserves placement but the payload is invisible to readers
-	// until CommitPayload succeeds.
+	//
+	//Allocate reserves placement but the payload is invisible to readers
+	//until CommitPayload succeeds.
 	AllocatePayload(context.Context, *v1.AllocatePayloadRequest) (*v1.AllocatePayloadResponse, error)
-	// Marks payload immutable and readable.
-	// After this point the payload must never change.
+	//
+	//Marks payload immutable and readable.
+	//After this point the payload must never change.
 	CommitPayload(context.Context, *v1.CommitPayloadRequest) (*v1.CommitPayloadResponse, error)
-	// Deletes payload placement and metadata.
 	//
-	// If force=true:
-	// - active leases are invalidated immediately
-	// - future reads must fail
+	//Deletes payload placement and metadata.
+	//
+	//If force=true:
+	//- active leases are invalidated immediately
+	//- future reads must fail
 	Delete(context.Context, *v1.DeleteRequest) (*emptypb.Empty, error)
-	// Requests movement to a higher tier (RAM/GPU/etc).
+	//
+	//Requests movement to a higher tier (RAM/GPU/etc).
 	Promote(context.Context, *v1.PromoteRequest) (*v1.PromoteResponse, error)
-	// Requests durable storage (usually disk/object storage).
 	//
-	// BLOCKING policy waits until durable or failure.
+	//Requests durable storage (usually disk/object storage).
+	//
+	//BLOCKING policy waits until durable or failure.
 	Spill(context.Context, *v1.SpillRequest) (*v1.SpillResponse, error)
-	// Hint to move payload bytes to a faster tier.
 	//
-	// Best-effort and idempotent.
+	//Hint to move payload bytes to a faster tier.
+	//
+	//Best-effort and idempotent.
 	Prefetch(context.Context, *v1.PrefetchRequest) (*emptypb.Empty, error)
-	// Best-effort advisory that blocks spill while active.
 	//
-	// Pin duration is in milliseconds. duration_ms=0 means indefinite pin until Unpin.
+	//Best-effort advisory that blocks spill while active.
+	//
+	//Pin duration is in milliseconds. duration_ms=0 means indefinite pin until Unpin.
 	Pin(context.Context, *v1.PinRequest) (*emptypb.Empty, error)
-	// Removes an existing pin.
 	//
-	// Idempotent: unpinning an unpinned payload is a no-op.
+	//Removes an existing pin.
+	//
+	//Idempotent: unpinning an unpinned payload is a no-op.
 	Unpin(context.Context, *v1.UnpinRequest) (*emptypb.Empty, error)
-	// Records descriptive relationships between payloads.
 	//
-	// Does NOT enforce execution order.
+	//Records descriptive relationships between payloads.
+	//
+	//Does NOT enforce execution order.
 	AddLineage(context.Context, *v11.AddLineageRequest) (*emptypb.Empty, error)
 	GetLineage(context.Context, *v11.GetLineageRequest) (*v11.GetLineageResponse, error)
-	// Updates current metadata view.
+	//
+	//Updates current metadata view.
 	UpdatePayloadMetadata(context.Context, *v11.UpdatePayloadMetadataRequest) (*v11.UpdatePayloadMetadataResponse, error)
-	// Appends immutable metadata history event.
+	//
+	//Appends immutable metadata history event.
 	AppendPayloadMetadataEvent(context.Context, *v11.AppendPayloadMetadataEventRequest) (*v11.AppendPayloadMetadataEventResponse, error)
-	// Returns a summary row for every payload known to the service.
-	// Optionally filtered by tier.
+	//
+	//Returns a summary row for every payload known to the service.
+	//Optionally filtered by tier.
 	ListPayloads(context.Context, *v1.ListPayloadsRequest) (*v1.ListPayloadsResponse, error)
+	//
+	//Register an externally-uploaded object-tier payload as DURABLE.
+	//
+	//The client:
+	//1. Calls AllocatePayload with preferred_tier=TIER_OBJECT and receives
+	//object_upload_path in the response.
+	//2. Uploads payload bytes directly to object_upload_path via Arrow
+	//filesystem (no bytes transit gRPC).
+	//3. Calls ImportPayload to hand ownership to the manager.
+	//
+	//The manager writes the sidecar metadata and transitions the payload
+	//to PAYLOAD_STATE_DURABLE.
+	ImportPayload(context.Context, *v1.ImportPayloadRequest) (*v1.ImportPayloadResponse, error)
 	mustEmbedUnimplementedPayloadCatalogServiceServer()
 }
 
@@ -317,6 +378,9 @@ func (UnimplementedPayloadCatalogServiceServer) AppendPayloadMetadataEvent(conte
 }
 func (UnimplementedPayloadCatalogServiceServer) ListPayloads(context.Context, *v1.ListPayloadsRequest) (*v1.ListPayloadsResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ListPayloads not implemented")
+}
+func (UnimplementedPayloadCatalogServiceServer) ImportPayload(context.Context, *v1.ImportPayloadRequest) (*v1.ImportPayloadResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ImportPayload not implemented")
 }
 func (UnimplementedPayloadCatalogServiceServer) mustEmbedUnimplementedPayloadCatalogServiceServer() {}
 func (UnimplementedPayloadCatalogServiceServer) testEmbeddedByValue()                               {}
@@ -573,6 +637,24 @@ func _PayloadCatalogService_ListPayloads_Handler(srv interface{}, ctx context.Co
 	return interceptor(ctx, in, info, handler)
 }
 
+func _PayloadCatalogService_ImportPayload_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(v1.ImportPayloadRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(PayloadCatalogServiceServer).ImportPayload(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: PayloadCatalogService_ImportPayload_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(PayloadCatalogServiceServer).ImportPayload(ctx, req.(*v1.ImportPayloadRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // PayloadCatalogService_ServiceDesc is the grpc.ServiceDesc for PayloadCatalogService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -631,6 +713,10 @@ var PayloadCatalogService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ListPayloads",
 			Handler:    _PayloadCatalogService_ListPayloads_Handler,
+		},
+		{
+			MethodName: "ImportPayload",
+			Handler:    _PayloadCatalogService_ImportPayload_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
