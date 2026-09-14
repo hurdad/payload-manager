@@ -37,7 +37,8 @@ LeaseId RingLeaseTable::Insert(std::string ring_id, uint32_t slot_idx, uint64_t 
   // re-roll defensively. Bounds the loop at a few attempts.
   for (int attempt = 0; attempt < 8; ++attempt) {
     LeaseId id          = NewLeaseId_();
-    auto [it, inserted] = table_.emplace(id, LeaseRecord{.ring_id = ring_id, .slot_idx = slot_idx, .generation = generation});
+    auto [it, inserted] = table_.emplace(
+        id, LeaseRecord{.ring_id = ring_id, .slot_idx = slot_idx, .generation = generation, .granted_at = std::chrono::steady_clock::now()});
     if (inserted) return id;
   }
   // 8 collisions in a row means the RNG is degenerate (or someone is
@@ -53,6 +54,20 @@ std::optional<LeaseRecord> RingLeaseTable::Remove(const LeaseId& id) {
   LeaseRecord r = it->second;
   table_.erase(it);
   return r;
+}
+
+std::vector<LeaseRecord> RingLeaseTable::RemoveExpiredForRing(const std::string& ring_id, std::chrono::steady_clock::time_point cutoff) {
+  std::lock_guard<std::mutex> lk(mu_);
+  std::vector<LeaseRecord>    expired;
+  for (auto it = table_.begin(); it != table_.end();) {
+    if (it->second.ring_id == ring_id && it->second.granted_at <= cutoff) {
+      expired.push_back(it->second);
+      it = table_.erase(it);
+    } else {
+      ++it;
+    }
+  }
+  return expired;
 }
 
 std::optional<LeaseId> RingLeaseTable::FromBytes(const std::string& bytes) {

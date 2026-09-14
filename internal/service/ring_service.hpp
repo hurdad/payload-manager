@@ -37,6 +37,13 @@ class RingService {
   void ReleaseRingSlot(const payload::manager::runtime::v1::ReleaseRingSlotRequest& req);
 
  private:
+  // Drop every lease on `ring` held past its TTL and hand the slot
+  // refcounts back; returns how many were dropped. Runs only when
+  // AcquireRingSlot has otherwise failed — a consumer that died holding
+  // a lease pins its slot forever, and the lease table is the only place
+  // that knows which slot a lease belongs to.
+  size_t ExpireStaleLeases_(payload::ring::Ring& ring);
+
   payload::ring::RingTierManager* ring_mgr_;
   payload::ring::RingLeaseTable*  lease_table_;
 };

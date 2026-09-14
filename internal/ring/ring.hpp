@@ -19,6 +19,15 @@
 // Acquire scans for AVAILABLE or (READABLE & refcount==0) slots
 // round-robin from the last acquired index. Mismatch on consumer
 // generation (consumer was slow) -> FAILED_PRECONDITION at Lease.
+//
+// Neither WRITING nor a non-zero refcount ever clears on its own, so a
+// producer that dies before Commit, or a consumer that dies before
+// Release, would otherwise retire a slot for the life of the process.
+// Acquire therefore makes a second pass when the first finds nothing,
+// reclaiming slots that have been WRITING longer than
+// Config::slot_write_timeout. Expired *leases* are swept by the service
+// layer, which owns the lease table; see RingService::AcquireRingSlot.
+// Both are last-resort paths that only run on an exhausted ring.
 
 #include <atomic>
 #include <chrono>
@@ -56,6 +65,7 @@ struct Slot {
   uint32_t                              refcount   = 0; // number of live Leases against `generation`
   uint64_t                              size_bytes = 0; // bytes written this generation; set by Commit
   std::chrono::steady_clock::time_point committed_at{};
+  std::chrono::steady_clock::time_point acquired_at{}; // set by Acquire; ages the WRITING state
 };
 
 // Outcome of Acquire: a reservation the producer fills in and then
@@ -91,6 +101,12 @@ class Ring {
     size_t                                           slot_size_bytes;
     std::string                                      shm_prefix; // e.g. "pm" -> slot names "/pm-ring-<id>-slot<i>"
     payload::manager::core::v1::RingExhaustionPolicy exhaustion_policy = payload::manager::core::v1::RING_EXHAUSTION_POLICY_DROP_NEW;
+    // How long a slot may stay WRITING before Acquire may take it back,
+    // and how long a lease may be held before the service layer may drop
+    // it. See the RingDefinition comments in config.proto; both are crash
+    // safety nets sized well above the honest worst case.
+    std::chrono::milliseconds slot_write_timeout{std::chrono::seconds(30)};
+    std::chrono::milliseconds lease_ttl{std::chrono::seconds(60)};
   };
 
   explicit Ring(Config cfg);
@@ -108,6 +124,12 @@ class Ring {
   }
   size_t slot_size_bytes() const {
     return cfg_.slot_size_bytes;
+  }
+  std::chrono::milliseconds lease_ttl() const {
+    return cfg_.lease_ttl;
+  }
+  std::chrono::milliseconds slot_write_timeout() const {
+    return cfg_.slot_write_timeout;
   }
 
   // Snapshot the per-slot shm names, in slot_idx order. Used to
@@ -153,15 +175,27 @@ class Ring {
   };
   std::vector<SlotSnapshot> Snapshot() const;
 
+  // Diagnostics: how many slots this ring has had to take back from a
+  // producer that never committed. Non-zero means a producer died (or
+  // slot_write_timeout is set below its honest worst case) — worth an
+  // alert either way.
+  uint64_t reclaimed_writing_slots() const;
+
  private:
   // Find the next slot eligible for Acquire. Caller must hold mu_.
   // Searches round-robin from acquire_cursor_; returns nullptr if
   // every slot has refcount > 0 (or is WRITING).
   Slot* PickAcquireSlot_();
+  // Second-pass fallback for PickAcquireSlot_: take back the slot that
+  // has been WRITING longest, if it is past slot_write_timeout. Caller
+  // must hold mu_. Returns nullptr when nothing is reclaimable.
+  Slot* ReclaimStaleWritingSlot_(std::chrono::steady_clock::time_point now);
 
   const Config      cfg_;
   std::vector<Slot> slots_;
   uint32_t          acquire_cursor_ = 0; // round-robin starting index for next Acquire
+
+  uint64_t reclaimed_writing_ = 0; // guarded by mu_
 
   mutable std::mutex mu_;
   // condition_variable cv_;  // For RING_EXHAUSTION_POLICY_BLOCK (v2)

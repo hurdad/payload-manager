@@ -88,7 +88,11 @@ message GpuTierConfig {
 // producers and consumers work through PayloadRingService.
 //
 // Unlike the UUID-addressed RAM tier there is no per-capture allocation, so
-// there is no allocation churn to leak and no TTL to forget. Slot names are
+// there is no allocation churn to leak. There is still reservation state to
+// lose: a producer that dies between AcquireRingSlot and CommitRingSlot leaves
+// its slot WRITING, and a consumer that dies holding a lease leaves the slot's
+// refcount above zero. Neither is recoverable without the timeouts below, so
+// both are reclaimed lazily when a ring runs out of slots. Slot names are
 // deterministic and the writable open unlinks before creating, so a stale
 // segment from a crashed process is replaced rather than accumulated — which
 // also matters for correctness, since reusing a stale segment would inherit its
@@ -115,6 +119,33 @@ message RingDefinition {
   // POSIX shm name prefix. Slots are named /<shm_prefix>-ring-<ring_id>-slot<i>.
   // Defaults to RamTierConfig.shm_prefix when empty.
   string shm_prefix = 5;
+
+  // How long a slot may sit in WRITING — acquired by a producer that has not
+  // yet committed — before AcquireRingSlot is allowed to take it back. Guards
+  // against a producer that crashed mid-capture; without it that slot is gone
+  // for the life of the process.
+  //
+  // This is a crash safety net, not a scheduling parameter. Set it well above
+  // the producer's worst-case time between acquire and commit: reclaiming a
+  // slot from a producer that is merely slow lets the next producer write over
+  // bytes it is still filling in. Reclaim only ever runs when the ring is
+  // already exhausted, so a generous value costs nothing in the steady state.
+  //
+  // 0 selects the default of 30s. There is no way to disable reclaim, because
+  // a permanently stuck slot is never the desired outcome.
+  uint64 slot_write_timeout_ms = 6;
+
+  // How long a consumer's read lease may be held before AcquireRingSlot is
+  // allowed to drop it and reclaim the slot. Guards against a consumer that
+  // died between LeaseRingSlot and ReleaseRingSlot.
+  //
+  // Same caveat as slot_write_timeout_ms, and more dangerous: force-releasing
+  // a live consumer's lease lets the producer recycle a slot that consumer is
+  // still reading. Set it above the slowest consumer's worst-case processing
+  // time for one capture.
+  //
+  // 0 selects the default of 60s. Reclaim cannot be disabled.
+  uint64 lease_ttl_ms = 7;
 }
 
 message RingTierConfig {

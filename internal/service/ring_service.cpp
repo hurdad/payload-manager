@@ -1,6 +1,9 @@
 #include "internal/service/ring_service.hpp"
 
+#include <chrono>
+
 #include "internal/util/errors.hpp"
+#include "spdlog/spdlog.h"
 
 namespace payload::service {
 
@@ -15,6 +18,14 @@ runtimev1::AcquireRingSlotResponse RingService::AcquireRingSlot(const runtimev1:
   if (!ring) throw payload::util::NotFound("ring not configured: " + req.ring_id());
 
   auto acq = ring->Acquire();
+  if (!acq) {
+    // Nothing acquirable. Ring::Acquire has already taken back any slot
+    // whose producer died mid-write; what it cannot see is a slot pinned
+    // by a lease whose consumer died, because the lease table lives here.
+    // Sweep those, hand the refcounts back, and try once more before
+    // telling the producer the ring is full.
+    if (ExpireStaleLeases_(*ring) > 0) acq = ring->Acquire();
+  }
   if (!acq) {
     // Every slot is currently leased — DROP_NEW policy returns
     // RESOURCE_EXHAUSTED. (BLOCK policy is v2 — for now any caller
@@ -84,6 +95,25 @@ runtimev1::LeaseRingSlotResponse RingService::LeaseRingSlot(const runtimev1::Lea
   resp.set_slot_idx(grant->slot_idx);
   resp.set_generation(grant->generation);
   return resp;
+}
+
+size_t RingService::ExpireStaleLeases_(payload::ring::Ring& ring) {
+  const auto ttl = ring.lease_ttl();
+  if (ttl <= std::chrono::milliseconds::zero()) return 0;
+
+  auto expired = lease_table_->RemoveExpiredForRing(ring.ring_id(), std::chrono::steady_clock::now() - ttl);
+  for (const auto& rec : expired) {
+    // Ring::Release is generation-guarded, so a lease whose slot has
+    // already moved on decrements nothing.
+    ring.Release(rec.slot_idx, rec.generation);
+  }
+  if (!expired.empty()) {
+    spdlog::warn(
+        "payload-manager: ring '{}' force-released {} lease(s) held past the {} ms TTL — assuming those "
+        "consumers died; a consumer that is merely slow will find its slot recycled under it",
+        ring.ring_id(), expired.size(), ttl.count());
+  }
+  return expired.size();
 }
 
 void RingService::ReleaseRingSlot(const runtimev1::ReleaseRingSlotRequest& req) {

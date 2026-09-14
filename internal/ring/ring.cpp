@@ -135,9 +135,43 @@ Slot* Ring::PickAcquireSlot_() {
   return nullptr;
 }
 
+Slot* Ring::ReclaimStaleWritingSlot_(std::chrono::steady_clock::time_point now) {
+  // Only reached when PickAcquireSlot_ came up empty. A slot still
+  // WRITING past the timeout means its producer never came back —
+  // crashed, or was killed between AcquireRingSlot and CommitRingSlot.
+  // Nothing else will ever clear that state, so the choice is to take
+  // the slot back or to lose it permanently.
+  //
+  // Take the *oldest* such slot: it is the one least likely to belong to
+  // a producer that is merely slow, and picking deterministically keeps
+  // repeated reclaims from thrashing across slots.
+  Slot* oldest = nullptr;
+  for (auto& s : slots_) {
+    if (s.status != SlotStatus::kWriting) continue;
+    if (s.refcount > 0) continue; // can't happen: WRITING is not leasable. Cheap to assert by skipping.
+    if (now - s.acquired_at < cfg_.slot_write_timeout) continue;
+    if (!oldest || s.acquired_at < oldest->acquired_at) oldest = &s;
+  }
+  if (!oldest) return nullptr;
+
+  const auto held = std::chrono::duration_cast<std::chrono::milliseconds>(now - oldest->acquired_at);
+  spdlog::warn(
+      "payload-manager: ring '{}' reclaiming slot {} (gen {}) held WRITING for {} ms, past the {} ms write "
+      "timeout — assuming the producer died; its late CommitRingSlot will be rejected on generation",
+      cfg_.ring_id, oldest->idx, oldest->generation, held.count(), cfg_.slot_write_timeout.count());
+  reclaimed_writing_ += 1;
+  // Caller bumps the generation, which is what makes the zombie
+  // producer's eventual Commit fail its generation check rather than
+  // publishing bytes over the next producer's capture.
+  acquire_cursor_ = (oldest->idx + 1) % cfg_.n_slots;
+  return oldest;
+}
+
 std::optional<AcquireResult> Ring::Acquire() {
+  const auto                  now = std::chrono::steady_clock::now();
   std::lock_guard<std::mutex> lk(mu_);
   Slot*                       slot = PickAcquireSlot_();
+  if (!slot) slot = ReclaimStaleWritingSlot_(now);
   if (!slot) {
     // DROP_NEW: caller surfaces RESOURCE_EXHAUSTED. BLOCK is v2.
     return std::nullopt;
@@ -146,8 +180,9 @@ std::optional<AcquireResult> Ring::Acquire() {
   // region via its own mmap of slot->shm_name (PM never copies bytes
   // through this path).
   slot->generation += 1;
-  slot->status     = SlotStatus::kWriting;
-  slot->size_bytes = 0;
+  slot->status      = SlotStatus::kWriting;
+  slot->size_bytes  = 0;
+  slot->acquired_at = now;
   return AcquireResult{
       .slot_idx       = slot->idx,
       .generation     = slot->generation,
@@ -199,6 +234,11 @@ void Ring::Release(uint32_t slot_idx, uint64_t generation) {
   // a re-issued event for the same gen could in principle re-Lease.
   // The slot becomes Acquire-eligible because PickAcquireSlot_ filters
   // on refcount==0 regardless of status.)
+}
+
+uint64_t Ring::reclaimed_writing_slots() const {
+  std::lock_guard<std::mutex> lk(mu_);
+  return reclaimed_writing_;
 }
 
 std::vector<Ring::SlotSnapshot> Ring::Snapshot() const {

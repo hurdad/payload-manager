@@ -1,5 +1,6 @@
 #include "internal/ring/ring_tier_manager.hpp"
 
+#include <chrono>
 #include <stdexcept>
 
 #include "spdlog/spdlog.h"
@@ -24,6 +25,16 @@ std::unique_ptr<RingTierManager> RingTierManager::Build(const payload::runtime::
     };
     if (def.exhaustion_policy() != payload::manager::core::v1::RING_EXHAUSTION_POLICY_UNSPECIFIED) {
       rc.exhaustion_policy = def.exhaustion_policy();
+    }
+    // 0 means "use the default" rather than "disable": a slot stuck in
+    // WRITING, or a lease whose consumer died, is never recoverable, so
+    // there is no configuration in which leaking one is the right answer.
+    // Ring::Config's NSDMIs carry the defaults.
+    if (def.slot_write_timeout_ms() > 0) {
+      rc.slot_write_timeout = std::chrono::milliseconds(def.slot_write_timeout_ms());
+    }
+    if (def.lease_ttl_ms() > 0) {
+      rc.lease_ttl = std::chrono::milliseconds(def.lease_ttl_ms());
     }
     mgr->rings_.emplace(def.ring_id(), std::make_unique<Ring>(std::move(rc)));
   }

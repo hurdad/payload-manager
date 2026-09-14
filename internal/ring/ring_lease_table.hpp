@@ -11,11 +11,13 @@
 // this lock matters, shard by hash bucket.
 
 #include <array>
+#include <chrono>
 #include <cstdint>
 #include <mutex>
 #include <optional>
 #include <string>
 #include <unordered_map>
+#include <vector>
 
 namespace payload::ring {
 
@@ -25,6 +27,11 @@ struct LeaseRecord {
   std::string ring_id;
   uint32_t    slot_idx;
   uint64_t    generation;
+  // When LeaseRingSlot granted this lease. A consumer that dies before
+  // ReleaseRingSlot leaves the slot's refcount up forever, so the ring
+  // ages leases out from here. Steady clock: this measures a duration
+  // held, and must not move when the wall clock does.
+  std::chrono::steady_clock::time_point granted_at{};
 };
 
 // Hash/eq for the 16-byte LeaseId. Must be defined before the
@@ -58,6 +65,17 @@ class RingLeaseTable {
   // OK; the caller skips the Ring::Release call when this returns
   // nullopt.
   std::optional<LeaseRecord> Remove(const LeaseId& id);
+
+  // Remove every lease on `ring_id` granted at or before `cutoff`, and
+  // return them so the caller can drop the matching slot refcounts.
+  //
+  // Scoped to one ring because the only caller is that ring's exhausted
+  // AcquireRingSlot path: it reclaims exactly the leases standing in the
+  // way, and leaves an unrelated ring's slow consumers alone. The table
+  // is flat, so this is a full scan — outstanding leases are bounded by
+  // (slots x consumers), i.e. hundreds, and this only runs on an
+  // exhausted ring.
+  std::vector<LeaseRecord> RemoveExpiredForRing(const std::string& ring_id, std::chrono::steady_clock::time_point cutoff);
 
   // Convenience overloads for wire encoding (bytes <-> LeaseId).
   // The proto carries `bytes lease_id = 1;` so callers see raw
