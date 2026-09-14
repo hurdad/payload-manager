@@ -108,6 +108,14 @@ RUN apt-get update \
 
 COPY --from=builder --chown=payload:payload /workspace/build/bin/payload-manager ./payload-manager
 
+# Create the disk-tier root in the image, owned by the user the container runs
+# as. Docker gives a named volume the ownership of the image directory it is
+# mounted over, and creates that directory root-owned when the image has none
+# — which left a non-root payload-manager unable to create its payloads/ tree
+# and exiting 2 on every start against a fresh volume.
+RUN mkdir -p /var/lib/payload-manager/payloads \
+    && chown -R payload:payload /var/lib/payload-manager
+
 EXPOSE 50051
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
