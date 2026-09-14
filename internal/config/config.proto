@@ -44,22 +44,43 @@ message DatabaseConfig {
 // ------------------------------------------------------------------
 
 message RamTierConfig {
+  // Hard cap. Allocate fails with ResourceExhausted when an incoming request
+  // would push the tier's live byte count above this. Set it to the actual
+  // /dev/shm tmpfs size so the service rejects the request before the kernel
+  // SIGBUSes a producer's first write into the mapping. 0 means no hard cap
+  // (legacy; not recommended).
   uint64 capacity_bytes = 1;
   bool use_hugepages = 2;
   // Prefix for POSIX shm segment names (no leading slash required).
   // Segments are named /<shm_prefix>-<uuid>. Defaults to "pm".
   string shm_prefix = 3;
+  // Percentage of capacity_bytes at which eviction starts firing (1-99).
+  // Unset (0) means the default, 80. Below the threshold the tier never evicts
+  // proactively; above it the tiering loop spills RAM payloads to disk until
+  // usage drops back under. Lower values give more headroom against bursty
+  // producers; higher values reduce eviction churn. Use 100 to evict only at
+  // the hard cap (the behaviour before this field existed).
+  uint32 eviction_high_water_pct = 4;
 }
 
 message DiskTierConfig {
   string root_path = 1;
+  // Hard cap for the disk tier; see RamTierConfig.capacity_bytes for the
+  // semantics. 0 means no hard cap.
   uint64 capacity_bytes = 2;
   bool fsync = 3;
+  // Eviction high-water for the disk tier. Unset (0) means 80; 100 evicts
+  // only at the hard cap. See RamTierConfig.eviction_high_water_pct.
+  uint32 eviction_high_water_pct = 4;
 }
 
 message GpuDeviceConfig {
   uint32 device_id = 1;
+  // Hard cap for this device; see RamTierConfig.capacity_bytes.
   uint64 capacity_bytes = 2;
+  // Eviction high-water for the GPU tier. Unset (0) means 80; 100 evicts
+  // only at the hard cap. See RamTierConfig.eviction_high_water_pct.
+  uint32 eviction_high_water_pct = 3;
 }
 
 message GpuTierConfig {
@@ -67,6 +88,10 @@ message GpuTierConfig {
 }
 
 message StorageConfig {
+  // Tag 5 is reserved for the TIER_RAM_RING configuration, which shares this
+  // number downstream. Do not reuse it for anything else.
+  reserved 5;
+
   RamTierConfig ram = 1;
   DiskTierConfig disk = 2;
   pb.arrow.storage.ObjectStorageConfig object = 3;

@@ -236,6 +236,25 @@ Application Build(const payload::runtime::config::RuntimeConfig& config) {
     pressure_state->disk_limit = std::numeric_limits<uint64_t>::max();
   }
 
+  // Eviction high-water marks. proto3 cannot tell "unset" from "0", so an
+  // unset field takes the documented default of 80%; 100 means evict only at
+  // the hard cap. GPU devices are configured individually but share one tier
+  // budget, so take the first device that states a preference.
+  constexpr uint32_t kDefaultEvictionHighWaterPct = 80;
+  const auto         resolve_pct                  = [](uint32_t configured) { return configured == 0 ? kDefaultEvictionHighWaterPct : configured; };
+
+  pressure_state->ram_evict_pct  = resolve_pct(config.storage().ram().eviction_high_water_pct());
+  pressure_state->disk_evict_pct = resolve_pct(config.storage().disk().eviction_high_water_pct());
+
+  uint32_t gpu_pct = 0;
+  for (const auto& dev : config.storage().gpu().devices()) {
+    if (dev.eviction_high_water_pct() != 0) {
+      gpu_pct = dev.eviction_high_water_pct();
+      break;
+    }
+  }
+  pressure_state->gpu_evict_pct = resolve_pct(gpu_pct);
+
   auto tiering_policy = std::make_shared<tiering::TieringPolicy>(
       metadata_cache,
       // RAM eviction: only consider payloads currently resident in RAM.

@@ -179,3 +179,92 @@ TEST(TieringPressure, GpuPressureStateLimit) {
   state.gpu_bytes.store(1024);
   EXPECT_TRUE(state.GpuPressure()) << "GPU pressure when bytes > limit";
 }
+
+// ---------------------------------------------------------------------------
+// Eviction high-water marks.
+//
+// Before eviction_high_water_pct existed, a tier only came under pressure once
+// it was already over its hard cap, leaving the 100 ms tiering loop no headroom
+// — a bursty producer could exhaust TIER_RAM between two passes and SIGBUS on
+// its next write. These pin the soft-cap behaviour and, importantly, that an
+// unset percentage still behaves exactly as before.
+// ---------------------------------------------------------------------------
+
+TEST(TieringPressure, UnsetHighWaterKeepsEvictAtHardCap) {
+  payload::tiering::PressureState state;
+  state.ram_limit = 1000; // ram_evict_pct left at 0 (unset)
+
+  EXPECT_EQ(state.RamEvictThreshold(), 1000u) << "unset pct must leave the threshold at the hard cap";
+
+  state.ram_bytes.store(999);
+  EXPECT_FALSE(state.RamPressure());
+  state.ram_bytes.store(1000);
+  EXPECT_FALSE(state.RamPressure()) << "at exactly the cap is not yet over it";
+  state.ram_bytes.store(1001);
+  EXPECT_TRUE(state.RamPressure());
+}
+
+TEST(TieringPressure, HighWaterTriggersEvictionBeforeHardCap) {
+  payload::tiering::PressureState state;
+  state.ram_limit     = 1000;
+  state.ram_evict_pct = 80;
+
+  EXPECT_EQ(state.RamEvictThreshold(), 800u);
+
+  state.ram_bytes.store(799);
+  EXPECT_FALSE(state.RamPressure()) << "below the high-water mark there is no pressure";
+  state.ram_bytes.store(801);
+  EXPECT_TRUE(state.RamPressure()) << "eviction must start well before the hard cap";
+}
+
+TEST(TieringPressure, HighWaterAppliesToEveryTier) {
+  payload::tiering::PressureState state;
+  state.ram_limit      = 1000;
+  state.gpu_limit      = 2000;
+  state.disk_limit     = 4000;
+  state.ram_evict_pct  = 50;
+  state.gpu_evict_pct  = 25;
+  state.disk_evict_pct = 90;
+
+  EXPECT_EQ(state.RamEvictThreshold(), 500u);
+  EXPECT_EQ(state.GpuEvictThreshold(), 500u);
+  EXPECT_EQ(state.DiskEvictThreshold(), 3600u);
+
+  state.gpu_bytes.store(600);
+  EXPECT_TRUE(state.GpuPressure());
+  state.disk_bytes.store(3000);
+  EXPECT_FALSE(state.DiskPressure());
+}
+
+TEST(TieringPressure, HighWaterOf100EvictsOnlyAtHardCap) {
+  payload::tiering::PressureState state;
+  state.ram_limit     = 1000;
+  state.ram_evict_pct = 100;
+
+  EXPECT_EQ(state.RamEvictThreshold(), 1000u);
+  state.ram_bytes.store(1000);
+  EXPECT_FALSE(state.RamPressure());
+  state.ram_bytes.store(1001);
+  EXPECT_TRUE(state.RamPressure());
+}
+
+TEST(TieringPressure, HighWaterLeavesUncappedTiersUncapped) {
+  payload::tiering::PressureState state;
+  // factory.cpp maps an unconfigured capacity to UINT64_MAX meaning "never
+  // evict"; applying a percentage to that must not create a finite threshold.
+  state.ram_limit     = UINT64_MAX;
+  state.ram_evict_pct = 80;
+
+  EXPECT_EQ(state.RamEvictThreshold(), UINT64_MAX);
+  state.ram_bytes.store(UINT64_MAX - 1);
+  EXPECT_FALSE(state.RamPressure()) << "an uncapped tier must never report pressure";
+}
+
+TEST(TieringPressure, HighWaterDoesNotOverflowOnHugeCaps) {
+  // limit*pct/100 would overflow above ~184 PiB; the implementation divides
+  // first. 2^60 bytes = 1 EiB.
+  constexpr uint64_t kHuge = uint64_t{1} << 60;
+  const auto         t     = payload::tiering::PressureState::EvictionThreshold(kHuge, 80);
+  EXPECT_GT(t, kHuge / 2) << "threshold must not wrap around";
+  EXPECT_LT(t, kHuge) << "threshold must still be below the hard cap";
+}
