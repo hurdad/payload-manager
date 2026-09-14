@@ -11,9 +11,18 @@ namespace payload::db::postgres {
 
 namespace {
 
-template <typename Enum>
-Enum CheckedEnumCast(int raw, int min_valid, int max_valid, const char* field_name) {
-  if (raw < min_valid || raw > max_valid) {
+/*
+  Validate against the enum's own descriptor rather than a hardcoded range.
+
+  The bounds used to be written out by hand (Tier was 0..4), so adding a value
+  silently broke reading any row that used it: TIER_VOID = 5 already could not
+  round-trip, and TIER_RAM_RING = 6 would have been the second instance of the
+  same bug. protoc generates <Enum>_IsValid for exactly this, and it tracks the
+  proto definition automatically.
+*/
+template <typename Enum, typename IsValidFn>
+Enum CheckedEnumCast(int raw, IsValidFn is_valid, const char* field_name) {
+  if (!is_valid(raw)) {
     throw std::runtime_error(std::string("pg_repository: out-of-range value for ") + field_name + ": " + std::to_string(raw));
   }
   return static_cast<Enum>(raw);
@@ -53,13 +62,13 @@ std::optional<model::PayloadRecord> PgRepository::GetPayload(Transaction& t, con
     if (res.empty()) return std::nullopt;
 
     model::PayloadRecord r;
-    r.id                 = payload::util::FromString(res[0][0].c_str());
-    r.tier               = CheckedEnumCast<payload::manager::v1::Tier>(res[0][1].as<int>(), 0, 4, "tier");
-    r.state              = CheckedEnumCast<payload::manager::v1::PayloadState>(res[0][2].as<int>(), 0, 8, "state");
-    r.size_bytes         = res[0][3].as<uint64_t>();
-    r.version            = res[0][4].as<uint64_t>();
-    r.expires_at_ms      = res[0][5].is_null() ? 0 : res[0][5].as<uint64_t>();
-    r.no_evict           = res[0][6].as<int>() != 0;
+    r.id            = payload::util::FromString(res[0][0].c_str());
+    r.tier          = CheckedEnumCast<payload::manager::v1::Tier>(res[0][1].as<int>(), payload::manager::v1::Tier_IsValid, "tier");
+    r.state         = CheckedEnumCast<payload::manager::v1::PayloadState>(res[0][2].as<int>(), payload::manager::v1::PayloadState_IsValid, "state");
+    r.size_bytes    = res[0][3].as<uint64_t>();
+    r.version       = res[0][4].as<uint64_t>();
+    r.expires_at_ms = res[0][5].is_null() ? 0 : res[0][5].as<uint64_t>();
+    r.no_evict      = res[0][6].as<int>() != 0;
     r.eviction_priority  = res[0][7].as<int>();
     r.spill_target       = res[0][8].as<int>();
     r.created_at_ms      = res[0][9].is_null() ? 0 : res[0][9].as<uint64_t>();
@@ -95,13 +104,13 @@ std::vector<model::PayloadRecord> PgRepository::ListPayloads(Transaction& t, pay
     records.reserve(res.size());
     for (const auto& row : res) {
       model::PayloadRecord r;
-      r.id                 = payload::util::FromString(row[0].c_str());
-      r.tier               = CheckedEnumCast<payload::manager::v1::Tier>(row[1].as<int>(), 0, 4, "tier");
-      r.state              = CheckedEnumCast<payload::manager::v1::PayloadState>(row[2].as<int>(), 0, 8, "state");
-      r.size_bytes         = row[3].as<uint64_t>();
-      r.version            = row[4].as<uint64_t>();
-      r.expires_at_ms      = row[5].is_null() ? 0 : row[5].as<uint64_t>();
-      r.no_evict           = row[6].as<int>() != 0;
+      r.id            = payload::util::FromString(row[0].c_str());
+      r.tier          = CheckedEnumCast<payload::manager::v1::Tier>(row[1].as<int>(), payload::manager::v1::Tier_IsValid, "tier");
+      r.state         = CheckedEnumCast<payload::manager::v1::PayloadState>(row[2].as<int>(), payload::manager::v1::PayloadState_IsValid, "state");
+      r.size_bytes    = row[3].as<uint64_t>();
+      r.version       = row[4].as<uint64_t>();
+      r.expires_at_ms = row[5].is_null() ? 0 : row[5].as<uint64_t>();
+      r.no_evict      = row[6].as<int>() != 0;
       r.eviction_priority  = row[7].as<int>();
       r.spill_target       = row[8].as<int>();
       r.created_at_ms      = row[9].is_null() ? 0 : row[9].as<uint64_t>();
@@ -152,13 +161,13 @@ std::vector<model::PayloadRecord> PgRepository::ListExpiredPayloads(Transaction&
     records.reserve(res.size());
     for (const auto& row : res) {
       model::PayloadRecord r;
-      r.id                 = payload::util::FromString(row[0].c_str());
-      r.tier               = CheckedEnumCast<payload::manager::v1::Tier>(row[1].as<int>(), 0, 4, "tier");
-      r.state              = CheckedEnumCast<payload::manager::v1::PayloadState>(row[2].as<int>(), 0, 8, "state");
-      r.size_bytes         = row[3].as<uint64_t>();
-      r.version            = row[4].as<uint64_t>();
-      r.expires_at_ms      = row[5].is_null() ? 0 : row[5].as<uint64_t>();
-      r.no_evict           = row[6].as<int>() != 0;
+      r.id            = payload::util::FromString(row[0].c_str());
+      r.tier          = CheckedEnumCast<payload::manager::v1::Tier>(row[1].as<int>(), payload::manager::v1::Tier_IsValid, "tier");
+      r.state         = CheckedEnumCast<payload::manager::v1::PayloadState>(row[2].as<int>(), payload::manager::v1::PayloadState_IsValid, "state");
+      r.size_bytes    = row[3].as<uint64_t>();
+      r.version       = row[4].as<uint64_t>();
+      r.expires_at_ms = row[5].is_null() ? 0 : row[5].as<uint64_t>();
+      r.no_evict      = row[6].as<int>() != 0;
       r.eviction_priority  = row[7].as<int>();
       r.spill_target       = row[8].as<int>();
       r.created_at_ms      = row[9].is_null() ? 0 : row[9].as<uint64_t>();
