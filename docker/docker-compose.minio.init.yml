@@ -14,7 +14,9 @@
 
 services:
   minio-init:
-    image: minio/mc:latest
+    # See docker-compose.minio.yml — Docker Hub's minio images are not
+    # anonymously pullable.
+    image: quay.io/minio/mc:latest
     depends_on:
       minio:
         condition: service_healthy
