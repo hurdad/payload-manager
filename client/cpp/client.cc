@@ -45,9 +45,12 @@ namespace {
 #ifdef PAYLOAD_CLIENT_ENABLE_OTEL
 class GrpcClientMetadataCarrier : public opentelemetry::context::propagation::TextMapCarrier {
  public:
-  explicit GrpcClientMetadataCarrier(grpc::ClientContext& ctx) : ctx_(ctx) {}
+  explicit GrpcClientMetadataCarrier(grpc::ClientContext& ctx) : ctx_(ctx) {
+  }
 
-  opentelemetry::nostd::string_view Get(opentelemetry::nostd::string_view) const noexcept override { return {}; }
+  opentelemetry::nostd::string_view Get(opentelemetry::nostd::string_view) const noexcept override {
+    return {};
+  }
 
   void Set(opentelemetry::nostd::string_view key, opentelemetry::nostd::string_view value) noexcept override {
     ctx_.AddMetadata(std::string(key), std::string(value));
@@ -59,11 +62,12 @@ class GrpcClientMetadataCarrier : public opentelemetry::context::propagation::Te
 
 void InjectTraceContext(grpc::ClientContext& ctx) {
   GrpcClientMetadataCarrier carrier(ctx);
-  auto propagator = opentelemetry::context::propagation::GlobalTextMapPropagator::GetGlobalPropagator();
+  auto                      propagator = opentelemetry::context::propagation::GlobalTextMapPropagator::GetGlobalPropagator();
   propagator->Inject(carrier, opentelemetry::context::RuntimeContext::GetCurrent());
 }
 #else
-void InjectTraceContext(grpc::ClientContext&) {}
+void InjectTraceContext(grpc::ClientContext&) {
+}
 #endif
 
 arrow::Status GrpcToArrow(const grpc::Status& status, std::string_view action) {
@@ -120,7 +124,7 @@ arrow::Result<std::string> ParseUuidBytes(std::string_view uuid) {
   for (size_t i = 0; i < 16; ++i) {
     const int hi = HexNibble(hex[2 * i]);
     const int lo = HexNibble(hex[2 * i + 1]);
-    bytes[i] = static_cast<char>((hi << 4) | lo);
+    bytes[i]     = static_cast<char>((hi << 4) | lo);
   }
   return bytes;
 }
@@ -132,8 +136,7 @@ arrow::Status SetPayloadIdFromUuid(std::string_view uuid, payload::manager::v1::
 }
 
 arrow::Status ValidatePayloadIdValue(const payload::manager::v1::PayloadID& id) {
-  if (id.value().size() != 16)
-    return arrow::Status::Invalid("payload_id must contain 16 bytes, got ", id.value().size());
+  if (id.value().size() != 16) return arrow::Status::Invalid("payload_id must contain 16 bytes, got ", id.value().size());
   return arrow::Status::OK();
 }
 
@@ -149,41 +152,47 @@ void DestroyMappedRegion(void* base_addr, size_t mapped_size, int fd) noexcept {
 class ReadOnlyMMapBuffer final : public arrow::Buffer {
  public:
   ReadOnlyMMapBuffer(const uint8_t* data, int64_t size, void* base_addr, size_t mapped_size, int fd)
-      : arrow::Buffer(data, size), base_addr_(base_addr), mapped_size_(mapped_size), fd_(fd) {}
+      : arrow::Buffer(data, size), base_addr_(base_addr), mapped_size_(mapped_size), fd_(fd) {
+  }
 
-  ~ReadOnlyMMapBuffer() override { DestroyMappedRegion(base_addr_, mapped_size_, fd_); }
+  ~ReadOnlyMMapBuffer() override {
+    DestroyMappedRegion(base_addr_, mapped_size_, fd_);
+  }
 
  private:
-  void* base_addr_;
+  void*  base_addr_;
   size_t mapped_size_;
-  int fd_;
+  int    fd_;
 };
 
 class MutableMMapBuffer final : public arrow::MutableBuffer {
  public:
   MutableMMapBuffer(uint8_t* data, int64_t size, void* base_addr, size_t mapped_size, int fd)
-      : arrow::MutableBuffer(data, size), base_addr_(base_addr), mapped_size_(mapped_size), fd_(fd) {}
+      : arrow::MutableBuffer(data, size), base_addr_(base_addr), mapped_size_(mapped_size), fd_(fd) {
+  }
 
-  ~MutableMMapBuffer() override { DestroyMappedRegion(base_addr_, mapped_size_, fd_); }
+  ~MutableMMapBuffer() override {
+    DestroyMappedRegion(base_addr_, mapped_size_, fd_);
+  }
 
  private:
-  void* base_addr_;
+  void*  base_addr_;
   size_t mapped_size_;
-  int fd_;
+  int    fd_;
 };
 
 struct MMapRegion {
-  void* base;
-  size_t map_size;
+  void*    base;
+  size_t   map_size;
   uint64_t delta;
 };
 
 arrow::Result<MMapRegion> AlignAndMap(int fd, uint64_t offset, uint64_t length, int prot) {
-  const long page_size = sysconf(_SC_PAGESIZE);
-  const uint64_t page = page_size <= 0 ? 4096 : static_cast<uint64_t>(page_size);
+  const long     page_size      = sysconf(_SC_PAGESIZE);
+  const uint64_t page           = page_size <= 0 ? 4096 : static_cast<uint64_t>(page_size);
   const uint64_t aligned_offset = (offset / page) * page;
-  const uint64_t delta = offset - aligned_offset;
-  const size_t map_size = static_cast<size_t>(delta + length);
+  const uint64_t delta          = offset - aligned_offset;
+  const size_t   map_size       = static_cast<size_t>(delta + length);
 
   void* base = mmap(nullptr, map_size, prot, MAP_SHARED, fd, static_cast<off_t>(aligned_offset));
   if (base == MAP_FAILED) {
@@ -195,20 +204,19 @@ arrow::Result<MMapRegion> AlignAndMap(int fd, uint64_t offset, uint64_t length, 
 arrow::Result<std::shared_ptr<arrow::Buffer>> MMapReadOnly(int fd, uint64_t offset, uint64_t length) {
   if (length == 0) return std::make_shared<arrow::Buffer>(nullptr, 0);
   ARROW_ASSIGN_OR_RAISE(auto r, AlignAndMap(fd, offset, length, PROT_READ));
-  return std::make_shared<ReadOnlyMMapBuffer>(reinterpret_cast<const uint8_t*>(r.base) + r.delta,
-                                              static_cast<int64_t>(length), r.base, r.map_size, fd);
+  return std::make_shared<ReadOnlyMMapBuffer>(reinterpret_cast<const uint8_t*>(r.base) + r.delta, static_cast<int64_t>(length), r.base, r.map_size,
+                                              fd);
 }
 
 arrow::Result<std::shared_ptr<arrow::MutableBuffer>> MMapMutable(int fd, uint64_t offset, uint64_t length) {
   if (length == 0) return std::make_shared<arrow::MutableBuffer>(nullptr, 0);
   ARROW_ASSIGN_OR_RAISE(auto r, AlignAndMap(fd, offset, length, PROT_READ | PROT_WRITE));
-  return std::make_shared<MutableMMapBuffer>(reinterpret_cast<uint8_t*>(r.base) + r.delta, static_cast<int64_t>(length),
-                                             r.base, r.map_size, fd);
+  return std::make_shared<MutableMMapBuffer>(reinterpret_cast<uint8_t*>(r.base) + r.delta, static_cast<int64_t>(length), r.base, r.map_size, fd);
 }
 
 arrow::Result<int> OpenShm(std::string_view shm_name, bool writable) {
   const int flags = writable ? O_RDWR : O_RDONLY;
-  int fd = shm_open(std::string(shm_name).c_str(), flags, 0);
+  int       fd    = shm_open(std::string(shm_name).c_str(), flags, 0);
   if (fd < 0) return ErrnoToArrow("shm_open", shm_name);
   return fd;
 }
@@ -219,15 +227,14 @@ class MutableCudaIpcBuffer final : public arrow::MutableBuffer {
   explicit MutableCudaIpcBuffer(std::shared_ptr<arrow::cuda::CudaBuffer> buffer)
       // Use address() rather than mutable_data(): CudaBuffer::mutable_data() returns
       // nullptr because is_cpu_ is false, but address() always returns the raw pointer.
-      : arrow::MutableBuffer(reinterpret_cast<uint8_t*>(buffer->address()), buffer->size()),
-        buffer_(std::move(buffer)) {}
+      : arrow::MutableBuffer(reinterpret_cast<uint8_t*>(buffer->address()), buffer->size()), buffer_(std::move(buffer)) {
+  }
 
  private:
   std::shared_ptr<arrow::cuda::CudaBuffer> buffer_;
 };
 
-arrow::Result<std::shared_ptr<arrow::cuda::CudaBuffer>> OpenCudaIpcBuffer(
-    const payload::manager::v1::PayloadDescriptor& descriptor) {
+arrow::Result<std::shared_ptr<arrow::cuda::CudaBuffer>> OpenCudaIpcBuffer(const payload::manager::v1::PayloadDescriptor& descriptor) {
   const auto& gpu = descriptor.gpu();
 
   if (gpu.ipc_handle().empty()) {
@@ -250,7 +257,7 @@ arrow::Result<std::shared_ptr<arrow::cuda::CudaBuffer>> OpenCudaIpcBuffer(
 // Hex representation of a 16-byte binary UUID — used as map key.
 std::string UuidBytesToHex(std::string_view bytes) {
   static constexpr char kHex[] = "0123456789abcdef";
-  std::string hex;
+  std::string           hex;
   hex.reserve(bytes.size() * 2);
   for (unsigned char c : bytes) {
     hex.push_back(kHex[c >> 4]);
@@ -265,15 +272,16 @@ std::string UuidBytesToHex(std::string_view bytes) {
 class VectorOwningMutableBuffer final : public arrow::MutableBuffer {
  public:
   explicit VectorOwningMutableBuffer(std::vector<uint8_t> data)
-      : arrow::MutableBuffer(data.data(), static_cast<int64_t>(data.size())), owned_(std::move(data)) {}
+      : arrow::MutableBuffer(data.data(), static_cast<int64_t>(data.size())), owned_(std::move(data)) {
+  }
 
  private:
   std::vector<uint8_t> owned_;
 };
 
 struct PendingObjectUpload {
-  std::string upload_path;
-  std::shared_ptr<arrow::MutableBuffer> buffer;  // VectorOwningMutableBuffer
+  std::string                           upload_path;
+  std::shared_ptr<arrow::MutableBuffer> buffer; // VectorOwningMutableBuffer
 };
 
 // Per-PayloadClient pending object-tier uploads.  Keyed by (client*, uuid_hex).
@@ -291,7 +299,7 @@ class PendingObjectRegistry {
 
   std::optional<PendingObjectUpload> Pop(const PayloadClient* client, const std::string& uuid_hex) {
     std::lock_guard lock(mutex_);
-    const auto client_it = registry_.find(client);
+    const auto      client_it = registry_.find(client);
     if (client_it == registry_.end()) return std::nullopt;
     const auto it = client_it->second.find(uuid_hex);
     if (it == client_it->second.end()) return std::nullopt;
@@ -310,14 +318,14 @@ class PendingObjectRegistry {
   // Re-key all pending uploads from old_client to new_client after a move.
   void Rekey(const PayloadClient* old_client, const PayloadClient* new_client) {
     std::lock_guard lock(mutex_);
-    auto it = registry_.find(old_client);
+    auto            it = registry_.find(old_client);
     if (it == registry_.end()) return;
     registry_[new_client] = std::move(it->second);
     registry_.erase(it);
   }
 
  private:
-  std::mutex mutex_;
+  std::mutex                                                                                     mutex_;
   std::unordered_map<const PayloadClient*, std::unordered_map<std::string, PendingObjectUpload>> registry_;
 };
 
@@ -326,13 +334,13 @@ class PendingObjectRegistry {
 // (picks up default AWS credential chain / env vars).
 arrow::Status UploadToObjectPath(const std::string& upload_uri, const std::shared_ptr<arrow::Buffer>& buffer,
                                  const std::shared_ptr<arrow::fs::FileSystem>& fs) {
-  std::string path;
+  std::string                            path;
   std::shared_ptr<arrow::fs::FileSystem> effective_fs;
 
   if (fs) {
     const auto scheme_end = upload_uri.find("://");
-    path = (scheme_end != std::string::npos) ? upload_uri.substr(scheme_end + 3) : upload_uri;
-    effective_fs = fs;
+    path                  = (scheme_end != std::string::npos) ? upload_uri.substr(scheme_end + 3) : upload_uri;
+    effective_fs          = fs;
   } else {
     if (upload_uri.starts_with("s3://") || upload_uri.starts_with("S3://")) {
       ARROW_RETURN_NOT_OK(arrow::fs::EnsureS3Initialized());
@@ -348,12 +356,12 @@ arrow::Status UploadToObjectPath(const std::string& upload_uri, const std::share
 // Best-effort delete of an already-uploaded object after an ImportPayload RPC failure.
 void BestEffortDeleteObject(const std::string& upload_uri, const std::shared_ptr<arrow::fs::FileSystem>& fs) {
   try {
-    std::string path;
+    std::string                            path;
     std::shared_ptr<arrow::fs::FileSystem> effective_fs;
     if (fs) {
       const auto scheme_end = upload_uri.find("://");
-      path = (scheme_end != std::string::npos) ? upload_uri.substr(scheme_end + 3) : upload_uri;
-      effective_fs = fs;
+      path                  = (scheme_end != std::string::npos) ? upload_uri.substr(scheme_end + 3) : upload_uri;
+      effective_fs          = fs;
     } else {
       if (arrow::fs::EnsureS3Initialized().ok()) {
         auto result = arrow::fs::FileSystemFromUri(upload_uri, &path);
@@ -372,7 +380,7 @@ std::shared_ptr<grpc::Channel> RequireChannel(std::shared_ptr<grpc::Channel> cha
   return channel;
 }
 
-}  // namespace
+} // namespace
 
 PayloadClient::PayloadClient(std::shared_ptr<grpc::Channel> channel, std::chrono::milliseconds rpc_timeout)
     : catalog_stub_(payload::manager::v1::PayloadCatalogService::NewStub(RequireChannel(channel))),
@@ -380,7 +388,8 @@ PayloadClient::PayloadClient(std::shared_ptr<grpc::Channel> channel, std::chrono
       admin_stub_(payload::manager::v1::PayloadAdminService::NewStub(channel)),
       stream_stub_(payload::manager::v1::PayloadStreamService::NewStub(channel)),
       ring_stub_(payload::manager::v1::PayloadRingService::NewStub(std::move(channel))),
-      rpc_timeout_(rpc_timeout) {}
+      rpc_timeout_(rpc_timeout) {
+}
 
 PayloadClient::PayloadClient(std::shared_ptr<grpc::Channel> channel, std::shared_ptr<arrow::fs::FileSystem> object_fs,
                              std::chrono::milliseconds rpc_timeout)
@@ -390,9 +399,12 @@ PayloadClient::PayloadClient(std::shared_ptr<grpc::Channel> channel, std::shared
       stream_stub_(payload::manager::v1::PayloadStreamService::NewStub(channel)),
       ring_stub_(payload::manager::v1::PayloadRingService::NewStub(std::move(channel))),
       object_fs_(std::move(object_fs)),
-      rpc_timeout_(rpc_timeout) {}
+      rpc_timeout_(rpc_timeout) {
+}
 
-PayloadClient::~PayloadClient() { PendingObjectRegistry::Instance().DrainClient(this); }
+PayloadClient::~PayloadClient() {
+  PendingObjectRegistry::Instance().DrainClient(this);
+}
 
 PayloadClient::PayloadClient(PayloadClient&& other) noexcept
     : catalog_stub_(std::move(other.catalog_stub_)),
@@ -409,12 +421,12 @@ PayloadClient& PayloadClient::operator=(PayloadClient&& other) noexcept {
   if (this != &other) {
     PendingObjectRegistry::Instance().DrainClient(this);
     catalog_stub_ = std::move(other.catalog_stub_);
-    data_stub_ = std::move(other.data_stub_);
-    admin_stub_ = std::move(other.admin_stub_);
-    stream_stub_ = std::move(other.stream_stub_);
-    ring_stub_ = std::move(other.ring_stub_);
-    object_fs_ = std::move(other.object_fs_);
-    rpc_timeout_ = other.rpc_timeout_;
+    data_stub_    = std::move(other.data_stub_);
+    admin_stub_   = std::move(other.admin_stub_);
+    stream_stub_  = std::move(other.stream_stub_);
+    ring_stub_    = std::move(other.ring_stub_);
+    object_fs_    = std::move(other.object_fs_);
+    rpc_timeout_  = other.rpc_timeout_;
     PendingObjectRegistry::Instance().Rekey(&other, this);
   }
   return *this;
@@ -429,9 +441,8 @@ std::unique_ptr<grpc::ClientContext> PayloadClient::MakeContext() const {
   return ctx;
 }
 
-arrow::Result<PayloadClient::WritablePayload> PayloadClient::AllocateWritableBuffer(
-    uint64_t size_bytes, payload::manager::v1::Tier preferred_tier, uint64_t ttl_ms,
-    bool no_evict) const {
+arrow::Result<PayloadClient::WritablePayload> PayloadClient::AllocateWritableBuffer(uint64_t size_bytes, payload::manager::v1::Tier preferred_tier,
+                                                                                    uint64_t ttl_ms, bool no_evict) const {
   payload::manager::v1::AllocatePayloadRequest req;
   req.set_size_bytes(size_bytes);
   req.set_preferred_tier(preferred_tier);
@@ -439,15 +450,15 @@ arrow::Result<PayloadClient::WritablePayload> PayloadClient::AllocateWritableBuf
   req.set_no_evict(no_evict);
 
   payload::manager::v1::AllocatePayloadResponse resp;
-  auto ctx = MakeContext();
+  auto                                          ctx = MakeContext();
   ARROW_RETURN_NOT_OK(GrpcToArrow(catalog_stub_->AllocatePayload(ctx.get(), req, &resp), "AllocatePayload"));
 
   if (!resp.object_upload_path().empty()) {
     // Object-tier: allocate a local heap buffer; the caller writes into it.
     // CommitPayload will upload bytes to object_upload_path then call ImportPayload.
     std::vector<uint8_t> data(size_bytes, 0);
-    auto owned_buf = std::make_shared<VectorOwningMutableBuffer>(std::move(data));
-    const auto uuid_hex = UuidBytesToHex(resp.payload_descriptor().payload_id().value());
+    auto                 owned_buf = std::make_shared<VectorOwningMutableBuffer>(std::move(data));
+    const auto           uuid_hex  = UuidBytesToHex(resp.payload_descriptor().payload_id().value());
     PendingObjectRegistry::Instance().Insert(this, uuid_hex, PendingObjectUpload{resp.object_upload_path(), owned_buf});
     return WritablePayload{resp.payload_descriptor(), std::move(owned_buf)};
   }
@@ -465,7 +476,7 @@ arrow::Result<payload::manager::v1::PayloadID> PayloadClient::PayloadIdFromUuid(
 
 std::string PayloadClient::UuidBytesToHex(std::string_view bytes) {
   static constexpr char kHex[] = "0123456789abcdef";
-  std::string hex;
+  std::string           hex;
   hex.reserve(bytes.size() * 2);
   for (unsigned char c : bytes) {
     hex.push_back(kHex[c >> 4]);
@@ -482,7 +493,7 @@ arrow::Status PayloadClient::CommitPayload(const payload::manager::v1::PayloadID
   ARROW_RETURN_NOT_OK(ValidatePayloadIdValue(payload_id));
 
   const auto uuid_hex = UuidBytesToHex(payload_id.value());
-  auto pending = PendingObjectRegistry::Instance().Pop(this, uuid_hex);
+  auto       pending  = PendingObjectRegistry::Instance().Pop(this, uuid_hex);
 
   if (pending.has_value()) {
     // Phase 1: upload bytes directly to object storage — no bytes via gRPC.
@@ -494,10 +505,9 @@ arrow::Status PayloadClient::CommitPayload(const payload::manager::v1::PayloadID
     import_req.set_size_bytes(static_cast<uint64_t>(pending->buffer->size()));
 
     payload::manager::v1::ImportPayloadResponse import_resp;
-    auto import_ctx = MakeContext();
+    auto                                        import_ctx = MakeContext();
 
-    auto rpc_status =
-        GrpcToArrow(catalog_stub_->ImportPayload(import_ctx.get(), import_req, &import_resp), "ImportPayload");
+    auto rpc_status = GrpcToArrow(catalog_stub_->ImportPayload(import_ctx.get(), import_req, &import_resp), "ImportPayload");
     if (!rpc_status.ok()) {
       BestEffortDeleteObject(pending->upload_path, object_fs_);
       return rpc_status;
@@ -510,26 +520,25 @@ arrow::Status PayloadClient::CommitPayload(const payload::manager::v1::PayloadID
   *req.mutable_id() = payload_id;
 
   payload::manager::v1::CommitPayloadResponse resp;
-  auto ctx = MakeContext();
+  auto                                        ctx = MakeContext();
   return GrpcToArrow(catalog_stub_->CommitPayload(ctx.get(), req, &resp), "CommitPayload");
 }
 
-arrow::Result<payload::manager::v1::ResolveSnapshotResponse> PayloadClient::Resolve(
-    const payload::manager::v1::PayloadID& payload_id) const {
+arrow::Result<payload::manager::v1::ResolveSnapshotResponse> PayloadClient::Resolve(const payload::manager::v1::PayloadID& payload_id) const {
   payload::manager::v1::ResolveSnapshotRequest request;
   ARROW_RETURN_NOT_OK(ValidatePayloadIdValue(payload_id));
   *request.mutable_id() = payload_id;
 
   payload::manager::v1::ResolveSnapshotResponse response;
-  auto ctx = MakeContext();
+  auto                                          ctx = MakeContext();
   ARROW_RETURN_NOT_OK(GrpcToArrow(data_stub_->ResolveSnapshot(ctx.get(), request, &response), "ResolveSnapshot"));
   return response;
 }
 
-arrow::Result<PayloadClient::ReadablePayload> PayloadClient::AcquireReadableBuffer(
-    const payload::manager::v1::PayloadID& payload_id,
-    payload::manager::v1::Tier min_tier,
-    payload::manager::v1::PromotionPolicy promotion_policy, uint64_t min_lease_duration_ms) const {
+arrow::Result<PayloadClient::ReadablePayload> PayloadClient::AcquireReadableBuffer(const payload::manager::v1::PayloadID& payload_id,
+                                                                                   payload::manager::v1::Tier             min_tier,
+                                                                                   payload::manager::v1::PromotionPolicy  promotion_policy,
+                                                                                   uint64_t min_lease_duration_ms) const {
   payload::manager::v1::AcquireReadLeaseRequest req;
   ARROW_RETURN_NOT_OK(ValidatePayloadIdValue(payload_id));
   *req.mutable_id() = payload_id;
@@ -539,7 +548,7 @@ arrow::Result<PayloadClient::ReadablePayload> PayloadClient::AcquireReadableBuff
   req.set_mode(payload::manager::v1::LEASE_MODE_READ);
 
   payload::manager::v1::AcquireReadLeaseResponse resp;
-  auto ctx = MakeContext();
+  auto                                           ctx = MakeContext();
   ARROW_RETURN_NOT_OK(GrpcToArrow(data_stub_->AcquireReadLease(ctx.get(), req, &resp), "AcquireReadLease"));
   ARROW_RETURN_NOT_OK(ValidateHasLocation(resp.payload_descriptor()));
 
@@ -552,60 +561,57 @@ arrow::Status PayloadClient::Release(const payload::manager::v1::LeaseID& lease_
   *req.mutable_lease_id() = lease_id;
 
   google::protobuf::Empty resp;
-  auto ctx = MakeContext();
+  auto                    ctx = MakeContext();
   return GrpcToArrow(data_stub_->ReleaseLease(ctx.get(), req, &resp), "ReleaseLease");
 }
 
-arrow::Result<payload::manager::v1::PromoteResponse> PayloadClient::Promote(
-    const payload::manager::v1::PromoteRequest& request) const {
+arrow::Result<payload::manager::v1::PromoteResponse> PayloadClient::Promote(const payload::manager::v1::PromoteRequest& request) const {
   payload::manager::v1::PromoteResponse response;
-  auto ctx = MakeContext();
+  auto                                  ctx = MakeContext();
   ARROW_RETURN_NOT_OK(GrpcToArrow(catalog_stub_->Promote(ctx.get(), request, &response), "Promote"));
   return response;
 }
 
-arrow::Result<payload::manager::v1::SpillResponse> PayloadClient::Spill(
-    const payload::manager::v1::SpillRequest& request) const {
+arrow::Result<payload::manager::v1::SpillResponse> PayloadClient::Spill(const payload::manager::v1::SpillRequest& request) const {
   payload::manager::v1::SpillResponse response;
-  auto ctx = MakeContext();
+  auto                                ctx = MakeContext();
   ARROW_RETURN_NOT_OK(GrpcToArrow(catalog_stub_->Spill(ctx.get(), request, &response), "Spill"));
   return response;
 }
 
 arrow::Status PayloadClient::Prefetch(const payload::manager::v1::PrefetchRequest& request) const {
   google::protobuf::Empty response;
-  auto ctx = MakeContext();
+  auto                    ctx = MakeContext();
   return GrpcToArrow(catalog_stub_->Prefetch(ctx.get(), request, &response), "Prefetch");
 }
 
 arrow::Status PayloadClient::Pin(const payload::manager::v1::PinRequest& request) const {
   google::protobuf::Empty response;
-  auto ctx = MakeContext();
+  auto                    ctx = MakeContext();
   return GrpcToArrow(catalog_stub_->Pin(ctx.get(), request, &response), "Pin");
 }
 
 arrow::Status PayloadClient::Unpin(const payload::manager::v1::UnpinRequest& request) const {
   google::protobuf::Empty response;
-  auto ctx = MakeContext();
+  auto                    ctx = MakeContext();
   return GrpcToArrow(catalog_stub_->Unpin(ctx.get(), request, &response), "Unpin");
 }
 
 arrow::Status PayloadClient::Delete(const payload::manager::v1::DeleteRequest& request) const {
   google::protobuf::Empty response;
-  auto ctx = MakeContext();
+  auto                    ctx = MakeContext();
   return GrpcToArrow(catalog_stub_->Delete(ctx.get(), request, &response), "Delete");
 }
 
 arrow::Status PayloadClient::AddLineage(const payload::manager::v1::AddLineageRequest& request) const {
   google::protobuf::Empty response;
-  auto ctx = MakeContext();
+  auto                    ctx = MakeContext();
   return GrpcToArrow(catalog_stub_->AddLineage(ctx.get(), request, &response), "AddLineage");
 }
 
-arrow::Result<payload::manager::v1::GetLineageResponse> PayloadClient::GetLineage(
-    const payload::manager::v1::GetLineageRequest& request) const {
+arrow::Result<payload::manager::v1::GetLineageResponse> PayloadClient::GetLineage(const payload::manager::v1::GetLineageRequest& request) const {
   payload::manager::v1::GetLineageResponse response;
-  auto ctx = MakeContext();
+  auto                                     ctx = MakeContext();
   ARROW_RETURN_NOT_OK(GrpcToArrow(catalog_stub_->GetLineage(ctx.get(), request, &response), "GetLineage"));
   return response;
 }
@@ -613,93 +619,83 @@ arrow::Result<payload::manager::v1::GetLineageResponse> PayloadClient::GetLineag
 arrow::Result<payload::manager::v1::UpdatePayloadMetadataResponse> PayloadClient::UpdatePayloadMetadata(
     const payload::manager::v1::UpdatePayloadMetadataRequest& request) const {
   payload::manager::v1::UpdatePayloadMetadataResponse response;
-  auto ctx = MakeContext();
-  ARROW_RETURN_NOT_OK(
-      GrpcToArrow(catalog_stub_->UpdatePayloadMetadata(ctx.get(), request, &response), "UpdatePayloadMetadata"));
+  auto                                                ctx = MakeContext();
+  ARROW_RETURN_NOT_OK(GrpcToArrow(catalog_stub_->UpdatePayloadMetadata(ctx.get(), request, &response), "UpdatePayloadMetadata"));
   return response;
 }
 
-arrow::Result<payload::manager::v1::AppendPayloadMetadataEventResponse>
-PayloadClient::AppendPayloadMetadataEvent(
+arrow::Result<payload::manager::v1::AppendPayloadMetadataEventResponse> PayloadClient::AppendPayloadMetadataEvent(
     const payload::manager::v1::AppendPayloadMetadataEventRequest& request) const {
   payload::manager::v1::AppendPayloadMetadataEventResponse response;
-  auto ctx = MakeContext();
-  ARROW_RETURN_NOT_OK(GrpcToArrow(catalog_stub_->AppendPayloadMetadataEvent(ctx.get(), request, &response),
-                                  "AppendPayloadMetadataEvent"));
+  auto                                                     ctx = MakeContext();
+  ARROW_RETURN_NOT_OK(GrpcToArrow(catalog_stub_->AppendPayloadMetadataEvent(ctx.get(), request, &response), "AppendPayloadMetadataEvent"));
   return response;
 }
 
 arrow::Result<payload::manager::v1::ListPayloadsResponse> PayloadClient::ListPayloads(
     const payload::manager::v1::ListPayloadsRequest& request) const {
   payload::manager::v1::ListPayloadsResponse response;
-  auto ctx = MakeContext();
+  auto                                       ctx = MakeContext();
   ARROW_RETURN_NOT_OK(GrpcToArrow(catalog_stub_->ListPayloads(ctx.get(), request, &response), "ListPayloads"));
   return response;
 }
 
-arrow::Result<payload::manager::v1::StatsResponse> PayloadClient::Stats(
-    const payload::manager::v1::StatsRequest& request) const {
+arrow::Result<payload::manager::v1::StatsResponse> PayloadClient::Stats(const payload::manager::v1::StatsRequest& request) const {
   payload::manager::v1::StatsResponse response;
-  auto ctx = MakeContext();
+  auto                                ctx = MakeContext();
   ARROW_RETURN_NOT_OK(GrpcToArrow(admin_stub_->Stats(ctx.get(), request, &response), "Stats"));
   return response;
 }
 
-arrow::Status PayloadClient::CreateStream(
-    const payload::manager::v1::CreateStreamRequest& request) const {
+arrow::Status PayloadClient::CreateStream(const payload::manager::v1::CreateStreamRequest& request) const {
   google::protobuf::Empty response;
-  auto ctx = MakeContext();
+  auto                    ctx = MakeContext();
   return GrpcToArrow(stream_stub_->CreateStream(ctx.get(), request, &response), "CreateStream");
 }
 
-arrow::Status PayloadClient::DeleteStream(
-    const payload::manager::v1::DeleteStreamRequest& request) const {
+arrow::Status PayloadClient::DeleteStream(const payload::manager::v1::DeleteStreamRequest& request) const {
   google::protobuf::Empty response;
-  auto ctx = MakeContext();
+  auto                    ctx = MakeContext();
   return GrpcToArrow(stream_stub_->DeleteStream(ctx.get(), request, &response), "DeleteStream");
 }
 
-arrow::Result<payload::manager::v1::AppendResponse> PayloadClient::Append(
-    const payload::manager::v1::AppendRequest& request) const {
+arrow::Result<payload::manager::v1::AppendResponse> PayloadClient::Append(const payload::manager::v1::AppendRequest& request) const {
   payload::manager::v1::AppendResponse response;
-  auto ctx = MakeContext();
+  auto                                 ctx = MakeContext();
   ARROW_RETURN_NOT_OK(GrpcToArrow(stream_stub_->Append(ctx.get(), request, &response), "Append"));
   return response;
 }
 
-arrow::Result<payload::manager::v1::ReadResponse> PayloadClient::Read(
-    const payload::manager::v1::ReadRequest& request) const {
+arrow::Result<payload::manager::v1::ReadResponse> PayloadClient::Read(const payload::manager::v1::ReadRequest& request) const {
   payload::manager::v1::ReadResponse response;
-  auto ctx = MakeContext();
+  auto                               ctx = MakeContext();
   ARROW_RETURN_NOT_OK(GrpcToArrow(stream_stub_->Read(ctx.get(), request, &response), "Read"));
   return response;
 }
 
-PayloadClient::SubscribeHandle PayloadClient::Subscribe(
-    const payload::manager::v1::SubscribeRequest& request) const {
-  auto ctx = MakeContext();
+PayloadClient::SubscribeHandle PayloadClient::Subscribe(const payload::manager::v1::SubscribeRequest& request) const {
+  auto ctx    = MakeContext();
   auto reader = stream_stub_->Subscribe(ctx.get(), request);
   return SubscribeHandle{std::move(ctx), std::move(reader)};
 }
 
 arrow::Status PayloadClient::Commit(const payload::manager::v1::CommitRequest& request) const {
   google::protobuf::Empty response;
-  auto ctx = MakeContext();
+  auto                    ctx = MakeContext();
   return GrpcToArrow(stream_stub_->Commit(ctx.get(), request, &response), "Commit");
 }
 
 arrow::Result<payload::manager::v1::GetCommittedResponse> PayloadClient::GetCommitted(
     const payload::manager::v1::GetCommittedRequest& request) const {
   payload::manager::v1::GetCommittedResponse response;
-  auto ctx = MakeContext();
+  auto                                       ctx = MakeContext();
   ARROW_RETURN_NOT_OK(GrpcToArrow(stream_stub_->GetCommitted(ctx.get(), request, &response), "GetCommitted"));
   return response;
 }
 
-arrow::Result<payload::manager::v1::GetRangeResponse> PayloadClient::GetRange(
-    const payload::manager::v1::GetRangeRequest& request) const {
+arrow::Result<payload::manager::v1::GetRangeResponse> PayloadClient::GetRange(const payload::manager::v1::GetRangeRequest& request) const {
   payload::manager::v1::GetRangeResponse response;
-  auto ctx = MakeContext();
+  auto                                   ctx = MakeContext();
   ARROW_RETURN_NOT_OK(GrpcToArrow(stream_stub_->GetRange(ctx.get(), request, &response), "GetRange"));
   return response;
 }
@@ -741,13 +737,11 @@ arrow::Result<std::shared_ptr<arrow::MutableBuffer>> PayloadClient::OpenMutableB
     return MMapMutable(fd, descriptor.disk().offset_bytes(), length);
   }
 
-  return arrow::Status::NotImplemented("Writable Arrow buffer for tier ",
-                                       payload::manager::v1::Tier_Name(descriptor.tier()),
+  return arrow::Status::NotImplemented("Writable Arrow buffer for tier ", payload::manager::v1::Tier_Name(descriptor.tier()),
                                        " is not supported in C++ client");
 }
 
-arrow::Result<std::shared_ptr<arrow::Buffer>> PayloadClient::OpenReadableBuffer(
-    const payload::manager::v1::PayloadDescriptor& descriptor) const {
+arrow::Result<std::shared_ptr<arrow::Buffer>> PayloadClient::OpenReadableBuffer(const payload::manager::v1::PayloadDescriptor& descriptor) const {
   ARROW_ASSIGN_OR_RAISE(auto length, DescriptorLengthBytes(descriptor));
 
   if (descriptor.has_gpu()) {
@@ -772,13 +766,11 @@ arrow::Result<std::shared_ptr<arrow::Buffer>> PayloadClient::OpenReadableBuffer(
     return MMapReadOnly(fd, descriptor.disk().offset_bytes(), length);
   }
 
-  return arrow::Status::NotImplemented("Readable Arrow buffer for tier ",
-                                       payload::manager::v1::Tier_Name(descriptor.tier()),
+  return arrow::Status::NotImplemented("Readable Arrow buffer for tier ", payload::manager::v1::Tier_Name(descriptor.tier()),
                                        " is not supported in C++ client");
 }
 
-arrow::Status PayloadClient::ValidateHasLocation(
-    const payload::manager::v1::PayloadDescriptor& descriptor) {
+arrow::Status PayloadClient::ValidateHasLocation(const payload::manager::v1::PayloadDescriptor& descriptor) {
   if (descriptor.has_ram() || descriptor.has_disk()) return arrow::Status::OK();
 
   if (descriptor.has_gpu()) {
@@ -791,63 +783,57 @@ arrow::Status PayloadClient::ValidateHasLocation(
 #endif
   }
 
-  return arrow::Status::Invalid("payload descriptor is missing location for tier ",
-                                payload::manager::v1::Tier_Name(descriptor.tier()));
+  return arrow::Status::Invalid("payload descriptor is missing location for tier ", payload::manager::v1::Tier_Name(descriptor.tier()));
 }
 
-arrow::Result<uint64_t> PayloadClient::DescriptorLengthBytes(
-    const payload::manager::v1::PayloadDescriptor& descriptor) {
+arrow::Result<uint64_t> PayloadClient::DescriptorLengthBytes(const payload::manager::v1::PayloadDescriptor& descriptor) {
   if (descriptor.has_gpu()) return descriptor.gpu().length_bytes();
   if (descriptor.has_ram()) return descriptor.ram().length_bytes();
   if (descriptor.has_disk()) return descriptor.disk().length_bytes();
-  return arrow::Status::Invalid("payload descriptor has no location for tier ",
-                                payload::manager::v1::Tier_Name(descriptor.tier()));
+  return arrow::Status::Invalid("payload descriptor has no location for tier ", payload::manager::v1::Tier_Name(descriptor.tier()));
 }
 
 // ---------------------------------------------------------------------------
 // Ring tier (TIER_RAM_RING)
 // ---------------------------------------------------------------------------
 
-arrow::Result<payload::manager::v1::MapRingResponse> PayloadClient::MapRing(
-    const std::string& ring_id) const {
+arrow::Result<payload::manager::v1::MapRingResponse> PayloadClient::MapRing(const std::string& ring_id) const {
   payload::manager::v1::MapRingRequest req;
   req.set_ring_id(ring_id);
   payload::manager::v1::MapRingResponse resp;
-  auto ctx = MakeContext();
+  auto                                  ctx = MakeContext();
   ARROW_RETURN_NOT_OK(GrpcToArrow(ring_stub_->MapRing(ctx.get(), req, &resp), "MapRing"));
   return resp;
 }
 
-arrow::Result<payload::manager::v1::AcquireRingSlotResponse> PayloadClient::AcquireRingSlot(
-    const std::string& ring_id) const {
+arrow::Result<payload::manager::v1::AcquireRingSlotResponse> PayloadClient::AcquireRingSlot(const std::string& ring_id) const {
   payload::manager::v1::AcquireRingSlotRequest req;
   req.set_ring_id(ring_id);
   payload::manager::v1::AcquireRingSlotResponse resp;
-  auto ctx = MakeContext();
+  auto                                          ctx = MakeContext();
   ARROW_RETURN_NOT_OK(GrpcToArrow(ring_stub_->AcquireRingSlot(ctx.get(), req, &resp), "AcquireRingSlot"));
   return resp;
 }
 
-arrow::Status PayloadClient::CommitRingSlot(const std::string& ring_id, uint32_t slot_idx, uint64_t generation,
-                                            uint64_t size_bytes) const {
+arrow::Status PayloadClient::CommitRingSlot(const std::string& ring_id, uint32_t slot_idx, uint64_t generation, uint64_t size_bytes) const {
   payload::manager::v1::CommitRingSlotRequest req;
   req.set_ring_id(ring_id);
   req.set_slot_idx(slot_idx);
   req.set_generation(generation);
   req.set_size_bytes(size_bytes);
   payload::manager::v1::CommitRingSlotResponse resp;
-  auto ctx = MakeContext();
+  auto                                         ctx = MakeContext();
   return GrpcToArrow(ring_stub_->CommitRingSlot(ctx.get(), req, &resp), "CommitRingSlot");
 }
 
-arrow::Result<payload::manager::v1::LeaseRingSlotResponse> PayloadClient::LeaseRingSlot(
-    const std::string& ring_id, uint32_t slot_idx, uint64_t generation) const {
+arrow::Result<payload::manager::v1::LeaseRingSlotResponse> PayloadClient::LeaseRingSlot(const std::string& ring_id, uint32_t slot_idx,
+                                                                                        uint64_t generation) const {
   payload::manager::v1::LeaseRingSlotRequest req;
   req.set_ring_id(ring_id);
   req.set_slot_idx(slot_idx);
   req.set_generation(generation);
   payload::manager::v1::LeaseRingSlotResponse resp;
-  auto ctx = MakeContext();
+  auto                                        ctx = MakeContext();
   ARROW_RETURN_NOT_OK(GrpcToArrow(ring_stub_->LeaseRingSlot(ctx.get(), req, &resp), "LeaseRingSlot"));
   return resp;
 }
@@ -856,8 +842,8 @@ arrow::Status PayloadClient::ReleaseRingSlot(const std::string& lease_id) const 
   payload::manager::v1::ReleaseRingSlotRequest req;
   req.set_lease_id(lease_id);
   google::protobuf::Empty resp;
-  auto ctx = MakeContext();
+  auto                    ctx = MakeContext();
   return GrpcToArrow(ring_stub_->ReleaseRingSlot(ctx.get(), req, &resp), "ReleaseRingSlot");
 }
 
-}  // namespace payload::manager::client
+} // namespace payload::manager::client

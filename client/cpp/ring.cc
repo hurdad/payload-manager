@@ -27,9 +27,10 @@ namespace core_v1 = payload::manager::core::v1;
 RingConsumer::RingConsumer(PayloadClient* pm_client, Options opts) : pm_client_(pm_client), opts_(std::move(opts)) {
 #if !PAYLOAD_CLIENT_ARROW_CUDA
   if (opts_.register_for_gpu) {
-    spdlog::warn("{}: register_for_gpu requested but the client was built without "
-                 "PAYLOAD_MANAGER_CLIENT_ENABLE_CUDA — slots will be mapped read-only and dev_va will be null",
-                 opts_.log_prefix);
+    spdlog::warn(
+        "{}: register_for_gpu requested but the client was built without "
+        "PAYLOAD_MANAGER_CLIENT_ENABLE_CUDA — slots will be mapped read-only and dev_va will be null",
+        opts_.log_prefix);
   }
 #endif
 }
@@ -42,34 +43,32 @@ RingConsumer::~RingConsumer() {
 // RingConsumer::Lease
 // ---------------------------------------------------------------------------
 
-RingConsumer::Lease::~Lease() { Release(); }
+RingConsumer::Lease::~Lease() {
+  Release();
+}
 
 RingConsumer::Lease::Lease(Lease&& other) noexcept
-    : host_va(other.host_va),
-      dev_va(other.dev_va),
-      size_bytes(other.size_bytes),
-      owner_(other.owner_),
-      lease_id_(std::move(other.lease_id_)) {
+    : host_va(other.host_va), dev_va(other.dev_va), size_bytes(other.size_bytes), owner_(other.owner_), lease_id_(std::move(other.lease_id_)) {
   // Neutralize the source: exactly one of the two must release.
   other.owner_ = nullptr;
   other.lease_id_.clear();
-  other.host_va = nullptr;
-  other.dev_va = nullptr;
+  other.host_va    = nullptr;
+  other.dev_va     = nullptr;
   other.size_bytes = 0;
 }
 
 RingConsumer::Lease& RingConsumer::Lease::operator=(Lease&& other) noexcept {
   if (this != &other) {
-    Release();  // drop whatever we were holding first
-    host_va = other.host_va;
-    dev_va = other.dev_va;
-    size_bytes = other.size_bytes;
-    owner_ = other.owner_;
-    lease_id_ = std::move(other.lease_id_);
+    Release(); // drop whatever we were holding first
+    host_va      = other.host_va;
+    dev_va       = other.dev_va;
+    size_bytes   = other.size_bytes;
+    owner_       = other.owner_;
+    lease_id_    = std::move(other.lease_id_);
     other.owner_ = nullptr;
     other.lease_id_.clear();
-    other.host_va = nullptr;
-    other.dev_va = nullptr;
+    other.host_va    = nullptr;
+    other.dev_va     = nullptr;
     other.size_bytes = 0;
   }
   return *this;
@@ -78,8 +77,8 @@ RingConsumer::Lease& RingConsumer::Lease::operator=(Lease&& other) noexcept {
 void RingConsumer::Lease::Release() {
   if (!owner_ || lease_id_.empty()) return;
   // Clear before the RPC so a throw (or a re-entrant call) can't release twice.
-  RingConsumer* owner = std::exchange(owner_, nullptr);
-  const std::string id = std::exchange(lease_id_, std::string{});
+  RingConsumer*     owner = std::exchange(owner_, nullptr);
+  const std::string id    = std::exchange(lease_id_, std::string{});
   owner->Release(id);
 }
 
@@ -112,13 +111,13 @@ bool RingConsumer::BuildMapping_(const std::string& ring_id, RingMapping& mappin
   // would mean indexing a vector sized by one with a bound taken from
   // the other.
   if (m.n_slots() == 0 || m.slot_capacity_bytes() == 0) {
-    spdlog::error("{}: MapRing('{}') returned a degenerate ring: n_slots={} slot_capacity_bytes={}", opts_.log_prefix,
-                  ring_id, m.n_slots(), m.slot_capacity_bytes());
+    spdlog::error("{}: MapRing('{}') returned a degenerate ring: n_slots={} slot_capacity_bytes={}", opts_.log_prefix, ring_id, m.n_slots(),
+                  m.slot_capacity_bytes());
     return false;
   }
   if (m.slot_shm_names_size() != static_cast<int>(m.n_slots())) {
-    spdlog::error("{}: MapRing('{}') returned {} shm names for {} slots — refusing to map", opts_.log_prefix, ring_id,
-                  m.slot_shm_names_size(), m.n_slots());
+    spdlog::error("{}: MapRing('{}') returned {} shm names for {} slots — refusing to map", opts_.log_prefix, ring_id, m.slot_shm_names_size(),
+                  m.n_slots());
     return false;
   }
 
@@ -131,38 +130,37 @@ bool RingConsumer::BuildMapping_(const std::string& ring_id, RingMapping& mappin
   const bool want_gpu = false;
 #endif
 
-  mapping.n_slots = m.n_slots();
+  mapping.n_slots       = m.n_slots();
   mapping.slot_capacity = m.slot_capacity_bytes();
   mapping.slots.resize(m.n_slots());
 
   for (int i = 0; i < m.slot_shm_names_size(); ++i) {
-    auto& slot = mapping.slots[i];
+    auto&              slot = mapping.slots[i];
     const std::string& name = m.slot_shm_names(i);
 
     // GPU consumers must map the slot writable: L4T R36's cudaHostRegister
     // rejects PROT_READ-only mappings with `invalid argument`. The consumer
     // never writes — the writable mapping is purely to satisfy registration.
     const int open_flags = want_gpu ? O_RDWR : O_RDONLY;
-    const int prot = want_gpu ? (PROT_READ | PROT_WRITE) : PROT_READ;
+    const int prot       = want_gpu ? (PROT_READ | PROT_WRITE) : PROT_READ;
 
     int fd = shm_open(name.c_str(), open_flags, 0);
     if (fd < 0) {
-      spdlog::error("{}: shm_open('{}') failed: {} — tearing down ring '{}'", opts_.log_prefix, name,
-                    std::strerror(errno), ring_id);
+      spdlog::error("{}: shm_open('{}') failed: {} — tearing down ring '{}'", opts_.log_prefix, name, std::strerror(errno), ring_id);
       TearDownRing_(mapping);
       return false;
     }
     void* va = mmap(nullptr, m.slot_capacity_bytes(), prot, MAP_SHARED, fd, 0);
     if (va == MAP_FAILED) {
-      spdlog::error("{}: mmap('{}', {} bytes) failed: {} — tearing down ring '{}'", opts_.log_prefix, name,
-                    m.slot_capacity_bytes(), std::strerror(errno), ring_id);
+      spdlog::error("{}: mmap('{}', {} bytes) failed: {} — tearing down ring '{}'", opts_.log_prefix, name, m.slot_capacity_bytes(),
+                    std::strerror(errno), ring_id);
       close(fd);
       TearDownRing_(mapping);
       return false;
     }
-    slot.host_va = va;
+    slot.host_va  = va;
     slot.capacity = m.slot_capacity_bytes();
-    slot.fd = fd;
+    slot.fd       = fd;
 
 #if PAYLOAD_CLIENT_ARROW_CUDA
     // Register the slot for the GPU ONCE here. Slots are stable and
@@ -172,16 +170,16 @@ bool RingConsumer::BuildMapping_(const std::string& ring_id, RingMapping& mappin
     if (want_gpu) {
       cudaError_t reg = cudaHostRegister(va, m.slot_capacity_bytes(), cudaHostRegisterMapped);
       if (reg != cudaSuccess) {
-        spdlog::error("{}: cudaHostRegister(slot '{}', {} bytes) failed: {} — tearing down ring '{}'", opts_.log_prefix,
-                      name, m.slot_capacity_bytes(), cudaGetErrorString(reg), ring_id);
+        spdlog::error("{}: cudaHostRegister(slot '{}', {} bytes) failed: {} — tearing down ring '{}'", opts_.log_prefix, name,
+                      m.slot_capacity_bytes(), cudaGetErrorString(reg), ring_id);
         TearDownRing_(mapping);
         return false;
       }
-      void* dev = nullptr;
-      cudaError_t gp = cudaHostGetDevicePointer(&dev, va, 0);
+      void*       dev = nullptr;
+      cudaError_t gp  = cudaHostGetDevicePointer(&dev, va, 0);
       if (gp != cudaSuccess) {
-        spdlog::error("{}: cudaHostGetDevicePointer(slot '{}') failed: {} — tearing down ring '{}'", opts_.log_prefix,
-                      name, cudaGetErrorString(gp), ring_id);
+        spdlog::error("{}: cudaHostGetDevicePointer(slot '{}') failed: {} — tearing down ring '{}'", opts_.log_prefix, name, cudaGetErrorString(gp),
+                      ring_id);
         TearDownRing_(mapping);
         return false;
       }
@@ -190,9 +188,8 @@ bool RingConsumer::BuildMapping_(const std::string& ring_id, RingMapping& mappin
 #endif
   }
 
-  spdlog::info("{}: mapped ring '{}' — {} slots × {} bytes = {} total bytes{}", opts_.log_prefix, ring_id,
-               mapping.n_slots, mapping.slot_capacity, static_cast<uint64_t>(mapping.n_slots) * mapping.slot_capacity,
-               want_gpu ? " (GPU-registered)" : "");
+  spdlog::info("{}: mapped ring '{}' — {} slots × {} bytes = {} total bytes{}", opts_.log_prefix, ring_id, mapping.n_slots, mapping.slot_capacity,
+               static_cast<uint64_t>(mapping.n_slots) * mapping.slot_capacity, want_gpu ? " (GPU-registered)" : "");
   return true;
 }
 
@@ -211,7 +208,7 @@ bool RingConsumer::EnsureMapped(const std::string& ring_id) {
   std::shared_ptr<std::mutex> build_mu;
   {
     std::lock_guard<std::mutex> lk(mu_);
-    if (rings_.contains(ring_id)) return true;  // fast path
+    if (rings_.contains(ring_id)) return true; // fast path
     build_mu = BuildMutexFor_(ring_id);
   }
 
@@ -224,7 +221,7 @@ bool RingConsumer::EnsureMapped(const std::string& ring_id) {
   std::lock_guard<std::mutex> build_lk(*build_mu);
   {
     std::lock_guard<std::mutex> lk(mu_);
-    if (rings_.contains(ring_id)) return true;  // a previous holder published it
+    if (rings_.contains(ring_id)) return true; // a previous holder published it
   }
 
   RingMapping mapping;
@@ -243,8 +240,8 @@ bool RingConsumer::EnsureMapped(const std::string& ring_id) {
   return true;
 }
 
-std::optional<RingConsumer::Lease> RingConsumer::LeaseAndOpen(const std::string& ring_id, uint32_t slot_idx,
-                                                              uint64_t generation, uint64_t size_bytes) {
+std::optional<RingConsumer::Lease> RingConsumer::LeaseAndOpen(const std::string& ring_id, uint32_t slot_idx, uint64_t generation,
+                                                              uint64_t size_bytes) {
   if (!pm_client_) return std::nullopt;
   // Lazy MapRing on first encounter; a no-op afterwards.
   if (!EnsureMapped(ring_id)) return std::nullopt;
@@ -254,24 +251,23 @@ std::optional<RingConsumer::Lease> RingConsumer::LeaseAndOpen(const std::string&
   // The pointers stay valid because entries are never erased or
   // resized once published.
   const void* host_va = nullptr;
-  const void* dev_va = nullptr;
+  const void* dev_va  = nullptr;
   {
     std::lock_guard<std::mutex> lk(mu_);
-    auto it = rings_.find(ring_id);
-    if (it == rings_.end()) return std::nullopt;  // EnsureMapped tore it down
+    auto                        it = rings_.find(ring_id);
+    if (it == rings_.end()) return std::nullopt; // EnsureMapped tore it down
     auto& mapping = it->second;
     if (slot_idx >= mapping.slots.size()) {
-      spdlog::warn("{}: slot_idx {} OOB for ring '{}' (n_slots={})", opts_.log_prefix, slot_idx, ring_id,
-                   mapping.n_slots);
+      spdlog::warn("{}: slot_idx {} OOB for ring '{}' (n_slots={})", opts_.log_prefix, slot_idx, ring_id, mapping.n_slots);
       return std::nullopt;
     }
     if (size_bytes > mapping.slot_capacity) {
-      spdlog::warn("{}: event claims size_bytes={} but ring '{}' slot capacity is {} — capping at capacity",
-                   opts_.log_prefix, size_bytes, ring_id, mapping.slot_capacity);
+      spdlog::warn("{}: event claims size_bytes={} but ring '{}' slot capacity is {} — capping at capacity", opts_.log_prefix, size_bytes, ring_id,
+                   mapping.slot_capacity);
       size_bytes = mapping.slot_capacity;
     }
     host_va = mapping.slots[slot_idx].host_va;
-    dev_va = mapping.slots[slot_idx].dev_va;
+    dev_va  = mapping.slots[slot_idx].dev_va;
   }
 
   // Belt and braces against a half-built mapping: BuildMapping_ either
@@ -290,21 +286,20 @@ std::optional<RingConsumer::Lease> RingConsumer::LeaseAndOpen(const std::string&
     // at capture rate, so it stays at debug. Anything else is a real
     // failure and must not hide there.
     if (resp.status().IsInvalid()) {
-      spdlog::debug("{}: LeaseRingSlot('{}', slot={}, gen={}) refused as stale: {}", opts_.log_prefix, ring_id,
-                    slot_idx, generation, resp.status().ToString());
+      spdlog::debug("{}: LeaseRingSlot('{}', slot={}, gen={}) refused as stale: {}", opts_.log_prefix, ring_id, slot_idx, generation,
+                    resp.status().ToString());
     } else {
-      spdlog::error("{}: LeaseRingSlot('{}', slot={}, gen={}) failed: {}", opts_.log_prefix, ring_id, slot_idx,
-                    generation, resp.status().ToString());
+      spdlog::error("{}: LeaseRingSlot('{}', slot={}, gen={}) failed: {}", opts_.log_prefix, ring_id, slot_idx, generation, resp.status().ToString());
     }
     return std::nullopt;
   }
 
   Lease lease;
-  lease.host_va = host_va;
-  lease.dev_va = dev_va;
+  lease.host_va    = host_va;
+  lease.dev_va     = dev_va;
   lease.size_bytes = size_bytes;
-  lease.owner_ = this;
-  lease.lease_id_ = resp.ValueOrDie().lease_id();
+  lease.owner_     = this;
+  lease.lease_id_  = resp.ValueOrDie().lease_id();
   return lease;
 }
 
@@ -315,8 +310,7 @@ void RingConsumer::Release(const std::string& lease_id) {
     // PM treats unknown lease_ids as OK, so the only path here is a
     // gRPC transport failure — which means the slot's refcount is still
     // up and PM will never reclaim it on its own. Worth an error.
-    spdlog::error("{}: ReleaseRingSlot failed, slot stays pinned server-side: {}", opts_.log_prefix,
-                  status.ToString());
+    spdlog::error("{}: ReleaseRingSlot failed, slot stays pinned server-side: {}", opts_.log_prefix, status.ToString());
   }
 }
 
@@ -332,12 +326,12 @@ RingProducerSlot::~RingProducerSlot() {
   // slot is a partial capture nobody announced, and consumers skip an
   // empty payload.
   if (client && !committed && valid()) {
-    spdlog::warn("{}: ring '{}' slot {} (gen {}) destroyed uncommitted — committing empty so PM can recycle it",
-                 log_prefix, ring_id, slot_idx, generation);
+    spdlog::warn("{}: ring '{}' slot {} (gen {}) destroyed uncommitted — committing empty so PM can recycle it", log_prefix, ring_id, slot_idx,
+                 generation);
     auto status = client->CommitRingSlot(ring_id, slot_idx, generation, 0);
     if (!status.ok()) {
-      spdlog::error("{}: rescue CommitRingSlot for ring '{}' slot {} failed, slot is now stuck: {}", log_prefix,
-                    ring_id, slot_idx, status.ToString());
+      spdlog::error("{}: rescue CommitRingSlot for ring '{}' slot {} failed, slot is now stuck: {}", log_prefix, ring_id, slot_idx,
+                    status.ToString());
     }
   }
   if (mmap_va) munmap(mmap_va, capacity);
@@ -357,12 +351,12 @@ RingProducerSlot::RingProducerSlot(RingProducerSlot&& other) noexcept
       log_prefix(std::move(other.log_prefix)),
       client(other.client),
       committed(other.committed) {
-  other.mmap_va = nullptr;
-  other.mmap_fd = -1;
+  other.mmap_va  = nullptr;
+  other.mmap_fd  = -1;
   other.capacity = 0;
   // Neutralize the source's rescue commit: exactly one of the two
   // handles owns this reservation, and it is now us.
-  other.client = nullptr;
+  other.client    = nullptr;
   other.committed = true;
 }
 
@@ -371,30 +365,30 @@ RingProducerSlot& RingProducerSlot::operator=(RingProducerSlot&& other) noexcept
     // Our own reservation goes away here, so it needs the same rescue
     // commit the destructor does.
     if (client && !committed && valid()) {
-      spdlog::warn("{}: ring '{}' slot {} (gen {}) overwritten uncommitted — committing empty so PM can recycle it",
-                   log_prefix, ring_id, slot_idx, generation);
+      spdlog::warn("{}: ring '{}' slot {} (gen {}) overwritten uncommitted — committing empty so PM can recycle it", log_prefix, ring_id, slot_idx,
+                   generation);
       auto status = client->CommitRingSlot(ring_id, slot_idx, generation, 0);
       if (!status.ok()) {
-        spdlog::error("{}: rescue CommitRingSlot for ring '{}' slot {} failed, slot is now stuck: {}", log_prefix,
-                      ring_id, slot_idx, status.ToString());
+        spdlog::error("{}: rescue CommitRingSlot for ring '{}' slot {} failed, slot is now stuck: {}", log_prefix, ring_id, slot_idx,
+                      status.ToString());
       }
     }
     if (mmap_va) munmap(mmap_va, capacity);
     if (mmap_fd >= 0) close(mmap_fd);
-    ring_id = std::move(other.ring_id);
-    slot_idx = other.slot_idx;
-    generation = other.generation;
-    capacity = other.capacity;
-    offset = other.offset;
-    mmap_va = other.mmap_va;
-    mmap_fd = other.mmap_fd;
-    log_prefix = std::move(other.log_prefix);
-    client = other.client;
-    committed = other.committed;
-    other.mmap_va = nullptr;
-    other.mmap_fd = -1;
-    other.capacity = 0;
-    other.client = nullptr;
+    ring_id         = std::move(other.ring_id);
+    slot_idx        = other.slot_idx;
+    generation      = other.generation;
+    capacity        = other.capacity;
+    offset          = other.offset;
+    mmap_va         = other.mmap_va;
+    mmap_fd         = other.mmap_fd;
+    log_prefix      = std::move(other.log_prefix);
+    client          = other.client;
+    committed       = other.committed;
+    other.mmap_va   = nullptr;
+    other.mmap_fd   = -1;
+    other.capacity  = 0;
+    other.client    = nullptr;
     other.committed = true;
   }
   return *this;
@@ -405,15 +399,13 @@ std::size_t RingProducerSlot::Append(const void* src, std::size_t src_bytes) {
   if (committed) {
     // PM has published this slot; consumers may be reading it right now.
     // Writing here would be a silent data race, not an append.
-    spdlog::warn("{}: Append of {} bytes to ring '{}' slot {} after commit — ignored", log_prefix, src_bytes, ring_id,
-                 slot_idx);
+    spdlog::warn("{}: Append of {} bytes to ring '{}' slot {} after commit — ignored", log_prefix, src_bytes, ring_id, slot_idx);
     return 0;
   }
-  const std::size_t room = (offset >= capacity) ? 0 : static_cast<std::size_t>(capacity - offset);
+  const std::size_t room    = (offset >= capacity) ? 0 : static_cast<std::size_t>(capacity - offset);
   const std::size_t to_copy = std::min(src_bytes, room);
   if (to_copy < src_bytes) {
-    spdlog::warn("{}: ring slot write truncated — offset={} capacity={} src={} writing={}", log_prefix, offset,
-                 capacity, src_bytes, to_copy);
+    spdlog::warn("{}: ring slot write truncated — offset={} capacity={} src={} writing={}", log_prefix, offset, capacity, src_bytes, to_copy);
   }
   std::memcpy(static_cast<std::uint8_t*>(mmap_va) + offset, src, to_copy);
   offset += to_copy;
@@ -423,7 +415,7 @@ std::size_t RingProducerSlot::Append(const void* src, std::size_t src_bytes) {
 RingProducerSlot AcquireRingProducerSlot(PayloadClient& client, const std::string& ring_id, std::string log_prefix) {
   RingProducerSlot s;
   s.log_prefix = std::move(log_prefix);
-  s.client = &client;
+  s.client     = &client;
 
   auto resp = client.AcquireRingSlot(ring_id);
   if (!resp.ok()) {
@@ -432,12 +424,11 @@ RingProducerSlot AcquireRingProducerSlot(PayloadClient& client, const std::strin
     // it stays at debug — callers distinguish via valid() and should
     // count it, not log it. A different status is a real failure.
     if (resp.status().IsCapacityError()) {
-      spdlog::debug("{}: AcquireRingSlot('{}') found no free slot: {}", s.log_prefix, ring_id,
-                    resp.status().ToString());
+      spdlog::debug("{}: AcquireRingSlot('{}') found no free slot: {}", s.log_prefix, ring_id, resp.status().ToString());
     } else {
       spdlog::error("{}: AcquireRingSlot('{}') failed: {}", s.log_prefix, ring_id, resp.status().ToString());
     }
-    return s;  // capacity stays 0 ⇒ invalid ⇒ no rescue commit to make
+    return s; // capacity stays 0 ⇒ invalid ⇒ no rescue commit to make
   }
   const auto& acq = resp.ValueOrDie();
 
@@ -445,35 +436,35 @@ RingProducerSlot AcquireRingProducerSlot(PayloadClient& client, const std::strin
   // below must hand it back or the slot is retired for good.
   int fd = shm_open(acq.shm_name().c_str(), O_RDWR, 0);
   if (fd < 0) {
-    spdlog::error("{}: ring slot shm_open('{}') failed: {} — committing empty to release the slot", s.log_prefix,
-                  acq.shm_name(), std::strerror(errno));
+    spdlog::error("{}: ring slot shm_open('{}') failed: {} — committing empty to release the slot", s.log_prefix, acq.shm_name(),
+                  std::strerror(errno));
     auto status = client.CommitRingSlot(ring_id, acq.slot_idx(), acq.generation(), 0);
     if (!status.ok()) {
-      spdlog::error("{}: releasing ring '{}' slot {} after shm_open failure did not land, slot is now stuck: {}",
-                    s.log_prefix, ring_id, acq.slot_idx(), status.ToString());
+      spdlog::error("{}: releasing ring '{}' slot {} after shm_open failure did not land, slot is now stuck: {}", s.log_prefix, ring_id,
+                    acq.slot_idx(), status.ToString());
     }
     return s;
   }
   void* va = mmap(nullptr, acq.capacity_bytes(), PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
   if (va == MAP_FAILED) {
-    spdlog::error("{}: ring slot mmap('{}', {} bytes) failed: {} — committing empty to release", s.log_prefix,
-                  acq.shm_name(), acq.capacity_bytes(), std::strerror(errno));
+    spdlog::error("{}: ring slot mmap('{}', {} bytes) failed: {} — committing empty to release", s.log_prefix, acq.shm_name(), acq.capacity_bytes(),
+                  std::strerror(errno));
     close(fd);
     auto status = client.CommitRingSlot(ring_id, acq.slot_idx(), acq.generation(), 0);
     if (!status.ok()) {
-      spdlog::error("{}: releasing ring '{}' slot {} after mmap failure did not land, slot is now stuck: {}",
-                    s.log_prefix, ring_id, acq.slot_idx(), status.ToString());
+      spdlog::error("{}: releasing ring '{}' slot {} after mmap failure did not land, slot is now stuck: {}", s.log_prefix, ring_id, acq.slot_idx(),
+                    status.ToString());
     }
     return s;
   }
 
-  s.ring_id = ring_id;
-  s.slot_idx = acq.slot_idx();
+  s.ring_id    = ring_id;
+  s.slot_idx   = acq.slot_idx();
   s.generation = acq.generation();
-  s.capacity = acq.capacity_bytes();
-  s.offset = 0;
-  s.mmap_va = va;
-  s.mmap_fd = fd;
+  s.capacity   = acq.capacity_bytes();
+  s.offset     = 0;
+  s.mmap_va    = va;
+  s.mmap_fd    = fd;
   return s;
 }
 
@@ -482,8 +473,7 @@ bool CommitRingProducerSlot(PayloadClient& client, RingProducerSlot& s, core_v1:
   if (s.committed) {
     // PM rejects the duplicate with FAILED_PRECONDITION anyway; catching
     // it here keeps a caller bug from looking like a server error.
-    spdlog::warn("{}: CommitRingProducerSlot called twice for ring '{}' slot {} — ignored", s.log_prefix, s.ring_id,
-                 s.slot_idx);
+    spdlog::warn("{}: CommitRingProducerSlot called twice for ring '{}' slot {} — ignored", s.log_prefix, s.ring_id, s.slot_idx);
     return false;
   }
   auto status = client.CommitRingSlot(s.ring_id, s.slot_idx, s.generation, s.offset);
@@ -503,4 +493,4 @@ bool CommitRingProducerSlot(PayloadClient& client, RingProducerSlot& s, core_v1:
   return true;
 }
 
-}  // namespace payload::manager::client
+} // namespace payload::manager::client

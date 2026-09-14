@@ -46,8 +46,8 @@
 #include <unordered_map>
 #include <vector>
 
-#include "payload/manager/core/v1/ring_slot.pb.h"
 #include "client.h"
+#include "payload/manager/core/v1/ring_slot.pb.h"
 
 namespace payload::manager::client {
 
@@ -103,7 +103,7 @@ class RingConsumer {
   RingConsumer(PayloadClient* pm_client, Options opts);
   ~RingConsumer();
 
-  RingConsumer(const RingConsumer&) = delete;
+  RingConsumer(const RingConsumer&)            = delete;
   RingConsumer& operator=(const RingConsumer&) = delete;
 
   /// A granted read lease. Releases on destruction.
@@ -117,7 +117,7 @@ class RingConsumer {
     Lease() = default;
     ~Lease();
 
-    Lease(const Lease&) = delete;
+    Lease(const Lease&)            = delete;
     Lease& operator=(const Lease&) = delete;
     Lease(Lease&& other) noexcept;
     Lease& operator=(Lease&& other) noexcept;
@@ -132,7 +132,9 @@ class RingConsumer {
 
     /// Opaque server-side handle. Empty on a default-constructed or
     /// moved-from lease.
-    const std::string& lease_id() const { return lease_id_; }
+    const std::string& lease_id() const {
+      return lease_id_;
+    }
 
     /// Release now rather than at scope exit — useful when the read is
     /// short but the enclosing scope is long, since a held lease blocks
@@ -145,7 +147,7 @@ class RingConsumer {
    private:
     friend class RingConsumer;
     RingConsumer* owner_ = nullptr;
-    std::string lease_id_;
+    std::string   lease_id_;
   };
 
   /// Map `ring_id` if not already mapped. Idempotent; returns false on
@@ -161,8 +163,7 @@ class RingConsumer {
   ///
   /// `size_bytes` comes from the wire and is clamped to the slot's
   /// capacity before being returned.
-  std::optional<Lease> LeaseAndOpen(const std::string& ring_id, uint32_t slot_idx, uint64_t generation,
-                                    uint64_t size_bytes);
+  std::optional<Lease> LeaseAndOpen(const std::string& ring_id, uint32_t slot_idx, uint64_t generation, uint64_t size_bytes);
 
   /// Drop a lease by id. Prefer letting the Lease handle do this; this
   /// is the primitive it is built on, exposed for callers that carry a
@@ -173,14 +174,14 @@ class RingConsumer {
 
  private:
   struct SlotMapping {
-    void* host_va = nullptr;
-    void* dev_va = nullptr;  // cudaHostGetDevicePointer result
-    size_t capacity = 0;     // ftruncated size; caps any read
-    int fd = -1;
+    void*  host_va  = nullptr;
+    void*  dev_va   = nullptr; // cudaHostGetDevicePointer result
+    size_t capacity = 0;       // ftruncated size; caps any read
+    int    fd       = -1;
   };
   struct RingMapping {
-    uint32_t n_slots = 0;
-    uint64_t slot_capacity = 0;
+    uint32_t                 n_slots       = 0;
+    uint64_t                 slot_capacity = 0;
     std::vector<SlotMapping> slots;
   };
 
@@ -191,10 +192,10 @@ class RingConsumer {
   /// Get-or-create the per-ring build mutex. Caller must hold mu_.
   std::shared_ptr<std::mutex> BuildMutexFor_(const std::string& ring_id);
 
-  PayloadClient* pm_client_;  // not owned; may be null (ring ops no-op)
-  Options opts_;
+  PayloadClient* pm_client_; // not owned; may be null (ring ops no-op)
+  Options        opts_;
 
-  mutable std::mutex mu_;
+  mutable std::mutex                           mu_;
   std::unordered_map<std::string, RingMapping> rings_;
   /// One mutex per ring_id, held across that ring's BuildMapping_ so two
   /// threads racing on the same first event don't both issue MapRing and
@@ -222,12 +223,12 @@ class RingConsumer {
 /// gives consumers an empty payload they will skip.
 struct RingProducerSlot {
   std::string ring_id;
-  uint32_t slot_idx = 0;
-  uint64_t generation = 0;
-  uint64_t capacity = 0;
-  uint64_t offset = 0;  // bytes written so far
-  void* mmap_va = nullptr;
-  int mmap_fd = -1;
+  uint32_t    slot_idx   = 0;
+  uint64_t    generation = 0;
+  uint64_t    capacity   = 0;
+  uint64_t    offset     = 0; // bytes written so far
+  void*       mmap_va    = nullptr;
+  int         mmap_fd    = -1;
   std::string log_prefix = "ring";
 
   /// Issuing client, for the destructor's rescue commit. Not owned; must
@@ -239,12 +240,14 @@ struct RingProducerSlot {
 
   RingProducerSlot() = default;
   ~RingProducerSlot();
-  RingProducerSlot(const RingProducerSlot&) = delete;
+  RingProducerSlot(const RingProducerSlot&)            = delete;
   RingProducerSlot& operator=(const RingProducerSlot&) = delete;
   RingProducerSlot(RingProducerSlot&&) noexcept;
   RingProducerSlot& operator=(RingProducerSlot&&) noexcept;
 
-  bool valid() const { return capacity > 0 && mmap_va != nullptr; }
+  bool valid() const {
+    return capacity > 0 && mmap_va != nullptr;
+  }
 
   /// Copy `src_bytes` in at the current offset, advancing it. Truncates
   /// at capacity (logged) and returns the number of bytes actually written.
@@ -259,8 +262,7 @@ struct RingProducerSlot {
 /// leased) or any other failure the returned handle is invalid — check
 /// valid(). When the slot was acquired but could not be mapped, it is
 /// committed with size 0 so PM can recycle it rather than leaking it.
-RingProducerSlot AcquireRingProducerSlot(PayloadClient& client, const std::string& ring_id,
-                                         std::string log_prefix = "ring");
+RingProducerSlot AcquireRingProducerSlot(PayloadClient& client, const std::string& ring_id, std::string log_prefix = "ring");
 
 /// CommitRingSlot for `s` and, when `out_ref` is non-null, populate it
 /// with the (ring_id, slot_idx, generation, size_bytes) a consumer needs.
@@ -268,7 +270,6 @@ RingProducerSlot AcquireRingProducerSlot(PayloadClient& client, const std::strin
 /// rescue commit and freezes further Appends. Committing an
 /// already-committed slot is refused locally (returns false without an
 /// RPC) — PM would reject the duplicate anyway.
-bool CommitRingProducerSlot(PayloadClient& client, RingProducerSlot& s,
-                            payload::manager::core::v1::RingSlotRef* out_ref);
+bool CommitRingProducerSlot(PayloadClient& client, RingProducerSlot& s, payload::manager::core::v1::RingSlotRef* out_ref);
 
-}  // namespace payload::manager::client
+} // namespace payload::manager::client
