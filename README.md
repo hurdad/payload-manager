@@ -259,7 +259,29 @@ The `docker/docker-compose.observability.yml` overlay adds Grafana Alloy (OTLP r
 
 ### payloadctl
 
-`payloadctl` supports tiering advisory commands that are useful during placement tuning and spill control:
+`payloadctl` drives the whole payload lifecycle from the command line. The full
+list is in `payloadctl` with no arguments; the everyday flow is:
+
+```bash
+# Mint a payload and get its id back, then publish it.
+payloadctl <addr> allocate <size_bytes> [tier=ram|disk|gpu]   # prints id= and tier=
+payloadctl <addr> commit <uuid>
+payloadctl <addr> resolve <uuid>
+
+# Look around.
+payloadctl <addr> list [tier=ram|disk|gpu|object]
+payloadctl <addr> stats
+
+# Move bytes between tiers, or take a read lease.
+payloadctl <addr> promote <uuid> <tier=ram|disk|gpu|object>
+payloadctl <addr> spill <uuid>
+payloadctl <addr> lease <uuid>
+payloadctl <addr> release <lease_id>
+payloadctl <addr> delete <uuid>
+```
+
+It also carries tiering advisories, useful during placement tuning and spill
+control:
 
 ```bash
 # Best-effort hint to stage a payload in a faster tier.
@@ -301,6 +323,31 @@ pip install ./client/python
 # Explicit CUDA-capable install intent
 pip install './client/python[cuda]'
 ```
+
+Ring tier access, both languages:
+
+```cpp
+// C++ — examples/cpp/ring_example.cpp
+RingProducer producer(&client, RingProducer::Options{});
+auto slot = producer.Acquire("example");     // null-ish handle when the ring is full
+slot.Append(bytes, n);
+slot.Commit(event.mutable_ring_slot());      // publishes; consumers lease by ref
+```
+
+```python
+# Python — examples/python/ring_example.py
+with RingProducer(channel) as producer, RingConsumer(channel) as consumer:
+    with producer.acquire("example") as slot:
+        slot.append(data)
+        ref = slot.commit()
+    with consumer.lease(ref) as lease:
+        process(lease.buffer)
+```
+
+Both map a ring once and reuse the mapping rather than mapping per capture, and
+both hand a reservation back rather than stranding it if the scope exits without
+a commit. The examples run the full cycle, including a stale reference being
+refused after the slot is recycled.
 
 Current GPU client runtime status:
 
