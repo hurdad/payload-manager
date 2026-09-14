@@ -652,21 +652,33 @@ jobs:
 
       # The filename is the digest; the file itself is empty. The manifest job
       # only needs the names.
+      #
+      # runner.temp, wiped first, rather than a fixed /tmp path. A hosted runner
+      # is a fresh VM per job so either works there, but the arm64 half of this
+      # matrix runs on one long-lived self-hosted board where /tmp persists
+      # between jobs. A shared directory there accumulates: the second image to
+      # build uploads its own digest plus the first one's, the third uploads
+      # three, and the manifest job then asks imagetools to join a digest that
+      # was pushed to a different repository, which fails as "not found".
       - name: Export digest
         if: github.event_name != 'pull_request'
         run: |
           set -euo pipefail
-          mkdir -p /tmp/digests
+          rm -rf "${{ runner.temp }}/digests"
+          mkdir -p "${{ runner.temp }}/digests"
           digest='${{ steps.build.outputs.digest }}'
           test -n "$digest"
-          touch "/tmp/digests/${digest#sha256:}"
+          touch "${{ runner.temp }}/digests/${digest#sha256:}"
+          # One build, one digest. Anything else means the directory was dirty.
+          n=$(find "${{ runner.temp }}/digests" -maxdepth 1 -type f | wc -l)
+          test "$n" -eq 1 || { echo "::error::expected 1 digest, found $n"; exit 1; }
 
       - name: Upload digest
         if: github.event_name != 'pull_request'
         uses: actions/upload-artifact@v4
         with:
           name: digests-${{ matrix.name }}-${{ matrix.arch }}
-          path: /tmp/digests/*
+          path: ${{ runner.temp }}/digests/*
           if-no-files-found: error
           retention-days: 1
 
@@ -709,7 +721,7 @@ jobs:
       - name: Download digests
         uses: actions/download-artifact@v4
         with:
-          path: /tmp/digests
+          path: ${{ runner.temp }}/digests
           pattern: digests-${{ matrix.name }}-*
           merge-multiple: true
 
@@ -738,7 +750,7 @@ jobs:
             type=raw,value=latest,enable={{is_default_branch}}
 
       - name: Create and push manifest list
-        working-directory: /tmp/digests
+        working-directory: ${{ runner.temp }}/digests
         run: |
           set -euo pipefail
           # Without this the glob below stays literal and imagetools reports a
