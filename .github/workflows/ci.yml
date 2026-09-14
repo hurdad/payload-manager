@@ -1,12 +1,17 @@
 name: CI
 
 # One pipeline for everything: lint, generated-code drift, unit tests and
-# coverage, the integration and end-to-end stacks, GPU tests, and the six
-# container images. This replaces quality.yml plus six near-identical
-# docker-*.yml workflows that differed only in image name and Dockerfile.
+# coverage, the integration and end-to-end stacks, GPU tests, and the container
+# images. This replaces quality.yml plus six near-identical docker-*.yml
+# workflows that differed only in image name and Dockerfile.
 #
 # The images publish only after the test jobs pass. Previously they ran in
 # parallel with the tests, so a red main still pushed to ghcr.
+#
+# Images are built once per architecture and joined into one tag afterwards:
+# seven build jobs (four images on amd64, three of them again on arm64) push by
+# digest, then four manifest jobs turn those digests into multi-arch tags. See
+# docker/README.md for the shape and why it is not one QEMU job.
 
 on:
   push:

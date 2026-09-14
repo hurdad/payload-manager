@@ -43,20 +43,58 @@ When `metrics_enabled` or `tracing_enabled` is set with no `otlp_endpoint`, the
 service assumes a collector on localhost and logs a warning saying so — without
 it the export fails on a loop with nothing in the log tying it back to config.
 
-## Architectures
+## Published images and architectures
 
-`Dockerfile`, `Dockerfile.payloadctl` and `Dockerfile.gateway`
-publish as multi-arch tags covering `linux/amd64` and `linux/arm64`, so a single
-pull resolves itself:
+| Image | Architectures |
+|---|---|
+| `ghcr.io/hurdad/payload-manager` | `linux/amd64`, `linux/arm64` |
+| `ghcr.io/hurdad/payload-manager-payloadctl` | `linux/amd64`, `linux/arm64` |
+| `ghcr.io/hurdad/payload-manager-gateway` | `linux/amd64`, `linux/arm64` |
+| `ghcr.io/hurdad/payload-manager-cuda` | `linux/amd64` only — see below |
+
+One tag serves both architectures, so the same command works on an x86 server
+and on a Jetson:
 
 ```bash
-docker pull ghcr.io/hurdad/payload-manager        # amd64 server or Jetson, same tag
+docker pull ghcr.io/hurdad/payload-manager
 ```
 
-CI builds each architecture natively — amd64 on a hosted runner, arm64 on a
-self-hosted Jetson — pushes each by digest with no tag, and a manifest job joins
-the digests into the tag. Emitting both platforms from one job through QEMU
-would emulate an entire C++ build and take hours.
+Every image is tagged `latest` (default branch only), the branch name, `sha-<short>`,
+and the git tag on a `v*` release. To see what a tag actually contains:
+
+```bash
+docker buildx imagetools inspect ghcr.io/hurdad/payload-manager:latest
+```
+
+### How the tags are built
+
+Each architecture is built **natively on its own runner** — amd64 on a hosted
+runner, arm64 on the self-hosted Jetson — and pushed **by digest with no tag**.
+A separate manifest job then joins the digests into the tag with
+`docker buildx imagetools create`. That is 7 build jobs and 4 manifest jobs in
+`.github/workflows/ci.yml`.
+
+The obvious alternative, one job emitting `linux/amd64,linux/arm64` through
+QEMU, emulates an entire C++ compile and takes hours rather than minutes.
+
+Two consequences worth knowing:
+
+- **The arm64 builds queue.** There is one self-hosted board, so its builds run
+  one at a time rather than in parallel with each other.
+- **Each build's digest must stay its own.** The digest each build hands to the
+  manifest job is written to `${{ runner.temp }}/digests`, wiped first, and the
+  step asserts the directory holds exactly one file. On a hosted runner — a
+  fresh VM per job — a shared path would be harmless; on the long-lived board it
+  is not, and a shared `/tmp/digests` once had the second image upload its own
+  digest plus the first one's, which surfaced much later as a manifest job being
+  told to join a digest from a different repository.
+
+A local build produces only the host's architecture, which is usually what you
+want:
+
+```bash
+docker build -f docker/Dockerfile -t payload-manager:latest .
+```
 
 `Dockerfile.cuda` is **amd64 only**. The only arm64 target is a Jetson, and the
 GPU tier cannot work there: CUDA IPC is unsupported on Tegra, and it fails

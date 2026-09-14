@@ -133,15 +133,28 @@ All Dockerfiles and Compose manifests now live under [`docker/`](docker/README.m
 
 ### Dockerfiles
 
-| Dockerfile | OTEL | GPU | Use |
-|---|---|---|---|
-| `docker/Dockerfile` | On | Off | Production image |
-| `docker/Dockerfile.cuda` | On | On | GPU-capable image with OpenTelemetry |
-| `docker/Dockerfile.gateway` | — | — | gRPC-Gateway + embedded Svelte UI |
+| Dockerfile | Published as | Arch | OTEL | GPU |
+|---|---|---|---|---|
+| `docker/Dockerfile` | `ghcr.io/hurdad/payload-manager` | amd64 + arm64 | On | Off |
+| `docker/Dockerfile.cuda` | `ghcr.io/hurdad/payload-manager-cuda` | amd64 | On | On |
+| `docker/Dockerfile.payloadctl` | `ghcr.io/hurdad/payload-manager-payloadctl` | amd64 + arm64 | — | — |
+| `docker/Dockerfile.gateway` | `ghcr.io/hurdad/payload-manager-gateway` | amd64 + arm64 | — | — |
 
-All images except `Dockerfile.cuda` publish as multi-arch tags (`linux/amd64`
-and `linux/arm64`), so the same tag serves an x86 server and a Jetson. CUDA is
-amd64 only — see [Architectures](docker/README.md#architectures).
+One tag serves both architectures, so the same pull works on an x86 server and
+on a Jetson:
+
+```bash
+docker pull ghcr.io/hurdad/payload-manager
+```
+
+CUDA is amd64 only, because its only arm64 target would be a Jetson and the GPU
+tier cannot work there — CUDA IPC is unsupported on Tegra. Use the ring tier
+instead; see [Jetson and other integrated GPUs](#jetson-and-other-integrated-gpus)
+below and [Published images and architectures](docker/README.md#published-images-and-architectures).
+
+There is no `-otel` image any more: OpenTelemetry is compiled into every service
+image and stays inert until `observability.metrics_enabled` or
+`observability.tracing_enabled` is set.
 
 ```bash
 # Production image (OpenTelemetry compiled in, inert until configured)
@@ -156,9 +169,12 @@ docker build -f docker/Dockerfile.payloadctl -t payloadctl:latest .
 
 ### Docker Compose
 
-Full compose matrix — pick a feature combination:
+Full compose matrix — pick a feature combination. The OTEL column is whether the
+stack *configures* observability, not whether the image supports it: every
+service image has OpenTelemetry compiled in, and it stays inert until
+`observability.metrics_enabled` or `.tracing_enabled` is set.
 
-| Compose file | Database | OTEL | GPU | Host port |
+| Compose file | Database | OTEL configured | GPU | Host port |
 |---|---|---|---|---|
 | `docker/docker-compose.postgres.yml` | Postgres | Off | Off | 50051 |
 | `docker/docker-compose.otel.postgres.yml` | Postgres | On | Off | 50055 |
@@ -166,7 +182,7 @@ Full compose matrix — pick a feature combination:
 | `docker/docker-compose.gateway.yml` | Postgres | Off | Off | 8080 (HTTP) |
 
 ```bash
-# Postgres, no OTEL
+# Postgres, observability not configured
 docker compose -f docker/docker-compose.postgres.yml up --build
 
 # Postgres + OTEL (add observability stack)
