@@ -44,10 +44,16 @@ void PgPool::PrepareStatements(pqxx::connection& conn) {
                "min_residency_tier, require_durable "
                "FROM payload WHERE id=$1");
 
+  // NULLIF on expires_at_ms is deliberate: the column is nullable and 0 on the
+  // record means "never expires", which is stored as NULL.
+  //
+  // created_at_ms is NOT NULL, so the same treatment made the statement
+  // unsatisfiable for any record carrying 0 — the insert simply failed with a
+  // not-null violation. Pass it through.
   conn.prepare("insert_payload",
                "INSERT INTO payload(id,tier,state,size_bytes,version,expires_at_ms,no_evict,eviction_priority,spill_target,created_at_ms,"
                "min_residency_tier,require_durable) "
-               "VALUES($1,$2,$3,$4,$5,NULLIF($6::bigint,0),$7,$8,$9,NULLIF($10::bigint,0),$11,$12)");
+               "VALUES($1,$2,$3,$4,$5,NULLIF($6::bigint,0),$7,$8,$9,$10,$11,$12)");
 
   conn.prepare("update_payload",
                "UPDATE payload SET tier=$2,state=$3,size_bytes=$4,version=$5,expires_at_ms=NULLIF($6::bigint,0),"

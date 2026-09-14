@@ -120,6 +120,7 @@ if(PAYLOAD_MANAGER_ENABLE_POSTGRES)
             postgres/pg_pool.cpp
             postgres/pg_tx.cpp
             postgres/pg_repository.cpp
+            postgres/pg_schema.cpp
             postgres/pqxx_compat.cpp
     )
 

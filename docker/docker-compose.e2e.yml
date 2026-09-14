@@ -1,10 +1,28 @@
 services:
+  # runtime-docker-postgres.yaml points the repository at postgres:5432, so the
+  # stack needs one. Without it payload-manager retried DNS ten times, exited 2,
+  # and the gateway and e2e containers never started at all.
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: payload
+      POSTGRES_PASSWORD: payload
+      POSTGRES_DB: payload_manager
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U payload -d payload_manager"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
   payload-manager:
     build:
       context: ..
       dockerfile: docker/Dockerfile
     restart: unless-stopped
     hostname: payload-manager
+    depends_on:
+      postgres:
+        condition: service_healthy
     command: ["./payload-manager", "--config", "/app/conf/runtime-docker-postgres.yaml"]
     healthcheck:
       test: ["CMD-SHELL", "bash -c '</dev/tcp/localhost/50051'"]

@@ -20,6 +20,7 @@
 #if PAYLOAD_DB_POSTGRES
 #include "internal/db/postgres/pg_pool.hpp"
 #include "internal/db/postgres/pg_repository.hpp"
+#include "internal/db/postgres/pg_schema.hpp"
 #endif
 
 namespace {
@@ -83,6 +84,44 @@ void VerifyAllocateCommitResolveDelete(Repository& repo, const payload::util::UU
   tx->Commit();
 }
 
+// Postgres stores metadata as JSONB, which reparses and re-serialises: it drops
+// insignificant whitespace, normalises separators and does not promise key
+// order. The in-memory backend keeps the string it was handed. Comparing raw
+// text therefore fails on a difference that carries no meaning — `{"a":1}` from
+// one backend against `{"a": 1}` from the other.
+//
+// Parity here means the same *data* survives a round trip, so compare with
+// whitespace outside string literals removed. That is the whole of the
+// difference JSONB introduces for these fixtures, and it avoids pulling in a
+// JSON parser for one assertion.
+std::string CanonicalJson(const std::string& json) {
+  std::string out;
+  out.reserve(json.size());
+  bool in_string = false;
+  bool escaped   = false;
+  for (char c : json) {
+    if (in_string) {
+      out.push_back(c);
+      if (escaped) {
+        escaped = false;
+      } else if (c == '\\') {
+        escaped = true;
+      } else if (c == '"') {
+        in_string = false;
+      }
+      continue;
+    }
+    if (c == '"') {
+      in_string = true;
+      out.push_back(c);
+      continue;
+    }
+    if (c == ' ' || c == '\t' || c == '\n' || c == '\r') continue;
+    out.push_back(c);
+  }
+  return out;
+}
+
 void VerifyMetadataReadWrite(Repository& repo, const payload::util::UUID& id) {
   auto tx = repo.Begin();
 
@@ -103,7 +142,7 @@ void VerifyMetadataReadWrite(Repository& repo, const payload::util::UUID& id) {
 
   auto read = repo.GetMetadata(*tx, payload::util::ToString(id));
   assert(read.has_value());
-  assert(read->json == metadata.json);
+  assert(CanonicalJson(read->json) == CanonicalJson(metadata.json));
   assert(read->schema == metadata.schema);
 
   metadata.json          = R"({"stage":"processed"})";
@@ -112,7 +151,7 @@ void VerifyMetadataReadWrite(Repository& repo, const payload::util::UUID& id) {
 
   auto updated = repo.GetMetadata(*tx, payload::util::ToString(id));
   assert(updated.has_value());
-  assert(updated->json == metadata.json);
+  assert(CanonicalJson(updated->json) == CanonicalJson(metadata.json));
 
   tx->Commit();
 }
@@ -189,13 +228,26 @@ void VerifyStreamReadWrite(Repository& repo, const std::string& stream_namespace
     tx->Commit();
   }
 
+  // Real UUIDs, not "<stream>-entry-N": stream_entries.payload_uuid is typed
+  // UUID and the insert casts to it, so anything else is rejected by Postgres.
+  // The in-memory backend keeps whatever string it is given, which is how a
+  // fixture that could never have worked against the real schema survived.
   std::vector<StreamEntryRecord> entries;
-  entries.push_back(StreamEntryRecord{
-      .payload_uuid = stream_name + "-entry-0", .event_time_ms = 1000, .append_time_ms = 2000, .duration_ns = 10, .tags = R"({"kind":"seed"})"});
-  entries.push_back(StreamEntryRecord{
-      .payload_uuid = stream_name + "-entry-1", .event_time_ms = 1500, .append_time_ms = 2500, .duration_ns = 12, .tags = R"({"kind":"seed"})"});
-  entries.push_back(StreamEntryRecord{
-      .payload_uuid = stream_name + "-entry-2", .event_time_ms = 2000, .append_time_ms = 3500, .duration_ns = 14, .tags = R"({"kind":"seed"})"});
+  entries.push_back(StreamEntryRecord{.payload_uuid   = payload::util::ToString(payload::util::GenerateUUID()),
+                                      .event_time_ms  = 1000,
+                                      .append_time_ms = 2000,
+                                      .duration_ns    = 10,
+                                      .tags           = R"({"kind":"seed"})"});
+  entries.push_back(StreamEntryRecord{.payload_uuid   = payload::util::ToString(payload::util::GenerateUUID()),
+                                      .event_time_ms  = 1500,
+                                      .append_time_ms = 2500,
+                                      .duration_ns    = 12,
+                                      .tags           = R"({"kind":"seed"})"});
+  entries.push_back(StreamEntryRecord{.payload_uuid   = payload::util::ToString(payload::util::GenerateUUID()),
+                                      .event_time_ms  = 2000,
+                                      .append_time_ms = 3500,
+                                      .duration_ns    = 14,
+                                      .tags           = R"({"kind":"seed"})"});
 
   {
     auto tx = repo.Begin();
@@ -377,7 +429,7 @@ void VerifyRestartDurability(BackendFactory& backend, const payload::util::UUID&
 
   auto m = repo->GetMetadata(*tx, id_str);
   assert(m.has_value());
-  assert(m->json == R"({"k":"v"})");
+  assert(CanonicalJson(m->json) == CanonicalJson(R"({"k":"v"})"));
 
   auto children = repo->GetChildren(*tx, id_str);
   assert(children.size() == 1);
@@ -407,34 +459,13 @@ BackendFactory MakePostgresFactory() {
 
   auto conninfo  = std::string(uri);
   auto make_repo = [conninfo]() {
-    auto       pool = std::make_shared<payload::db::postgres::PgPool>(conninfo);
-    auto       conn = pool->Acquire();
-    pqxx::work tx(*conn);
-    tx.exec(
-        "CREATE TABLE IF NOT EXISTS payload (id TEXT PRIMARY KEY, tier SMALLINT NOT NULL, state SMALLINT NOT NULL, size_bytes BIGINT NOT NULL, "
-        "version BIGINT NOT NULL, expires_at_ms BIGINT, no_evict SMALLINT NOT NULL DEFAULT 0, eviction_priority SMALLINT NOT NULL DEFAULT 0, "
-        "spill_target SMALLINT NOT NULL DEFAULT 0, created_at_ms BIGINT NOT NULL DEFAULT 0);");
-    tx.exec(
-        "CREATE TABLE IF NOT EXISTS payload_metadata (id TEXT PRIMARY KEY REFERENCES payload(id) ON DELETE CASCADE, json JSONB NOT NULL, schema "
-        "TEXT, updated_at_ms BIGINT NOT NULL);");
-    tx.exec(
-        "CREATE TABLE IF NOT EXISTS payload_lineage (parent_id TEXT NOT NULL REFERENCES payload(id) ON DELETE CASCADE, child_id TEXT NOT NULL "
-        "REFERENCES payload(id) ON DELETE CASCADE, operation TEXT, role TEXT, parameters TEXT, created_at_ms BIGINT NOT NULL);");
-    tx.exec(
-        "CREATE TABLE IF NOT EXISTS payload_metadata_events (id TEXT NOT NULL, data BYTEA, schema TEXT, source TEXT, version TEXT, ts_ms BIGINT NOT "
-        "NULL);");
-    tx.exec(
-        "CREATE TABLE IF NOT EXISTS streams (stream_id BIGSERIAL PRIMARY KEY, namespace TEXT NOT NULL, name TEXT NOT NULL, created_at TIMESTAMPTZ "
-        "NOT NULL DEFAULT now(), retention_max_entries BIGINT, retention_max_age_sec BIGINT, UNIQUE(namespace, name));");
-    tx.exec(
-        "CREATE TABLE IF NOT EXISTS stream_entries (stream_id BIGINT NOT NULL REFERENCES streams(stream_id) ON DELETE CASCADE, offset BIGINT NOT "
-        "NULL, payload_uuid UUID NOT NULL, event_time TIMESTAMPTZ, append_time TIMESTAMPTZ NOT NULL DEFAULT now(), duration_ns BIGINT, tags JSONB, "
-        "PRIMARY KEY (stream_id, offset));");
-    tx.exec(
-        "CREATE TABLE IF NOT EXISTS stream_consumer_offsets (stream_id BIGINT NOT NULL REFERENCES streams(stream_id) ON DELETE CASCADE, "
-        "consumer_group TEXT NOT NULL, offset BIGINT NOT NULL, updated_at TIMESTAMPTZ NOT NULL DEFAULT now(), PRIMARY KEY (stream_id, "
-        "consumer_group));");
-    tx.commit();
+    // Use the service's own schema rather than a copy maintained here. The
+    // copy that used to live in this file had drifted: no min_residency_tier
+    // or require_durable, TEXT ids where the service uses UUID, and an
+    // unquoted `offset`. Parity against a schema the service never creates
+    // tests nothing useful.
+    payload::db::postgres::BootstrapSchema(conninfo);
+    auto pool = std::make_shared<payload::db::postgres::PgPool>(conninfo);
     return std::make_shared<payload::db::postgres::PgRepository>(std::move(pool));
   };
 
@@ -458,7 +489,11 @@ void RunBackendSuite(BackendFactory& backend) {
   VerifyLineageReadWrite(*repo, payload::util::GenerateUUID(), payload::util::GenerateUUID());
   VerifyRollbackBehavior(*repo, payload::util::GenerateUUID());
   VerifyConcurrentUpdates(*repo, payload::util::GenerateUUID(), backend.supports_parallel_transactions);
-  VerifyStreamReadWrite(*repo, "integration", backend.name + "-stream");
+  // Unique per run: (namespace, name) is UNIQUE, and a Postgres database
+  // outlives the process, so a fixed name makes the second run of the suite
+  // against the same database fail on a constraint rather than on anything
+  // it is trying to test.
+  VerifyStreamReadWrite(*repo, "integration", backend.name + "-stream-" + payload::util::ToString(payload::util::GenerateUUID()));
 
   VerifyRestartDurability(backend, payload::util::GenerateUUID());
 
