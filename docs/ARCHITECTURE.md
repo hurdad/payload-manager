@@ -28,6 +28,7 @@ flowchart TB
         mem[("Memory catalog")]
         pg[("PostgreSQL catalog")]
         tiering["Placement · Tiering · Spill<br/>pressure-driven demotion"]
+        obs["Observability<br/>metrics · traces · structured logs<br/>inert until configured"]
     end
 
     subgraph tiers["Storage tiers — a demotion chain"]
@@ -43,6 +44,13 @@ flowchart TB
         slots["N pre-allocated /dev/shm slots per ring<br/>addressed by ring_id, slot_idx, generation<br/>no PayloadID · no catalog row · recycled in place"]
     end
 
+    subgraph telemetry["Telemetry — docker-compose.observability.yml"]
+        alloy["Grafana Alloy<br/>OTLP receiver · gRPC 4317 · HTTP 4318"]
+        prom["Prometheus<br/>remote_write · 9090"]
+        tempo["Tempo<br/>OTLP traces · 3200"]
+        graf["Grafana<br/>dashboards · 3000"]
+    end
+
     browser --> webui
     webui -- "REST / JSON" --> gw
     gw --> servers
@@ -53,6 +61,12 @@ flowchart TB
     repo --> mem
     repo --> pg
     svc --> tiering
+    svc --> obs
+    obs -- "OTLP · push" --> alloy
+    alloy -- "metrics" --> prom
+    alloy -- "traces" --> tempo
+    prom -- "query" --> graf
+    tempo -- "query" --> graf
     ringsvc --> slots
 
     tiering --> gpu
