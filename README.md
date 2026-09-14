@@ -31,64 +31,12 @@ The thing to notice first: **payload bytes never travel through the service.**
 Clients ask for a descriptor and a lease, then read or write the memory, file or
 object directly. Everything in the control plane below moves metadata only.
 
-```mermaid
-flowchart TB
-    subgraph clients["Clients"]
-        browser["Browser / HTTP client"]
-        native["Native client<br/>C++ / Python"]
-    end
+[![Payload Manager architecture](docs/architecture.svg)](docs/architecture.svg)
 
-    subgraph control["Control plane — metadata only"]
-        gw["gRPC-Gateway<br/>REST to gRPC · Svelte UI · OpenAPI"]
-        servers["gRPC servers<br/>admin · catalog · data · ring · stream"]
-        svc["Service layer<br/>lifecycle · placement · leasing<br/>metadata · lineage · streams"]
-        ringsvc["Ring service<br/>acquire / commit slots<br/>lease / release for readers"]
-        repo["Repository — internal/db<br/>transactions"]
-        mem[("Memory catalog")]
-        pg[("PostgreSQL catalog")]
-        tiering["Placement · Tiering · Spill<br/>pressure-driven demotion"]
-    end
-
-    subgraph tiers["Storage tiers — a demotion chain"]
-        direction TB
-        gpu["GPU<br/>CUDA IPC handle"]
-        ram["RAM<br/>POSIX shm"]
-        disk["Disk<br/>file"]
-        obj["Object storage<br/>S3 / GCS / Azure"]
-        gone(["Void — deleted, not moved"])
-    end
-
-    subgraph ring["Ring tier — TIER_RAM_RING"]
-        slots["N pre-allocated /dev/shm slots per ring<br/>addressed by ring_id, slot_idx, generation<br/>no PayloadID · no catalog row · recycled in place"]
-    end
-
-    browser --> gw --> servers
-    native --> servers
-    servers --> svc
-    servers --> ringsvc
-    svc --> repo
-    repo --> mem
-    repo --> pg
-    svc --> tiering
-    ringsvc --> slots
-
-    tiering --> gpu
-    tiering --> ram
-    tiering --> disk
-    tiering --> obj
-
-    gpu -- spill --> ram
-    ram -- spill --> disk
-    disk -- spill --> obj
-    gpu -. "spill_target = TIER_VOID" .-> gone
-    ram -.-> gone
-    disk -.-> gone
-
-    native == "data plane — bytes, no service in the path" ==> ram
-    native ==> gpu
-    native ==> disk
-    native ==> slots
-```
+<sub>Clients talk to the control plane for metadata; bytes move directly between
+the client and the tier. The mermaid source for this diagram, and a fuller
+description of each layer, are in
+[Architecture Overview](docs/ARCHITECTURE.md).</sub>
 
 **The demotion chain.** Tiers are not a menu. A payload is placed once, and the
 tiering manager spills it downward as the tier holding it comes under pressure:

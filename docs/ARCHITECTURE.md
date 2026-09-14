@@ -4,7 +4,73 @@
 
 Payload Manager provides a control plane for binary payload lifecycle and placement while keeping payload bytes on their native storage path. It coordinates metadata, placement decisions, and access guarantees (leases) so workers can read/write directly from storage tiers.
 
-## 2. Major architectural layers
+## 2. Diagram
+
+The rendered version of this is in the top-level README; this is the source it
+was drawn from. GitHub renders the block below directly, so edit here and keep
+`docs/architecture.svg` in step by running
+`python3 scripts/make_architecture_diagram.py`.
+
+```mermaid
+flowchart TB
+    subgraph clients["Clients"]
+        browser["Browser / HTTP client"]
+        native["Native client<br/>C++ / Python"]
+    end
+
+    subgraph control["Control plane — metadata only"]
+        gw["gRPC-Gateway<br/>REST to gRPC · Svelte UI · OpenAPI"]
+        servers["gRPC servers<br/>admin · catalog · data · ring · stream"]
+        svc["Service layer<br/>lifecycle · placement · leasing<br/>metadata · lineage · streams"]
+        ringsvc["Ring service<br/>acquire / commit slots<br/>lease / release for readers"]
+        repo["Repository — internal/db<br/>transactions"]
+        mem[("Memory catalog")]
+        pg[("PostgreSQL catalog")]
+        tiering["Placement · Tiering · Spill<br/>pressure-driven demotion"]
+    end
+
+    subgraph tiers["Storage tiers — a demotion chain"]
+        direction TB
+        gpu["GPU<br/>CUDA IPC handle"]
+        ram["RAM<br/>POSIX shm"]
+        disk["Disk<br/>file"]
+        obj["Object storage<br/>S3 / GCS / Azure"]
+        gone(["Void — deleted, not moved"])
+    end
+
+    subgraph ring["Ring tier — TIER_RAM_RING"]
+        slots["N pre-allocated /dev/shm slots per ring<br/>addressed by ring_id, slot_idx, generation<br/>no PayloadID · no catalog row · recycled in place"]
+    end
+
+    browser --> gw --> servers
+    native --> servers
+    servers --> svc
+    servers --> ringsvc
+    svc --> repo
+    repo --> mem
+    repo --> pg
+    svc --> tiering
+    ringsvc --> slots
+
+    tiering --> gpu
+    tiering --> ram
+    tiering --> disk
+    tiering --> obj
+
+    gpu -- spill --> ram
+    ram -- spill --> disk
+    disk -- spill --> obj
+    gpu -. "spill_target = TIER_VOID" .-> gone
+    ram -.-> gone
+    disk -.-> gone
+
+    native == "data plane — bytes, no service in the path" ==> ram
+    native ==> gpu
+    native ==> disk
+    native ==> slots
+```
+
+## 3. Major architectural layers
 
 ### Gateway (REST + UI)
 
@@ -170,14 +236,14 @@ Details that matter:
 This path is not Jetson-specific — it works anywhere — but on a discrete GPU it crosses PCIe and
 the GPU tier is the better choice. On integrated hardware it is the only one that works.
 
-## 3. Cross-cutting concerns
+## 4. Cross-cutting concerns
 
 - **Configuration:** protobuf-backed config loading in `internal/config`.
 - **Observability:** tracing and metrics in `internal/observability`.
 - **Utility primitives:** time and UUID helpers in `internal/util`.
 - **Lineage:** graph model and traversal in `internal/lineage`.
 
-## 4. Control flow (high-level)
+## 5. Control flow (high-level)
 
 ### gRPC path (native clients)
 
@@ -195,7 +261,7 @@ the GPU tier is the better choice. On integrated hardware it is the only one tha
 3. Response is translated back to JSON and returned.
 4. For `GET /v1/payloads/{id}/download`: gateway resolves the current tier via `ResolveSnapshot`; if the payload is in RAM or GPU it calls `Spill` (blocking) to move it to disk, then acquires a disk read lease and streams the file contents directly from the shared data volume.
 
-## 5. Deployment security considerations
+## 6. Deployment security considerations
 
 ### Configuration file permissions
 
@@ -219,7 +285,7 @@ The gRPC server (`server.bind_address`) defaults to `0.0.0.0:50051`. In producti
 - Bind to a loopback or internal address when the service is only accessed within the same node or cluster.
 - Place a TLS-terminating proxy (e.g. Envoy) in front of `payload-manager` for external-facing deployments; the server currently uses insecure credentials and relies on the surrounding infrastructure for transport security.
 
-## 6. Non-goals (explicit)
+## 7. Non-goals (explicit)
 
 - Payload Manager is not intended to proxy large payload byte streams through gRPC.
 - Payload Manager is not intended to collapse all storage tiers into a single physical medium.
