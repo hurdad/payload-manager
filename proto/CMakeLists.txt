@@ -132,6 +132,16 @@ set(ARROW_PROTO_FILES
 
 set(ALL_DEP_PROTOS ${ALL_PROTO_FILES} ${SERVICE_PROTO_FILES} ${CONFIG_PROTO_FILES} ${ARROW_PROTO_FILES})
 
+# Python stubs cover the public network API only. The Python client speaks that
+# API; node-local runtime configuration is none of its business, and generating
+# it would leak internal shapes into a client package.
+#
+# There is a practical reason too: grpcio-tools bundles its own protoc, which is
+# older than the system one and rejects proto3 `optional` (protobuf 3.15+).
+# config/observability.proto and arrow/arrow_fs_gcs.proto both use it, so
+# feeding them to grpc_tools.protoc fails even though the C++ codegen is fine.
+set(PY_DEP_PROTOS ${ALL_PROTO_FILES} ${SERVICE_PROTO_FILES})
+
 # Absolute dependency paths
 set(PROTO_ABS_FILES)
 foreach(PROTO_FILE IN LISTS ALL_DEP_PROTOS)
@@ -255,7 +265,7 @@ if(ENABLE_PYTHON_PROTO)
   set(PYTHON_OUT_DIR ${CMAKE_CURRENT_BINARY_DIR}/python)
   file(MAKE_DIRECTORY ${PYTHON_OUT_DIR})
 
-  foreach(PROTO_FILE IN LISTS ALL_DEP_PROTOS)
+  foreach(PROTO_FILE IN LISTS PY_DEP_PROTOS)
     get_filename_component(PROTO_WE ${PROTO_FILE} NAME_WE)
     get_filename_component(PROTO_DIR ${PROTO_FILE} DIRECTORY)
 
@@ -384,7 +394,7 @@ if(ENABLE_PYTHON_PROTO)
           -I ${PROTO_ROOT}
           -I ${GOOGLEAPIS_PROTO_ROOT}
           --python_out=${PYTHON_OUT_DIR}
-          ${ALL_DEP_PROTOS}
+          ${PY_DEP_PROTOS}
           WORKING_DIRECTORY ${PROTO_ROOT}
           DEPENDS ${PROTO_ABS_FILES}
           COMMENT "Generating Python protobuf sources"
