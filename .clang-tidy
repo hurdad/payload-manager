@@ -1,0 +1,39 @@
+# clang-tidy configuration for payload-manager.
+#
+# Scope is deliberately narrow: this is a mature codebase adopting clang-tidy
+# after the fact, so the check list starts with families that find real defects
+# rather than style opinions. Widen it once the baseline is clean — adding a
+# check that fires thousands of times teaches everyone to ignore the report.
+#
+# Generated protobuf/gRPC sources are excluded via the CI invocation and
+# HeaderFilterRegex below, not here.
+
+Checks: >
+  -*,
+  bugprone-*,
+  clang-analyzer-*,
+  performance-*,
+  modernize-use-nullptr,
+  modernize-use-override,
+  modernize-use-emplace,
+  modernize-loop-convert,
+  readability-redundant-string-cstr,
+  readability-container-size-empty,
+  misc-unused-using-decls,
+  -bugprone-easily-swappable-parameters,
+  -bugprone-narrowing-conversions,
+  -performance-avoid-endl
+
+# Only diagnose our own headers; never generated stubs or system/third-party.
+HeaderFilterRegex: '^.*/(internal|client|cmd|api/payload)/.*\.(h|hpp)$'
+ExcludeHeaderFilterRegex: '.*\.pb\.h$|.*\.grpc\.pb\.h$'
+
+WarningsAsErrors: ''
+
+FormatStyle: file
+
+CheckOptions:
+  - key: bugprone-assert-side-effect.AssertMacros
+    value: assert
+  - key: performance-unnecessary-value-param.AllowedTypes
+    value: 'PayloadID;Tier'
