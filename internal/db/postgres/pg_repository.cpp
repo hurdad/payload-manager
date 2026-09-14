@@ -38,8 +38,9 @@ Result PgRepository::Translate(const std::exception& e) {
 
 Result PgRepository::InsertPayload(Transaction& t, const model::PayloadRecord& r) {
   try {
-    TX(t).Work().exec_prepared("insert_payload", payload::util::ToString(r.id), (int)r.tier, (int)r.state, r.size_bytes, r.version, r.expires_at_ms,
-                               (int)r.no_evict, r.eviction_priority, r.spill_target, r.created_at_ms, r.min_residency_tier, (int)r.require_durable);
+    TX(t).Work().exec(pqxx::prepped{"insert_payload"}, pqxx::params{payload::util::ToString(r.id), (int)r.tier, (int)r.state, r.size_bytes, r.version,
+                                                                    r.expires_at_ms, (int)r.no_evict, r.eviction_priority, r.spill_target,
+                                                                    r.created_at_ms, r.min_residency_tier, (int)r.require_durable});
     return Result::Ok();
   } catch (const std::exception& e) {
     return Translate(e);
@@ -48,7 +49,7 @@ Result PgRepository::InsertPayload(Transaction& t, const model::PayloadRecord& r
 
 std::optional<model::PayloadRecord> PgRepository::GetPayload(Transaction& t, const payload::util::UUID& id) {
   try {
-    auto res = TX(t).Work().exec_prepared("get_payload", payload::util::ToString(id));
+    auto res = TX(t).Work().exec(pqxx::prepped{"get_payload"}, pqxx::params{payload::util::ToString(id)});
     if (res.empty()) return std::nullopt;
 
     model::PayloadRecord r;
@@ -77,17 +78,17 @@ std::vector<model::PayloadRecord> PgRepository::ListPayloads(Transaction& t, pay
     const int32_t effective_offset = (offset > 0) ? offset : 0;
 
     if (tier_filter != payload::manager::v1::TIER_UNSPECIFIED) {
-      res = TX(t).Work().exec_params(
+      res = TX(t).Work().exec(
           "SELECT "
           "id,tier,state,size_bytes,version,expires_at_ms,no_evict,eviction_priority,spill_target,created_at_ms,min_residency_tier,require_durable"
           " FROM payload WHERE tier=$1 ORDER BY created_at_ms DESC LIMIT $2 OFFSET $3;",
-          static_cast<int>(tier_filter), effective_limit, effective_offset);
+          pqxx::params{static_cast<int>(tier_filter), effective_limit, effective_offset});
     } else {
-      res = TX(t).Work().exec_params(
+      res = TX(t).Work().exec(
           "SELECT "
           "id,tier,state,size_bytes,version,expires_at_ms,no_evict,eviction_priority,spill_target,created_at_ms,min_residency_tier,require_durable"
           " FROM payload ORDER BY created_at_ms DESC LIMIT $1 OFFSET $2;",
-          effective_limit, effective_offset);
+          pqxx::params{effective_limit, effective_offset});
     }
 
     std::vector<model::PayloadRecord> records;
@@ -118,7 +119,7 @@ int32_t PgRepository::CountPayloads(Transaction& t, payload::manager::v1::Tier t
   try {
     pqxx::result res;
     if (tier_filter != payload::manager::v1::TIER_UNSPECIFIED) {
-      res = TX(t).Work().exec_params("SELECT COUNT(*) FROM payload WHERE tier=$1;", static_cast<int>(tier_filter));
+      res = TX(t).Work().exec("SELECT COUNT(*) FROM payload WHERE tier=$1;", pqxx::params{static_cast<int>(tier_filter)});
     } else {
       res = TX(t).Work().exec("SELECT COUNT(*) FROM payload;");
     }
@@ -129,8 +130,9 @@ int32_t PgRepository::CountPayloads(Transaction& t, payload::manager::v1::Tier t
 }
 Result PgRepository::UpdatePayload(Transaction& t, const model::PayloadRecord& r) {
   try {
-    TX(t).Work().exec_prepared("update_payload", payload::util::ToString(r.id), (int)r.tier, (int)r.state, r.size_bytes, r.version, r.expires_at_ms,
-                               (int)r.no_evict, r.eviction_priority, r.spill_target, r.min_residency_tier, (int)r.require_durable);
+    TX(t).Work().exec(pqxx::prepped{"update_payload"},
+                      pqxx::params{payload::util::ToString(r.id), (int)r.tier, (int)r.state, r.size_bytes, r.version, r.expires_at_ms,
+                                   (int)r.no_evict, r.eviction_priority, r.spill_target, r.min_residency_tier, (int)r.require_durable});
     return Result::Ok();
   } catch (const std::exception& e) {
     return Translate(e);
@@ -139,12 +141,12 @@ Result PgRepository::UpdatePayload(Transaction& t, const model::PayloadRecord& r
 
 std::vector<model::PayloadRecord> PgRepository::ListExpiredPayloads(Transaction& t, uint64_t now_ms) {
   try {
-    auto res = TX(t).Work().exec_params(
+    auto res = TX(t).Work().exec(
         "SELECT "
         "id,tier,state,size_bytes,version,expires_at_ms,no_evict,eviction_priority,spill_target,created_at_ms,min_residency_tier,require_durable "
         "FROM payload"
         " WHERE expires_at_ms > 0 AND expires_at_ms <= $1;",
-        now_ms);
+        pqxx::params{now_ms});
 
     std::vector<model::PayloadRecord> records;
     records.reserve(res.size());
@@ -172,7 +174,7 @@ std::vector<model::PayloadRecord> PgRepository::ListExpiredPayloads(Transaction&
 
 Result PgRepository::DeletePayload(Transaction& t, const payload::util::UUID& id) {
   try {
-    TX(t).Work().exec_prepared("delete_payload", payload::util::ToString(id));
+    TX(t).Work().exec(pqxx::prepped{"delete_payload"}, pqxx::params{payload::util::ToString(id)});
     return Result::Ok();
   } catch (const std::exception& e) {
     return Translate(e);
@@ -181,10 +183,10 @@ Result PgRepository::DeletePayload(Transaction& t, const payload::util::UUID& id
 
 Result PgRepository::UpsertMetadata(Transaction& t, const model::MetadataRecord& r) {
   try {
-    TX(t).Work().exec_params(
+    TX(t).Work().exec(
         "INSERT INTO payload_metadata(id,json,schema,updated_at_ms) VALUES($1,$2::jsonb,$3,$4) "
         "ON CONFLICT(id) DO UPDATE SET json=EXCLUDED.json,schema=EXCLUDED.schema,updated_at_ms=EXCLUDED.updated_at_ms;",
-        r.id, r.json, r.schema, r.updated_at_ms);
+        pqxx::params{r.id, r.json, r.schema, r.updated_at_ms});
     return Result::Ok();
   } catch (const std::exception& e) {
     return Translate(e);
@@ -193,7 +195,7 @@ Result PgRepository::UpsertMetadata(Transaction& t, const model::MetadataRecord&
 
 std::optional<model::MetadataRecord> PgRepository::GetMetadata(Transaction& t, const std::string& id) {
   try {
-    auto res = TX(t).Work().exec_params("SELECT id,json::text,schema,updated_at_ms FROM payload_metadata WHERE id=$1;", id);
+    auto res = TX(t).Work().exec("SELECT id,json::text,schema,updated_at_ms FROM payload_metadata WHERE id=$1;", pqxx::params{id});
     if (res.empty()) {
       return std::nullopt;
     }
@@ -211,8 +213,8 @@ std::optional<model::MetadataRecord> PgRepository::GetMetadata(Transaction& t, c
 
 Result PgRepository::InsertMetadataEvent(Transaction& t, const model::MetadataEventRecord& r) {
   try {
-    TX(t).Work().exec_params("INSERT INTO payload_metadata_events(id,data,schema,source,version,ts_ms) VALUES($1,$2,$3,$4,$5,$6);", r.id, r.data,
-                             r.schema, r.source, r.version, r.ts_ms);
+    TX(t).Work().exec("INSERT INTO payload_metadata_events(id,data,schema,source,version,ts_ms) VALUES($1,$2,$3,$4,$5,$6);",
+                      pqxx::params{r.id, r.data, r.schema, r.source, r.version, r.ts_ms});
     return Result::Ok();
   } catch (const std::exception& e) {
     return Translate(e);
@@ -221,8 +223,8 @@ Result PgRepository::InsertMetadataEvent(Transaction& t, const model::MetadataEv
 
 Result PgRepository::InsertLineage(Transaction& t, const model::LineageRecord& r) {
   try {
-    TX(t).Work().exec_params("INSERT INTO payload_lineage(parent_id,child_id,operation,role,parameters,created_at_ms) VALUES($1,$2,$3,$4,$5,$6);",
-                             r.parent_id, r.child_id, r.operation, r.role, r.parameters, r.created_at_ms);
+    TX(t).Work().exec("INSERT INTO payload_lineage(parent_id,child_id,operation,role,parameters,created_at_ms) VALUES($1,$2,$3,$4,$5,$6);",
+                      pqxx::params{r.parent_id, r.child_id, r.operation, r.role, r.parameters, r.created_at_ms});
     return Result::Ok();
   } catch (const std::exception& e) {
     return Translate(e);
@@ -231,8 +233,9 @@ Result PgRepository::InsertLineage(Transaction& t, const model::LineageRecord& r
 
 std::vector<model::LineageRecord> PgRepository::GetParents(Transaction& t, const std::string& id) {
   try {
-    auto res = TX(t).Work().exec_params(
-        "SELECT parent_id,child_id,operation,role,parameters,created_at_ms FROM payload_lineage WHERE child_id=$1 ORDER BY created_at_ms ASC;", id);
+    auto res = TX(t).Work().exec(
+        "SELECT parent_id,child_id,operation,role,parameters,created_at_ms FROM payload_lineage WHERE child_id=$1 ORDER BY created_at_ms ASC;",
+        pqxx::params{id});
 
     std::vector<model::LineageRecord> out;
     out.reserve(res.size());
@@ -254,8 +257,9 @@ std::vector<model::LineageRecord> PgRepository::GetParents(Transaction& t, const
 
 std::vector<model::LineageRecord> PgRepository::GetChildren(Transaction& t, const std::string& id) {
   try {
-    auto res = TX(t).Work().exec_params(
-        "SELECT parent_id,child_id,operation,role,parameters,created_at_ms FROM payload_lineage WHERE parent_id=$1 ORDER BY created_at_ms ASC;", id);
+    auto res = TX(t).Work().exec(
+        "SELECT parent_id,child_id,operation,role,parameters,created_at_ms FROM payload_lineage WHERE parent_id=$1 ORDER BY created_at_ms ASC;",
+        pqxx::params{id});
 
     std::vector<model::LineageRecord> out;
     out.reserve(res.size());
@@ -277,11 +281,11 @@ std::vector<model::LineageRecord> PgRepository::GetChildren(Transaction& t, cons
 
 Result PgRepository::CreateStream(Transaction& t, model::StreamRecord& r) {
   try {
-    auto res = TX(t).Work().exec_params(
+    auto res = TX(t).Work().exec(
         "INSERT INTO streams(namespace,name,retention_max_entries,retention_max_age_sec,created_at) "
         "VALUES($1,$2,NULLIF($3,0),NULLIF($4,0),CASE WHEN $5=0 THEN now() ELSE to_timestamp($5 / 1000.0) END) "
         "RETURNING stream_id, EXTRACT(EPOCH FROM created_at)::bigint * 1000;",
-        r.stream_namespace, r.name, r.retention_max_entries, r.retention_max_age_sec, r.created_at_ms);
+        pqxx::params{r.stream_namespace, r.name, r.retention_max_entries, r.retention_max_age_sec, r.created_at_ms});
     r.stream_id     = res[0][0].as<uint64_t>();
     r.created_at_ms = res[0][1].as<uint64_t>();
     return Result::Ok();
@@ -292,11 +296,11 @@ Result PgRepository::CreateStream(Transaction& t, model::StreamRecord& r) {
 
 std::optional<model::StreamRecord> PgRepository::GetStreamByName(Transaction& t, const std::string& stream_namespace, const std::string& name) {
   try {
-    auto res = TX(t).Work().exec_params(
+    auto res = TX(t).Work().exec(
         "SELECT stream_id, namespace, name, COALESCE(retention_max_entries,0), "
         "COALESCE(retention_max_age_sec,0), EXTRACT(EPOCH FROM created_at)::bigint * 1000 "
         "FROM streams WHERE namespace=$1 AND name=$2;",
-        stream_namespace, name);
+        pqxx::params{stream_namespace, name});
     if (res.empty()) {
       return std::nullopt;
     }
@@ -316,11 +320,11 @@ std::optional<model::StreamRecord> PgRepository::GetStreamByName(Transaction& t,
 
 std::optional<model::StreamRecord> PgRepository::GetStreamById(Transaction& t, uint64_t stream_id) {
   try {
-    auto res = TX(t).Work().exec_params(
+    auto res = TX(t).Work().exec(
         "SELECT stream_id, namespace, name, COALESCE(retention_max_entries,0), "
         "COALESCE(retention_max_age_sec,0), EXTRACT(EPOCH FROM created_at)::bigint * 1000 "
         "FROM streams WHERE stream_id=$1;",
-        stream_id);
+        pqxx::params{stream_id});
     if (res.empty()) {
       return std::nullopt;
     }
@@ -340,7 +344,7 @@ std::optional<model::StreamRecord> PgRepository::GetStreamById(Transaction& t, u
 
 Result PgRepository::DeleteStreamByName(Transaction& t, const std::string& stream_namespace, const std::string& name) {
   try {
-    TX(t).Work().exec_params("DELETE FROM streams WHERE namespace=$1 AND name=$2;", stream_namespace, name);
+    TX(t).Work().exec("DELETE FROM streams WHERE namespace=$1 AND name=$2;", pqxx::params{stream_namespace, name});
     return Result::Ok();
   } catch (const std::exception& e) {
     return Translate(e);
@@ -349,7 +353,7 @@ Result PgRepository::DeleteStreamByName(Transaction& t, const std::string& strea
 
 Result PgRepository::DeleteStreamById(Transaction& t, uint64_t stream_id) {
   try {
-    TX(t).Work().exec_params("DELETE FROM streams WHERE stream_id=$1;", stream_id);
+    TX(t).Work().exec("DELETE FROM streams WHERE stream_id=$1;", pqxx::params{stream_id});
     return Result::Ok();
   } catch (const std::exception& e) {
     return Translate(e);
@@ -358,21 +362,21 @@ Result PgRepository::DeleteStreamById(Transaction& t, uint64_t stream_id) {
 
 Result PgRepository::AppendStreamEntries(Transaction& t, uint64_t stream_id, std::vector<model::StreamEntryRecord>& entries) {
   try {
-    auto     max_res     = TX(t).Work().exec_params("SELECT COALESCE(MAX(\"offset\"), -1) FROM stream_entries WHERE stream_id=$1;", stream_id);
+    auto     max_res     = TX(t).Work().exec("SELECT COALESCE(MAX(\"offset\"), -1) FROM stream_entries WHERE stream_id=$1;", pqxx::params{stream_id});
     uint64_t next_offset = max_res[0][0].as<int64_t>() + 1;
 
     for (auto& e : entries) {
       e.stream_id = stream_id;
       e.offset    = next_offset++;
 
-      auto insert_res = TX(t).Work().exec_params(
+      auto insert_res = TX(t).Work().exec(
           "INSERT INTO stream_entries(stream_id,\"offset\",payload_uuid,event_time,append_time,duration_ns,tags) "
           "VALUES($1,$2,$3::uuid,"
           "CASE WHEN $4=0 THEN NULL ELSE to_timestamp($4 / 1000.0) END,"
           "CASE WHEN $5=0 THEN now() ELSE to_timestamp($5 / 1000.0) END,"
           "NULLIF($6,0),CASE WHEN $7='' THEN NULL ELSE $7::jsonb END) "
           "RETURNING EXTRACT(EPOCH FROM append_time)::bigint * 1000;",
-          e.stream_id, e.offset, e.payload_uuid, e.event_time_ms, e.append_time_ms, e.duration_ns, e.tags);
+          pqxx::params{e.stream_id, e.offset, e.payload_uuid, e.event_time_ms, e.append_time_ms, e.duration_ns, e.tags});
       e.append_time_ms = insert_res[0][0].as<uint64_t>();
     }
     return Result::Ok();
@@ -403,9 +407,9 @@ std::vector<model::StreamEntryRecord> PgRepository::ReadStreamEntries(Transactio
 
   pqxx::result res;
   if (min_append_time_ms.has_value()) {
-    res = TX(t).Work().exec_params(sql, stream_id, start_offset, *min_append_time_ms);
+    res = TX(t).Work().exec(sql, pqxx::params{stream_id, start_offset, *min_append_time_ms});
   } else {
-    res = TX(t).Work().exec_params(sql, stream_id, start_offset);
+    res = TX(t).Work().exec(sql, pqxx::params{stream_id, start_offset});
   }
 
   for (const auto& row : res) {
@@ -424,7 +428,7 @@ std::vector<model::StreamEntryRecord> PgRepository::ReadStreamEntries(Transactio
 }
 
 std::optional<uint64_t> PgRepository::GetMaxStreamOffset(Transaction& t, uint64_t stream_id) {
-  auto res = TX(t).Work().exec_params("SELECT MAX(\"offset\") FROM stream_entries WHERE stream_id=$1;", stream_id);
+  auto res = TX(t).Work().exec("SELECT MAX(\"offset\") FROM stream_entries WHERE stream_id=$1;", pqxx::params{stream_id});
   if (res.empty() || res[0][0].is_null()) {
     return std::nullopt;
   }
@@ -435,14 +439,14 @@ std::vector<model::StreamEntryRecord> PgRepository::ReadStreamEntriesRange(Trans
                                                                            uint64_t end_offset) {
   std::vector<model::StreamEntryRecord> out;
 
-  auto res = TX(t).Work().exec_params(
+  auto res = TX(t).Work().exec(
       "SELECT stream_id,\"offset\",payload_uuid::text,"
       "COALESCE(EXTRACT(EPOCH FROM event_time)::bigint * 1000,0),"
       "EXTRACT(EPOCH FROM append_time)::bigint * 1000,"
       "COALESCE(duration_ns,0),COALESCE(tags::text,'') "
       "FROM stream_entries WHERE stream_id=$1 AND \"offset\">=$2 AND \"offset\"<=$3 "
       "ORDER BY \"offset\" ASC;",
-      stream_id, start_offset, end_offset);
+      pqxx::params{stream_id, start_offset, end_offset});
 
   for (const auto& row : res) {
     model::StreamEntryRecord e;
@@ -465,13 +469,13 @@ Result PgRepository::TrimStreamEntriesToMaxCount(Transaction& t, uint64_t stream
   }
 
   try {
-    TX(t).Work().exec_params(
+    TX(t).Work().exec(
         "DELETE FROM stream_entries "
         "WHERE stream_id=$1 AND \"offset\" IN ("
         "SELECT \"offset\" FROM stream_entries WHERE stream_id=$1 ORDER BY \"offset\" ASC "
         "LIMIT GREATEST((SELECT COUNT(*)::bigint FROM stream_entries WHERE stream_id=$1) - $2::bigint, 0)"
         ");",
-        stream_id, max_entries);
+        pqxx::params{stream_id, max_entries});
     return Result::Ok();
   } catch (const std::exception& e) {
     return Translate(e);
@@ -480,10 +484,10 @@ Result PgRepository::TrimStreamEntriesToMaxCount(Transaction& t, uint64_t stream
 
 Result PgRepository::DeleteStreamEntriesOlderThan(Transaction& t, uint64_t stream_id, uint64_t min_append_time_ms) {
   try {
-    TX(t).Work().exec_params(
+    TX(t).Work().exec(
         "DELETE FROM stream_entries "
         "WHERE stream_id=$1 AND append_time < to_timestamp($2 / 1000.0);",
-        stream_id, min_append_time_ms);
+        pqxx::params{stream_id, min_append_time_ms});
     return Result::Ok();
   } catch (const std::exception& e) {
     return Translate(e);
@@ -492,12 +496,12 @@ Result PgRepository::DeleteStreamEntriesOlderThan(Transaction& t, uint64_t strea
 
 Result PgRepository::CommitConsumerOffset(Transaction& t, const model::StreamConsumerOffsetRecord& record) {
   try {
-    TX(t).Work().exec_params(
+    TX(t).Work().exec(
         "INSERT INTO stream_consumer_offsets(stream_id,consumer_group,\"offset\",updated_at) "
         "VALUES($1,$2,$3,CASE WHEN $4=0 THEN now() ELSE to_timestamp($4 / 1000.0) END) "
         "ON CONFLICT(stream_id,consumer_group) DO UPDATE SET "
         "\"offset\"=excluded.\"offset\", updated_at=excluded.updated_at;",
-        record.stream_id, record.consumer_group, record.offset, record.updated_at_ms);
+        pqxx::params{record.stream_id, record.consumer_group, record.offset, record.updated_at_ms});
     return Result::Ok();
   } catch (const std::exception& e) {
     return Translate(e);
@@ -506,10 +510,10 @@ Result PgRepository::CommitConsumerOffset(Transaction& t, const model::StreamCon
 
 std::optional<model::StreamConsumerOffsetRecord> PgRepository::GetConsumerOffset(Transaction& t, uint64_t stream_id,
                                                                                  const std::string& consumer_group) {
-  auto res = TX(t).Work().exec_params(
+  auto res = TX(t).Work().exec(
       "SELECT stream_id,consumer_group,\"offset\",EXTRACT(EPOCH FROM updated_at)::bigint * 1000 "
       "FROM stream_consumer_offsets WHERE stream_id=$1 AND consumer_group=$2;",
-      stream_id, consumer_group);
+      pqxx::params{stream_id, consumer_group});
   if (res.empty()) {
     return std::nullopt;
   }
