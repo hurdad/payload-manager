@@ -153,7 +153,7 @@ std::shared_ptr<db::Repository> BuildRepository(const payload::runtime::config::
     s_pg_guard = std::make_unique<pqxx::connection>(database.postgres().connection_uri());
     {
       pqxx::nontransaction ntx(*s_pg_guard);
-      auto                 res = ntx.exec_params("SELECT pg_try_advisory_lock($1);", kSingleInstanceLockId);
+      auto                 res = ntx.exec("SELECT pg_try_advisory_lock($1);", pqxx::params{kSingleInstanceLockId});
       if (res.empty() || !res[0][0].as<bool>()) {
         s_pg_guard.reset();
         throw std::runtime_error(
