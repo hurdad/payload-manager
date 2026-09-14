@@ -14,7 +14,10 @@
 #include <arrow/type.h>
 #include <arrow/util/key_value_metadata.h>
 
+#include <algorithm>
+#include <cctype>
 #include <chrono>
+#include <string>
 #include <unordered_map>
 #include <vector>
 
@@ -294,10 +297,32 @@ arrow::Result<arrow::Compression::type> ResolveCompression(const std::string& pa
       return arrow::Compression::BZ2;
     case pb::arrow::storage::COMPRESSION_AUTO:
     default: {
-      auto compression_result = arrow::util::Codec::GetCompressionType(path);
-      if (compression_result.ok()) {
-        return *compression_result;
+      // Infer from the path's suffix.
+      //
+      // This used to call Codec::GetCompressionType(path), which takes a codec
+      // *name* ("gzip", "zstd") and not a path — so the lookup failed for every
+      // real path and AUTO always resolved to UNCOMPRESSED. Since AUTO is the
+      // proto3 default, that made the setting a no-op for anyone who never set
+      // compression explicitly.
+      //
+      // The names Arrow accepts are not the suffixes files carry (".gz" is not
+      // "gzip"), so map them here rather than handing the suffix over.
+      const auto dot = path.find_last_of('.');
+      if (dot != std::string::npos) {
+        std::string ext = path.substr(dot + 1);
+        std::transform(ext.begin(), ext.end(), ext.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+
+        if (ext == "gz") return arrow::Compression::GZIP;
+        if (ext == "zst" || ext == "zstd") return arrow::Compression::ZSTD;
+        if (ext == "snappy" || ext == "sz") return arrow::Compression::SNAPPY;
+        if (ext == "br") return arrow::Compression::BROTLI;
+        if (ext == "bz2") return arrow::Compression::BZ2;
+        if (ext == "lzo") return arrow::Compression::LZO;
+        // .lz4 files are the framed format, not raw LZ4 blocks.
+        if (ext == "lz4") return arrow::Compression::LZ4_FRAME;
       }
+      // Anything unrecognised — including this project's own <uuid>.bin — stays
+      // uncompressed, which is what the broken lookup happened to produce.
       return arrow::Compression::UNCOMPRESSED;
     }
   }

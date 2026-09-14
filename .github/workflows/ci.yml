@@ -291,11 +291,23 @@ jobs:
         if: ${{ !cancelled() }}
         run: |
           set -euo pipefail
+          # Patterns are anchored '(.*/)?' rather than '.*/': gcovr matches these
+          # against paths relative to --root, so a leading '.*/' never matched
+          # 'tests/...' or 'examples/...' and both were counted. Test sources
+          # execute themselves, so they scored ~76% and pulled the reported
+          # figure well above the truth — 68.8% against 59.5% for shipping code.
+          # These now mirror codecov.yml's ignore list, so the summary here and
+          # the number Codecov reports are the same number.
           gcovr --root . build \
-            --exclude '.*/build/.*' \
-            --exclude '.*/tests/.*' \
+            --exclude '(.*/)?build/.*' \
+            --exclude '(.*/)?cmake-build-[^/]*/.*' \
+            --exclude '(.*/)?tests/.*' \
+            --exclude '(.*/)?examples/.*' \
+            --exclude '(.*/)?gateway/.*' \
+            --exclude '(.*/)?ui/.*' \
             --exclude '.*\.pb\.(h|cc)$' \
-            --exclude '.*/proto/google/.*' \
+            --exclude '.*\.grpc\.pb\.(h|cc)$' \
+            --exclude '(.*/)?proto/google/.*' \
             --xml-pretty --output coverage.xml \
             --print-summary
 
