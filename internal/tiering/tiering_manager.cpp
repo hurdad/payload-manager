@@ -5,6 +5,7 @@
 #include "internal/core/payload_manager.hpp"
 #include "internal/observability/logging.hpp"
 #include "internal/observability/spans.hpp"
+#include "internal/storage/ram/ram_arrow_store.hpp"
 #include "payload/manager/v1.hpp"
 
 namespace payload::tiering {
@@ -51,6 +52,18 @@ void TieringManager::Loop() {
       state_->ram_bytes.store(it_ram != tier_bytes.end() ? it_ram->second : 0);
       state_->gpu_bytes.store(it_gpu != tier_bytes.end() ? it_gpu->second : 0);
       state_->disk_bytes.store(it_disk != tier_bytes.end() ? it_disk->second : 0);
+    }
+
+    // Sample the tmpfs itself on the same cadence. Tier occupancy only covers
+    // what this process handed out; /dev/shm can also be consumed by another
+    // container on the same ipc namespace or by a leaked mapping, and that
+    // shortfall is otherwise invisible until an allocation is refused.
+    {
+      const auto total      = payload::storage::RamArrowStore::ShmTotalBytes();
+      const auto free_bytes = payload::storage::RamArrowStore::ShmFreeBytes();
+      if (total.has_value() && free_bytes.has_value()) {
+        payload::observability::Metrics::Instance().SetShmBytes(*total, *free_bytes);
+      }
     }
 
     if (auto victim = policy_->ChooseRamEviction(*state_)) {

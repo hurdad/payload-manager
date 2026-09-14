@@ -59,8 +59,18 @@ jobs:
 
       # Integration suites need live Postgres/MinIO; excluded from the
       # coverage lane so a missing service cannot look like a test failure.
+      # --output-junit gives Codecov's test-results action something to parse.
       - name: Test
-        run: ctest --test-dir build --output-on-failure -E "integration"
+        run: ctest --test-dir build --output-on-failure -E "integration" --output-junit test-results.xml
+
+      # Runs even when the suite failed — a red run is exactly when the
+      # per-test breakdown is worth having.
+      - name: Upload test results to Codecov
+        if: ${{ !cancelled() }}
+        uses: codecov/test-results-action@v1
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: build/test-results.xml
 
       - name: Generate coverage report
         run: |

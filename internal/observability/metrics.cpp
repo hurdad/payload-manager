@@ -163,16 +163,21 @@ struct Metrics::Impl {
   opentelemetry::nostd::shared_ptr<metrics_api::Histogram<double>>      request_latency_ms;
   opentelemetry::nostd::shared_ptr<metrics_api::Histogram<double>>      spill_duration_ms;
   opentelemetry::nostd::shared_ptr<metrics_api::Counter<std::uint64_t>> spill_bytes_total;
+  opentelemetry::nostd::shared_ptr<metrics_api::Counter<std::uint64_t>> spill_failures_total;
   opentelemetry::nostd::shared_ptr<metrics_api::ObservableInstrument>   tier_occupancy_gauge;
   opentelemetry::nostd::shared_ptr<metrics_api::ObservableInstrument>   tier_count_gauge;
   opentelemetry::nostd::shared_ptr<metrics_api::Counter<std::uint64_t>> allocation_failure_count;
   opentelemetry::nostd::shared_ptr<metrics_api::ObservableInstrument>   spill_queue_depth_gauge;
+  opentelemetry::nostd::shared_ptr<metrics_api::ObservableInstrument>   shm_bytes_total_gauge;
+  opentelemetry::nostd::shared_ptr<metrics_api::ObservableInstrument>   shm_bytes_free_gauge;
 
   std::mutex                                    tier_occupancy_mutex;
   std::unordered_map<std::string, std::int64_t> tier_occupancy_values;
   std::mutex                                    tier_count_mutex;
   std::unordered_map<std::string, std::int64_t> tier_count_values;
   std::atomic<std::int64_t>                     spill_queue_depth{0};
+  std::atomic<std::int64_t>                     shm_bytes_total{0};
+  std::atomic<std::int64_t>                     shm_bytes_free{0};
 };
 
 bool InitializeMetrics(const OtlpConfig& config) {
@@ -277,10 +282,12 @@ Metrics::Metrics() : impl_(std::make_unique<Impl>()) {
   auto provider = metrics_api::Provider::GetMeterProvider();
   impl_->meter  = provider->GetMeter("payload-manager", "0.1.0");
 
-  impl_->request_count      = impl_->meter->CreateUInt64Counter("payload.request.count", "1", "Total number of service requests");
-  impl_->request_latency_ms = impl_->meter->CreateDoubleHistogram("payload.request.latency_ms", "ms", "End-to-end request latency in milliseconds");
-  impl_->spill_duration_ms  = impl_->meter->CreateDoubleHistogram("payload.spill.duration_ms", "ms", "Spill operation duration in milliseconds");
-  impl_->spill_bytes_total  = impl_->meter->CreateUInt64Counter("payload.spill.bytes_total", "By", "Total bytes moved by spill operations");
+  impl_->request_count        = impl_->meter->CreateUInt64Counter("payload.request.count", "1", "Total number of service requests");
+  impl_->request_latency_ms   = impl_->meter->CreateDoubleHistogram("payload.request.latency_ms", "ms", "End-to-end request latency in milliseconds");
+  impl_->spill_failures_total = impl_->meter->CreateUInt64Counter(
+      "payload.spill.failures_total", "Spill operations that failed; reason in {tier_unavailable, not_found, invalid_state, other}", "1");
+  impl_->spill_duration_ms = impl_->meter->CreateDoubleHistogram("payload.spill.duration_ms", "ms", "Spill operation duration in milliseconds");
+  impl_->spill_bytes_total = impl_->meter->CreateUInt64Counter("payload.spill.bytes_total", "By", "Total bytes moved by spill operations");
   impl_->allocation_failure_count =
       impl_->meter->CreateUInt64Counter("payload.allocation.failure_count", "1", "Total number of allocation failures due to tier capacity");
   impl_->tier_occupancy_gauge    = impl_->meter->CreateInt64ObservableGauge("payload.tier.occupancy_bytes", "Current tier occupancy in bytes", "By");
@@ -293,6 +300,26 @@ Metrics::Metrics() : impl_(std::make_unique<Impl>()) {
         int_result->Observe(impl->spill_queue_depth.load());
       },
       impl_.get());
+  // Live tmpfs size and free space. The tier occupancy gauges only report what
+  // this process has handed out; these report the medium itself, so an operator
+  // can see consumption from outside the service before it causes a refusal.
+  impl_->shm_bytes_total_gauge = impl_->meter->CreateInt64ObservableGauge("payload.shm.bytes_total", "Size of the tmpfs backing /dev/shm", "By");
+  impl_->shm_bytes_free_gauge  = impl_->meter->CreateInt64ObservableGauge("payload.shm.bytes_free", "Free space on the tmpfs backing /dev/shm", "By");
+  impl_->shm_bytes_total_gauge->AddCallback(
+      [](metrics_api::ObserverResult result, void* state) {
+        auto* impl       = static_cast<Impl*>(state);
+        auto  int_result = opentelemetry::nostd::get<opentelemetry::nostd::shared_ptr<metrics_api::ObserverResultT<std::int64_t>>>(result);
+        int_result->Observe(impl->shm_bytes_total.load());
+      },
+      impl_.get());
+  impl_->shm_bytes_free_gauge->AddCallback(
+      [](metrics_api::ObserverResult result, void* state) {
+        auto* impl       = static_cast<Impl*>(state);
+        auto  int_result = opentelemetry::nostd::get<opentelemetry::nostd::shared_ptr<metrics_api::ObserverResultT<std::int64_t>>>(result);
+        int_result->Observe(impl->shm_bytes_free.load());
+      },
+      impl_.get());
+
   impl_->tier_occupancy_gauge->AddCallback(
       [](metrics_api::ObserverResult result, void* state) {
         auto*                       impl = static_cast<Impl*>(state);
@@ -379,6 +406,25 @@ void Metrics::RecordSpillBytes(std::string_view op, std::uint64_t bytes) {
   const opentelemetry::nostd::string_view    op_sv(op.data(), op.size());
   const std::initializer_list<AttributePair> attributes = {{"op", op_sv}};
   AddWithAttributes(impl_->spill_bytes_total, bytes, attributes);
+}
+
+void Metrics::SetShmBytes(std::uint64_t total, std::uint64_t free_bytes) {
+  if (!impl_ || !impl_->shm_bytes_total_gauge || !g_metrics_options.tier_labels_enabled) {
+    return;
+  }
+
+  impl_->shm_bytes_total.store(static_cast<std::int64_t>(total));
+  impl_->shm_bytes_free.store(static_cast<std::int64_t>(free_bytes));
+}
+
+void Metrics::RecordSpillFailure(std::string_view reason) {
+  if (!impl_ || !impl_->spill_failures_total || !g_metrics_options.spill_metrics_enabled) {
+    return;
+  }
+
+  const opentelemetry::nostd::string_view    reason_sv(reason.data(), reason.size());
+  const std::initializer_list<AttributePair> attributes = {{"reason", reason_sv}};
+  AddWithAttributes(impl_->spill_failures_total, static_cast<std::uint64_t>(1), attributes);
 }
 
 void Metrics::RecordAllocationFailure(std::string_view tier) {

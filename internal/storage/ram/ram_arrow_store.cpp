@@ -196,6 +196,17 @@ std::optional<uint64_t> RamArrowStore::ShmTotalBytes() {
   return static_cast<uint64_t>(st.f_blocks) * static_cast<uint64_t>(st.f_frsize);
 }
 
+/*static*/
+std::optional<uint64_t> RamArrowStore::ShmFreeBytes() {
+  struct statvfs st{};
+  if (statvfs(kShmDir, &st) != 0) {
+    return std::nullopt;
+  }
+  // f_bavail, not f_bfree: the former excludes blocks reserved for root, which
+  // an unprivileged process cannot use anyway.
+  return static_cast<uint64_t>(st.f_bavail) * static_cast<uint64_t>(st.f_frsize);
+}
+
 std::optional<uint64_t> RamArrowStore::AvailableBytes() const {
   const auto now = std::chrono::steady_clock::now();
 
@@ -204,14 +215,7 @@ std::optional<uint64_t> RamArrowStore::AvailableBytes() const {
     return avail_cached_;
   }
 
-  struct statvfs st{};
-  if (statvfs(kShmDir, &st) != 0) {
-    avail_cached_ = std::nullopt;
-  } else {
-    // f_bavail, not f_bfree: the former excludes blocks reserved for root,
-    // which an unprivileged process cannot use anyway.
-    avail_cached_ = static_cast<uint64_t>(st.f_bavail) * static_cast<uint64_t>(st.f_frsize);
-  }
+  avail_cached_     = ShmFreeBytes();
   avail_checked_at_ = now;
   return avail_cached_;
 }

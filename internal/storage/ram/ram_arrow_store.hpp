@@ -63,6 +63,11 @@ class RamArrowStore final : public StorageBackend {
   // Total size of the tmpfs backing /dev/shm, or nullopt if it cannot be read.
   static std::optional<uint64_t> ShmTotalBytes();
 
+  // Uncached free space on that tmpfs. AvailableBytes() wraps this with a TTL
+  // for the allocation hot path; callers sampling on their own schedule (the
+  // tiering loop's metrics tick) can use this directly.
+  static std::optional<uint64_t> ShmFreeBytes();
+
   /*
     Unlink shm segments belonging to this prefix that no longer correspond to a
     known payload, and return how many were removed.

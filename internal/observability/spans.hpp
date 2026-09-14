@@ -62,8 +62,14 @@ class Metrics {
   void ObserveRequestLatencyMs(std::string_view route, double latency_ms);
   void ObserveSpillDurationMs(std::string_view op, double duration_ms);
   void RecordSpillBytes(std::string_view op, std::uint64_t bytes);
+  // reason is a bounded label: tier_unavailable | not_found | invalid_state | other
+  void RecordSpillFailure(std::string_view reason);
   void SetTierOccupancyBytes(std::string_view tier, std::uint64_t bytes);
   void SetTierPayloadCount(std::string_view tier, std::uint64_t count);
+  // Live size and free space of the tmpfs backing /dev/shm. Distinct from tier
+  // occupancy: the configured cap only covers what this process handed out,
+  // while anything else on the same tmpfs consumes it invisibly.
+  void SetShmBytes(std::uint64_t total, std::uint64_t free_bytes);
   void RecordAllocationFailure(std::string_view tier);
   void SetSpillQueueDepth(std::size_t depth);
 
@@ -147,6 +153,12 @@ inline void Metrics::SetTierOccupancyBytes(std::string_view, std::uint64_t) {
 }
 
 inline void Metrics::SetTierPayloadCount(std::string_view, std::uint64_t) {
+}
+
+inline void Metrics::SetShmBytes(std::uint64_t, std::uint64_t) {
+}
+
+inline void Metrics::RecordSpillFailure(std::string_view) {
 }
 
 inline void Metrics::RecordAllocationFailure(std::string_view) {
