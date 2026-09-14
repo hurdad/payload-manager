@@ -84,7 +84,7 @@ description of the schema would only be something to keep in step.
 
 A common interface allows placement/tiering logic to stay backend-agnostic.
 
-`TIER_VOID` is a sentinel value — not a storage backend. When a payload is spilled to void the tiering layer deletes it rather than moving bytes. See [Design Details](./DESIGN.md#tiervoid-discard-on-eviction).
+`TIER_VOID` is a sentinel value — not a storage backend. When a payload is spilled to void the tiering layer deletes it rather than moving bytes. See [Design Details](./DESIGN.md#tier_void-discard-on-eviction).
 
 ### Ring tier (`TIER_RAM_RING`)
 

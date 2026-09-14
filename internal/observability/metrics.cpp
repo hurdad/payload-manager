@@ -301,14 +301,14 @@ Metrics::Metrics() : impl_(std::make_unique<Impl>()) {
   auto provider = metrics_api::Provider::GetMeterProvider();
   impl_->meter  = provider->GetMeter("payload-manager", "0.1.0");
 
-  impl_->request_count        = impl_->meter->CreateUInt64Counter("payload.request.count", "1", "Total number of service requests");
-  impl_->request_latency_ms   = impl_->meter->CreateDoubleHistogram("payload.request.latency_ms", "ms", "End-to-end request latency in milliseconds");
+  impl_->request_count        = impl_->meter->CreateUInt64Counter("payload.request.count", "Total number of service requests", "1");
+  impl_->request_latency_ms   = impl_->meter->CreateDoubleHistogram("payload.request.latency_ms", "End-to-end request latency in milliseconds", "ms");
   impl_->spill_failures_total = impl_->meter->CreateUInt64Counter(
       "payload.spill.failures_total", "Spill operations that failed; reason in {tier_unavailable, not_found, invalid_state, other}", "1");
-  impl_->spill_duration_ms = impl_->meter->CreateDoubleHistogram("payload.spill.duration_ms", "ms", "Spill operation duration in milliseconds");
-  impl_->spill_bytes_total = impl_->meter->CreateUInt64Counter("payload.spill.bytes_total", "By", "Total bytes moved by spill operations");
+  impl_->spill_duration_ms = impl_->meter->CreateDoubleHistogram("payload.spill.duration_ms", "Spill operation duration in milliseconds", "ms");
+  impl_->spill_bytes_total = impl_->meter->CreateUInt64Counter("payload.spill.bytes_total", "Total bytes moved by spill operations", "By");
   impl_->allocation_failure_count =
-      impl_->meter->CreateUInt64Counter("payload.allocation.failure_count", "1", "Total number of allocation failures due to tier capacity");
+      impl_->meter->CreateUInt64Counter("payload.allocation.failure_count", "Total number of allocation failures due to tier capacity", "1");
   impl_->tier_occupancy_gauge    = impl_->meter->CreateInt64ObservableGauge("payload.tier.occupancy_bytes", "Current tier occupancy in bytes", "By");
   impl_->tier_count_gauge        = impl_->meter->CreateInt64ObservableGauge("payload.tier.payload_count", "Number of payloads per tier", "1");
   impl_->spill_queue_depth_gauge = impl_->meter->CreateInt64ObservableGauge("payload.spill.queue_depth", "Number of payloads queued for spill", "1");

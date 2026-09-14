@@ -81,6 +81,67 @@ Metrics use OTEL resource attribute `service.name`, sourced from OTEL config ser
 - **Enable controls:**
   - `tier_occupancy_metrics_enabled`
 
+### `payload.spill.failures_total`
+
+- **Type:** Counter (`uint64`)
+- **Unit:** `1`
+- **Meaning:** Spill operations that failed.
+- **Attributes:**
+  - `reason` (one of `tier_unavailable`, `not_found`, `invalid_state`, `other`)
+- **Enable controls:**
+  - `spill_metrics_enabled`
+
+### `payload.spill.bytes_total`
+
+- **Type:** Counter (`uint64`)
+- **Unit:** `By`
+- **Meaning:** Total bytes moved by spill operations.
+- **Enable controls:**
+  - `spill_metrics_enabled`
+
+### `payload.spill.queue_depth`
+
+- **Type:** Observable Gauge (`int64`)
+- **Unit:** `1`
+- **Meaning:** Payloads currently queued for spill, sampled during collection.
+- **Enable controls:**
+  - `spill_metrics_enabled`
+
+### `payload.allocation.failure_count`
+
+- **Type:** Counter (`uint64`)
+- **Unit:** `1`
+- **Meaning:** Allocation failures caused by tier capacity.
+- **Enable controls:**
+  - `request_metrics_enabled`
+
+### `payload.tier.payload_count`
+
+- **Type:** Observable Gauge (`int64`)
+- **Unit:** `1`
+- **Meaning:** Number of payloads per tier, sampled during collection.
+- **Attributes:**
+  - Optional: `tier` (enabled by `tier_labels_enabled`)
+- **Enable controls:**
+  - `tier_occupancy_metrics_enabled`
+
+### `payload.shm.bytes_total`
+
+- **Type:** Observable Gauge (`int64`)
+- **Unit:** `By`
+- **Meaning:** Size of the tmpfs backing `/dev/shm`.
+- **Notes:** The tier occupancy gauges report only what this process handed out;
+  this reports the medium itself, so consumption from outside the service is
+  visible before it causes a refusal. In a container this is Docker's 64 MB
+  default unless the deployment sets `--shm-size` or shares the host IPC
+  namespace (`ipc: host`, which every service Compose stack here does).
+
+### `payload.shm.bytes_free`
+
+- **Type:** Observable Gauge (`int64`)
+- **Unit:** `By`
+- **Meaning:** Free space on the tmpfs backing `/dev/shm`.
+
 ### `payload.ring.slots_total`
 
 - **Type:** Observable Gauge (`int64`)
