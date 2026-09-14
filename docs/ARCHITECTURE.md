@@ -14,12 +14,13 @@ was drawn from. GitHub renders the block below directly, so edit here and keep
 ```mermaid
 flowchart TB
     subgraph clients["Clients"]
-        browser["Browser / HTTP client"]
+        browser["Browser"]
+        webui["Svelte web UI<br/>embedded in the gateway binary, served at /"]
         native["Native client<br/>C++ / Python"]
     end
 
     subgraph control["Control plane — metadata only"]
-        gw["gRPC-Gateway<br/>REST to gRPC · Svelte UI · OpenAPI"]
+        gw["gRPC-Gateway<br/>REST to gRPC · serves the UI · OpenAPI"]
         servers["gRPC servers<br/>admin · catalog · data · ring · stream"]
         svc["Service layer<br/>lifecycle · placement · leasing<br/>metadata · lineage · streams"]
         ringsvc["Ring service<br/>acquire / commit slots<br/>lease / release for readers"]
@@ -42,8 +43,10 @@ flowchart TB
         slots["N pre-allocated /dev/shm slots per ring<br/>addressed by ring_id, slot_idx, generation<br/>no PayloadID · no catalog row · recycled in place"]
     end
 
-    browser --> gw --> servers
-    native --> servers
+    browser --> webui
+    webui -- "REST / JSON" --> gw
+    gw --> servers
+    native -- "gRPC, direct" --> servers
     servers --> svc
     servers --> ringsvc
     svc --> repo
@@ -74,7 +77,9 @@ flowchart TB
 
 ### Gateway (REST + UI)
 
-`gateway/` is a standalone Go binary that sits in front of the gRPC server:
+`gateway/` is a standalone Go binary serving the browser path — HTTP clients and
+the web UI. It is not in front of everything: a native C++ or Python client
+speaks gRPC to the servers directly and never touches the gateway.
 
 - Translates HTTP/JSON requests to gRPC using [gRPC-Gateway v2](https://github.com/grpc-ecosystem/grpc-gateway).
 - Serves a compiled Svelte single-page application embedded directly in the binary via `embed.FS`.

@@ -2,7 +2,7 @@
 """Emit docs/architecture.svg. Generated rather than hand-placed so the
 coordinates stay consistent when a box moves."""
 
-W, H = 1268, 700
+W, H = 1268, 744
 P = []          # svg body parts
 L = []          # group labels, painted last so edges cannot run through them
 
@@ -41,60 +41,62 @@ def arrow(x1, y1, x2, y2, cls="edge", label=None, lx=None, ly=None, dash=False):
         P.append(f'<text class="elbl" x="{lx if lx is not None else (x1+x2)/2}" y="{ly if ly is not None else (y1+y2)/2-6}">{esc(label)}</text>')
 
 # ---------------------------------------------------------------- clients
-group(28, 20, 560, 86, "Clients", "g1")
-box(52, 48, 236, 44, ["Browser / HTTP client"])
-box(316, 48, 248, 44, ["Native client  (C++ / Python)"])
+group(28, 20, 560, 124, "Clients", "g1")
+box(52, 46, 236, 38, ["Browser"])
+box(52, 94, 236, 40, ["Svelte web UI", "embedded in the gateway"])
+box(316, 46, 248, 38, ["Native client  (C++ / Python)"])
 
 # ------------------------------------------------------------ control plane
-group(28, 126, 560, 482, "Control plane  —  metadata only", "g2")
-box(52, 158, 512, 46, ["gRPC-Gateway", "REST to gRPC  ·  Svelte UI  ·  OpenAPI"])
-box(52, 228, 512, 46, ["gRPC servers", "admin · catalog · data · ring · stream"])
-box(52, 298, 250, 62, ["Service layer", "lifecycle · placement · leasing", "metadata · lineage · streams"])
-box(320, 298, 244, 62, ["Ring service", "acquire / commit slots", "lease / release"])
-box(52, 386, 250, 46, ["Repository  (internal/db)", "transactions"])
-cyl(58,  452, 110, 44, "Memory")
-cyl(186, 452, 116, 44, "PostgreSQL")
-box(52, 522, 250, 62, ["Placement · Tiering · Spill", "demotes a tier under pressure"])
+group(28, 164, 560, 482, "Control plane  —  metadata only", "g2")
+box(52, 196, 300, 46, ["gRPC-Gateway", "REST to gRPC  ·  serves the UI  ·  OpenAPI"])
+box(52, 266, 512, 46, ["gRPC servers", "admin · catalog · data · ring · stream"])
+box(52, 336, 250, 62, ["Service layer", "lifecycle · placement · leasing", "metadata · lineage · streams"])
+box(320, 336, 244, 62, ["Ring service", "acquire / commit slots", "lease / release"])
+box(52, 424, 250, 46, ["Repository  (internal/db)", "transactions"])
+cyl(58,  490, 110, 44, "Memory")
+cyl(186, 490, 116, 44, "PostgreSQL")
+box(52, 560, 250, 62, ["Placement · Tiering · Spill", "demotes a tier under pressure"])
 
 # ------------------------------------------------------------ storage tiers
-group(628, 126, 506, 430, "Storage tiers  —  a demotion chain", "g3")
-box(668, 166, 236, 50, ["GPU", "CUDA IPC handle"], "tier")
-box(668, 268, 236, 50, ["RAM", "POSIX shared memory"], "tier")
-box(668, 370, 236, 50, ["Disk", "file"], "tier")
-box(668, 472, 236, 50, ["Object storage", "S3 / GCS / Azure"], "tier")
-box(940, 370, 170, 50, ["Void", "deleted, not moved"], "void")
+group(628, 164, 506, 430, "Storage tiers  —  a demotion chain", "g3")
+box(668, 204, 236, 50, ["GPU", "CUDA IPC handle"], "tier")
+box(668, 306, 236, 50, ["RAM", "POSIX shared memory"], "tier")
+box(668, 408, 236, 50, ["Disk", "file"], "tier")
+box(668, 510, 236, 50, ["Object storage", "S3 / GCS / Azure"], "tier")
+box(940, 408, 170, 50, ["Void", "deleted, not moved"], "void")
 
-for y in (216, 318, 420):
+for y in (254, 356, 458):
     arrow(786, y, 786, y + 52, "spill", "spill", 812, y + 32)
 
-# void: one labelled edge, two plain
-arrow(904, 191, 940, 380, "dash", "spill_target = TIER_VOID", 1025, 332, dash=True)
-arrow(904, 293, 940, 388, "dash", None, dash=True)
-arrow(904, 395, 940, 395, "dash", None, dash=True)
+arrow(904, 229, 940, 418, "dash", "spill_target = TIER_VOID", 1025, 370, dash=True)
+arrow(904, 331, 940, 426, "dash", None, dash=True)
+arrow(904, 433, 940, 433, "dash", None, dash=True)
 
 # --------------------------------------------------------------- ring tier
-group(628, 576, 506, 86, "Ring tier  —  TIER_RAM_RING", "g4")
-box(652, 604, 458, 44, ["N pre-allocated /dev/shm slots per ring",
+group(628, 614, 506, 86, "Ring tier  —  TIER_RAM_RING", "g4")
+box(652, 642, 458, 44, ["N pre-allocated /dev/shm slots per ring",
                         "(ring_id, slot_idx, generation)  ·  no PayloadID  ·  no catalog row"], "ring")
 
 # ------------------------------------------------------------------- edges
-arrow(170, 92, 170, 158)                       # browser -> gateway
-arrow(440, 92, 440, 158)                       # native -> gateway row
-arrow(308, 204, 308, 228)                      # gateway -> servers
-arrow(177, 274, 177, 298)                      # servers -> service layer
-arrow(442, 274, 442, 298)                      # servers -> ring service
-arrow(177, 360, 177, 386)                      # service -> repository
-arrow(140, 432, 118, 452)                      # repo -> memory
-arrow(215, 432, 240, 452)                      # repo -> postgres
-arrow(177, 496, 177, 522)                      # repo column -> tiering
-arrow(302, 545, 628, 330, "thin")              # tiering -> tier group
-P.append('<path class="thin" d="M442 360 V 619 H 628" marker-end="url(#a-thin)" fill="none"/>')
+arrow(170, 84, 170, 94)                        # browser runs the UI
+arrow(170, 134, 170, 196, "edge", "REST / JSON", 216, 170)
+arrow(202, 242, 202, 266)                      # gateway -> servers
+# The native client never goes through the gateway; that is a browser path.
+arrow(440, 84, 440, 266, "edge", "gRPC, direct", 494, 176)
+arrow(177, 312, 177, 336)                      # servers -> service layer
+arrow(442, 312, 442, 336)                      # servers -> ring service
+arrow(177, 398, 177, 424)                      # service -> repository
+arrow(140, 470, 118, 490)                      # repo -> memory
+arrow(215, 470, 240, 490)                      # repo -> postgres
+arrow(177, 534, 177, 560)                      # catalogs column -> tiering
+arrow(302, 583, 628, 368, "thin")              # tiering -> tier group
+P.append('<path class="thin" d="M442 398 V 657 H 628" marker-end="url(#a-thin)" fill="none"/>')
 
 # data plane
-P.append('<path class="data" d="M564 70 H 1215 V 619" fill="none"/>')
-P.append('<text class="dlbl" x="880" y="58">data plane  —  bytes move directly, no service in the path</text>')
-arrow(1215, 300, 1134, 300, "data")
-arrow(1215, 619, 1134, 619, "data")
+P.append('<path class="data" d="M564 64 H 1215 V 657" fill="none"/>')
+P.append('<text class="dlbl" x="880" y="52">data plane  —  bytes move directly, no service in the path</text>')
+arrow(1215, 338, 1134, 338, "data")
+arrow(1215, 657, 1134, 657, "data")
 
 STYLE = """
   .bg    { fill:#ffffff }
