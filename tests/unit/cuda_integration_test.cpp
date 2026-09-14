@@ -4,7 +4,6 @@
 #include <cstdint>
 #include <memory>
 #include <stdexcept>
-#include <vector>
 
 #include "internal/storage/gpu/cuda_arrow_store.hpp"
 #include "internal/storage/gpu/cuda_context.hpp"
@@ -59,9 +58,16 @@ TEST(CudaIntegration, AllocateReadExportAndRemoveLifecycle) {
   ASSERT_TRUE(allocated != nullptr);
   EXPECT_EQ(allocated->size(), size_bytes);
 
+  // Read copies device to host and hands back a fresh CPU-readable buffer —
+  // see the contract on CudaArrowStore::Read, which spill depends on. So it is
+  // deliberately not the buffer Allocate returned, and deliberately not a
+  // CudaBuffer. This used to assert pointer equality, which the implementation
+  // could never satisfy.
   const auto read = store.Read(id);
   ASSERT_TRUE(read != nullptr);
-  EXPECT_EQ(read.get(), allocated.get());
+  EXPECT_NE(read.get(), allocated.get());
+  EXPECT_EQ(read->size(), size_bytes);
+  EXPECT_EQ(std::dynamic_pointer_cast<arrow::cuda::CudaBuffer>(read), nullptr);
 
   const auto ipc = store.ExportIPC(id);
   EXPECT_TRUE(ipc != nullptr);
@@ -88,18 +94,23 @@ TEST(CudaIntegration, WriteCopiesHostBufferToDeviceBuffer) {
   host_buffer->mutable_data()[3] = static_cast<uint8_t>(4);
 
   store.Write(id, host_buffer, false);
-  const auto device_buffer = store.Read(id);
-  ASSERT_TRUE(device_buffer != nullptr);
-  EXPECT_EQ(device_buffer->size(), host_buffer->size());
 
-  std::vector<uint8_t> round_trip(static_cast<size_t>(host_buffer->size()), 0);
-  const auto           cuda_buffer = std::dynamic_pointer_cast<arrow::cuda::CudaBuffer>(device_buffer);
-  ASSERT_TRUE(cuda_buffer != nullptr);
-  const auto copy_status = cuda_buffer->CopyToHost(/*position=*/0, cuda_buffer->size(), round_trip.data());
-  ASSERT_TRUE(copy_status.ok());
+  // Read has already done the device-to-host copy, so the bytes are readable
+  // directly. The previous version cast this to CudaBuffer and called
+  // CopyToHost on it, which cannot work: the cast yields null because the
+  // buffer is host memory by the time Read returns.
+  const auto round_trip = store.Read(id);
+  ASSERT_TRUE(round_trip != nullptr);
+  EXPECT_EQ(round_trip->size(), host_buffer->size());
+  EXPECT_EQ(std::dynamic_pointer_cast<arrow::cuda::CudaBuffer>(round_trip), nullptr);
 
-  EXPECT_EQ(round_trip[0], 1u);
-  EXPECT_EQ(round_trip[1], 2u);
-  EXPECT_EQ(round_trip[2], 3u);
-  EXPECT_EQ(round_trip[3], 4u);
+  ASSERT_EQ(round_trip->size(), 4);
+  EXPECT_EQ(round_trip->data()[0], 1u);
+  EXPECT_EQ(round_trip->data()[1], 2u);
+  EXPECT_EQ(round_trip->data()[2], 3u);
+  EXPECT_EQ(round_trip->data()[3], 4u);
+
+  // The stored payload is still device memory — only Read's return value is
+  // on the host. Exporting an IPC handle proves the device side survived.
+  EXPECT_TRUE(store.ExportIPC(id) != nullptr);
 }
