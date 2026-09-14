@@ -144,42 +144,83 @@ everything else.
 
 ## Compose files
 
-Base stacks:
+### Base stacks
 
-- `docker-compose.memory.yml` — in-memory catalog; one container, no database.
-- `docker-compose.postgres.yml` — PostgreSQL catalog.
-- `docker-compose.gpu.postgres.yml` — PostgreSQL catalog, GPU tier.
+Named for the catalog backend, which is the thing that actually differs between
+them. Observability is not a stack: since OpenTelemetry was folded into the
+single service image, the only thing separating a "with OTEL" deployment from a
+plain one was the config it mounted, so `docker-compose.otel.yml` overrides that
+and nothing else.
 
-Stacks are named for the catalog backend. Observability is not a stack: since
-OpenTelemetry was folded into the single service image, the only thing that
-separated a "with OTEL" deployment from a plain one was the config it mounted,
-so `docker-compose.otel.yml` overrides that and nothing else.
+| Stack | Catalog | GPU | gRPC port |
+|---|---|---|---|
+| `docker-compose.memory.yml` | in-memory; no database container | — | 50052 |
+| `docker-compose.postgres.yml` | PostgreSQL | — | 50051 |
+| `docker-compose.gpu.postgres.yml` | PostgreSQL | yes | 50056 |
 
-Gateway stack (self-contained):
+### Gateway stacks
 
-- `docker-compose.gateway.yml` — runs `payload-manager` (Postgres) + `payload-gateway` together. The gateway UI is available at `http://localhost:8080/`. Both containers share the same data volume so payload downloads work across all tiers.
+Self-contained: `payload-manager` and `payload-gateway` together, sharing a data
+volume so payload downloads work across every tier. UI on `http://localhost:8080/`.
 
-Overlays:
+| Stack | Catalog | GPU |
+|---|---|---|
+| `docker-compose.gateway.yml` | PostgreSQL | — |
+| `docker-compose.gateway.gpu.yml` | PostgreSQL | yes |
 
-- `docker-compose.observability.yml`
-- `docker-compose.examples.yml`
-- `docker-compose.examples.python.yml`
-- `docker-compose.examples.cuda.yml`
-- `docker-compose.examples.python.cuda.yml`
-- `docker-compose.test.yml`
-- `docker-compose.stress.yml`
+### End-to-end stacks
 
-Run examples from repository root:
+Complete stacks that additionally run the Playwright UI suite (`Dockerfile.e2e`)
+and exit with its result.
+
+| Stack | GPU |
+|---|---|
+| `docker-compose.e2e.yml` | — |
+| `docker-compose.e2e.cuda.yml` | yes |
+
+### Overlays
+
+Layered onto a base stack with repeated `-f`, left to right.
+
+| Overlay | Effect |
+|---|---|
+| `docker-compose.otel.yml` | Swaps in a config with metrics and tracing enabled |
+| `docker-compose.observability.yml` | Adds Alloy (OTLP on 4317), Prometheus, Grafana (`:3000`) and Tempo to receive it |
+| `docker-compose.minio.yml` | Adds MinIO (S3-compatible, `:9000`) and points the object tier at it |
+| `docker-compose.minio.init.yml` | One-shot container that pre-creates the `payloads` bucket; layered on `minio.yml` |
+| `docker-compose.minio.gpu.yml` | Swaps `minio.yml`'s config for the combined GPU + OTEL + MinIO one |
+| `docker-compose.test.yml` | Runs the integration suite against the stack and exits with its result |
+| `docker-compose.stress.yml` | Runs the tier-spill stress example |
+| `docker-compose.examples.yml` | Runs the C++ examples |
+| `docker-compose.examples.cuda.yml` | Runs the CUDA C++ examples |
+| `docker-compose.examples.python.yml` | Runs the Python examples |
+| `docker-compose.examples.python.cuda.yml` | Runs the CUDA Python examples |
+
+`minio.yml` relies on the service creating the bucket itself through
+`allow_bucket_creation`, which is what the integration tests use. Add
+`minio.init.yml` when you would rather the bucket existed first.
+
+Run from the repository root:
 
 ```bash
-# gRPC-Gateway + UI (Postgres)
-docker compose -f docker/docker-compose.gateway.yml up --build
+# Simplest thing that runs: one container, no database
+docker compose -f docker/docker-compose.memory.yml up --build
 
-# Plain gRPC only (Postgres)
+# PostgreSQL, observability not configured
 docker compose -f docker/docker-compose.postgres.yml up --build
 
-# With observability
-docker compose -f docker/docker-compose.postgres.yml -f docker/docker-compose.otel.yml -f docker/docker-compose.observability.yml up --build
+# gRPC-Gateway + UI
+docker compose -f docker/docker-compose.gateway.yml up --build
+
+# With observability, and something to receive it
+docker compose -f docker/docker-compose.postgres.yml \
+               -f docker/docker-compose.otel.yml \
+               -f docker/docker-compose.observability.yml up --build
+
+# Object tier on MinIO, bucket pre-created
+docker compose -f docker/docker-compose.postgres.yml \
+               -f docker/docker-compose.minio.yml \
+               -f docker/docker-compose.minio.init.yml up --build
 ```
 
 > Note: Compose files set `build.context: ..` and `dockerfile: docker/...` so they can be executed via `-f docker/<file>.yml` while still building from the repository root context.
