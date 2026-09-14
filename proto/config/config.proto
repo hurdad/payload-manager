@@ -29,9 +29,30 @@ message PostgresConfig {
   uint32 max_connections = 2;
 }
 
+// In-process catalog. A complete Repository implementation, held to the same
+// behaviour as Postgres by tests/integration/repository_parity_test.cpp — not a
+// stub. It keeps everything in memory, so the catalog is gone on restart while
+// the payload bytes on disk and in object storage survive, leaving the service
+// unable to resolve them.
+//
+// Intended for development, tests and single-run pipelines. It also does not
+// take the single-instance advisory lock the Postgres backend uses, so nothing
+// stops two processes sharing a data directory and diverging.
+message MemoryConfig {}
+
 message DatabaseConfig {
+  // Which catalog backend to run. Name one explicitly.
+  //
+  // Leaving this unset still selects `memory`, because that is what the
+  // service has always done and existing configs rely on it — but it is worth
+  // naming, since the difference is silent. A deployment whose database block
+  // goes missing gets an in-memory catalog that behaves correctly right up
+  // until the first restart, at which point every payload becomes
+  // unresolvable. Setting `memory: {}` says you meant it; the service logs
+  // loudly when it falls back instead.
   oneof backend {
     PostgresConfig postgres = 1;
+    MemoryConfig   memory   = 2;
   }
 }
 

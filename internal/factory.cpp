@@ -118,12 +118,27 @@ std::shared_ptr<db::Repository> BuildRepository(const payload::runtime::config::
     }
 
     auto pool = std::make_shared<db::postgres::PgPool>(database.postgres().connection_uri(), database.postgres().max_connections());
+    PAYLOAD_LOG_INFO("using the postgres catalog",
+                     {payload::observability::IntField("max_connections", static_cast<int64_t>(database.postgres().max_connections()))});
     return std::make_shared<db::postgres::PgRepository>(std::move(pool));
 #else
     throw std::runtime_error("postgres backend requested but not enabled at build time");
 #endif
   }
 
+  // Explicitly chosen, or fallen back to. Either way say which, at a level
+  // that matches the consequence: an in-memory catalog loses every payload
+  // reference on restart, and nothing else in the logs would tell you that is
+  // the mode you are running in.
+  if (database.has_memory()) {
+    PAYLOAD_LOG_INFO("using the in-memory catalog; payload references do not survive restart", {});
+  } else {
+    PAYLOAD_LOG_WARN(
+        "no database backend configured — falling back to the in-memory catalog; "
+        "payload references do not survive restart. Set database.memory to silence this, "
+        "or database.postgres to persist",
+        {});
+  }
   return std::make_shared<db::memory::MemoryRepository>();
 }
 
