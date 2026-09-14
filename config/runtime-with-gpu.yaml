@@ -10,6 +10,17 @@ database:
   memory: {}
 
 storage:
+  # Ring tier. Rings are static: they are created at startup from this list and
+  # cannot be added over the API, so a consumer's MapRing only ever sees what is
+  # declared here. Slots are pre-allocated shm segments rewritten in place —
+  # no PayloadID, no catalog row. examples/cpp/ring_example.cpp runs against
+  # this one.
+  ring:
+    rings:
+      - ring_id: "example"
+        n_slots: 4
+        slot_size_bytes: 65536
+
   ram:
     capacity_bytes: 17179869184   # 16 GiB
     use_hugepages: true

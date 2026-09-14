@@ -52,6 +52,7 @@ payload_example(read          read_example.cpp)
 payload_example(spill         spill_example.cpp)
 payload_example(list          list_example.cpp)
 payload_example(tier_spill_stress tier_spill_stress.cpp)
+payload_example(ring          ring_example.cpp)
 
 # GPU example: only built when the client has CUDA IPC support.
 if(PAYLOAD_MANAGER_CLIENT_ENABLE_CUDA)

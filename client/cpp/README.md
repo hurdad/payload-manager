@@ -85,13 +85,16 @@ Producer:
 ```cpp
 #include "client/cpp/ring.h"
 
-using payload::manager::client::AcquireRingProducerSlot;
-using payload::manager::client::CommitRingProducerSlot;
+using payload::manager::client::RingProducer;
 
-auto slot = AcquireRingProducerSlot(client, "radio_iq", "radio");
+// One per process, like RingConsumer: it maps each ring's slots once and
+// reuses them, rather than mapping and unmapping on every capture.
+RingProducer producer(&client, RingProducer::Options{.log_prefix = "radio"});
+
+auto slot = producer.Acquire("radio_iq");
 if (!slot.valid()) return;              // ring full — apply your drop policy
 slot.Append(samples.data(), samples.size());
-CommitRingProducerSlot(client, slot, event.mutable_ring_slot());
+slot.Commit(event.mutable_ring_slot());
 // Leaving the scope before the commit is safe: the slot is committed empty
 // so PM can recycle it.
 ```

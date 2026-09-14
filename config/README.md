@@ -14,8 +14,10 @@ localhost and logs a warning saying so.
 
 ## Local / bare-metal
 
-- `runtime-with-gpu.yaml` - GPU-enabled, in-memory catalog. Runs from this file
-  alone with nothing to install; payload references do not survive a restart.
+- `runtime-with-gpu.yaml` - GPU-enabled, in-memory catalog, and the only file
+  here that declares a ring. Runs from this file alone with nothing to install;
+  payload references do not survive a restart. `examples/cpp/ring_example.cpp`
+  targets its `example` ring.
 - `runtime-with-gpu-postgres.yaml` - the same deployment backed by PostgreSQL.
 - `runtime-no-gpu.yaml` - no GPU tier, PostgreSQL.
 

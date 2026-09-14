@@ -136,7 +136,8 @@ memory — there is nothing to copy and no handle to pass. A ring slot is a POSI
 consumer already mmaps; registering that mapping with CUDA yields a device pointer to the same
 physical pages the producer wrote.
 
-The C++ client does this already. Set `register_for_gpu` on the consumer and read `dev_va` from
+The C++ client does this already — `examples/cpp/ring_example.cpp` is a runnable
+walkthrough of the whole cycle. Set `register_for_gpu` on the consumer and read `dev_va` from
 the lease:
 
 ```cpp

@@ -1,6 +1,6 @@
 // Client-side TIER_RAM_RING helper tests (client/cpp/ring.h).
 //
-// These drive the real RingConsumer / RingProducerSlot against a real
+// These drive the real RingConsumer / RingProducer against a real
 // PayloadRingService over an in-process gRPC channel rather than a mock:
 // the behaviour worth pinning down here is the interaction between the
 // client handles and PM's slot state machine (an uncommitted slot stays
@@ -14,6 +14,7 @@
 #include <unistd.h>
 
 #include <cstring>
+#include <map>
 #include <memory>
 #include <string>
 #include <vector>
@@ -31,11 +32,9 @@ namespace {
 namespace pm_cfg  = payload::runtime::config;
 namespace core_v1 = payload::manager::core::v1;
 
-using payload::manager::client::AcquireRingProducerSlot;
-using payload::manager::client::CommitRingProducerSlot;
 using payload::manager::client::PayloadClient;
 using payload::manager::client::RingConsumer;
-using payload::manager::client::RingProducerSlot;
+using payload::manager::client::RingProducer;
 
 constexpr const char* kRingId = "test_ring";
 
@@ -76,6 +75,7 @@ class RingClientTest : public ::testing::Test {
       server_->Shutdown();
       server_->Wait();
     }
+    producer_.reset(); // holds mappings and a client pointer; must go first
     server_impl_.reset();
     svc_.reset();
     lease_table_.reset();
@@ -86,12 +86,22 @@ class RingClientTest : public ::testing::Test {
     return RingConsumer(client_.get(), RingConsumer::Options{.log_prefix = "test"});
   }
 
+  /// The producer caches slot mappings, so tests share one per fixture the
+  /// way a real pipeline would rather than building a mapping per capture.
+  RingProducer* Producer() {
+    if (!producer_) {
+      producer_ = std::make_unique<RingProducer>(client_.get(), RingProducer::Options{.log_prefix = "test"});
+    }
+    return producer_.get();
+  }
+
   std::unique_ptr<payload::ring::RingTierManager> mgr_;
   std::unique_ptr<payload::ring::RingLeaseTable>  lease_table_;
   std::shared_ptr<payload::service::RingService>  svc_;
   std::unique_ptr<payload::grpc::RingServer>      server_impl_;
   std::unique_ptr<::grpc::Server>                 server_;
   std::unique_ptr<PayloadClient>                  client_;
+  std::unique_ptr<RingProducer>                   producer_;
 };
 
 // ---------------------------------------------------------------------------
@@ -104,10 +114,10 @@ TEST_F(RingClientTest, ProducerWritesAndConsumerReadsTheSameBytes) {
   const std::string    payload = "hello ring tier";
   core_v1::RingSlotRef ref;
   {
-    auto slot = AcquireRingProducerSlot(*client_, kRingId, "producer");
+    auto slot = Producer()->Acquire(kRingId);
     ASSERT_TRUE(slot.valid());
     EXPECT_EQ(slot.Append(payload.data(), payload.size()), payload.size());
-    ASSERT_TRUE(CommitRingProducerSlot(*client_, slot, &ref));
+    ASSERT_TRUE(slot.Commit(&ref));
   }
 
   EXPECT_EQ(ref.ring_id(), kRingId);
@@ -127,14 +137,14 @@ TEST_F(RingClientTest, ProducerWritesAndConsumerReadsTheSameBytes) {
 TEST_F(RingClientTest, AppendAccumulatesAcrossCalls) {
   Start("append-accum", 2, 4096);
 
-  auto slot = AcquireRingProducerSlot(*client_, kRingId, "producer");
+  auto slot = Producer()->Acquire(kRingId);
   ASSERT_TRUE(slot.valid());
   EXPECT_EQ(slot.Append("abc", 3), 3u);
   EXPECT_EQ(slot.Append("def", 3), 3u);
-  EXPECT_EQ(slot.offset, 6u);
+  EXPECT_EQ(slot.size(), 6u);
 
   core_v1::RingSlotRef ref;
-  ASSERT_TRUE(CommitRingProducerSlot(*client_, slot, &ref));
+  ASSERT_TRUE(slot.Commit(&ref));
   EXPECT_EQ(ref.size_bytes(), 6u);
 
   auto consumer = MakeConsumer();
@@ -146,13 +156,13 @@ TEST_F(RingClientTest, AppendAccumulatesAcrossCalls) {
 TEST_F(RingClientTest, AppendTruncatesAtSlotCapacity) {
   Start("truncate", 1, 8);
 
-  auto slot = AcquireRingProducerSlot(*client_, kRingId, "producer");
+  auto slot = Producer()->Acquire(kRingId);
   ASSERT_TRUE(slot.valid());
-  EXPECT_EQ(slot.capacity, 8u);
+  EXPECT_EQ(slot.capacity(), 8u);
 
   const std::string too_big(32, 'x');
   EXPECT_EQ(slot.Append(too_big.data(), too_big.size()), 8u);
-  EXPECT_EQ(slot.offset, 8u);
+  EXPECT_EQ(slot.size(), 8u);
   // Slot is full; a further append writes nothing.
   EXPECT_EQ(slot.Append("y", 1), 0u);
 }
@@ -169,13 +179,13 @@ TEST_F(RingClientTest, AbandonedSlotIsReturnedToTheRing) {
   Start("abandon", 1, 1024);
 
   {
-    auto slot = AcquireRingProducerSlot(*client_, kRingId, "producer");
+    auto slot = Producer()->Acquire(kRingId);
     ASSERT_TRUE(slot.valid());
     slot.Append("partial", 7);
     // No commit — scope exit must hand the slot back.
   }
 
-  auto again = AcquireRingProducerSlot(*client_, kRingId, "producer");
+  auto again = Producer()->Acquire(kRingId);
   EXPECT_TRUE(again.valid()) << "abandoned slot was never returned to the ring";
 }
 
@@ -188,11 +198,11 @@ TEST_F(RingClientTest, AbandonedSlotIsPublishedEmptyNotPartial) {
   uint32_t slot_idx   = 0;
   uint64_t generation = 0;
   {
-    auto slot = AcquireRingProducerSlot(*client_, kRingId, "producer");
+    auto slot = Producer()->Acquire(kRingId);
     ASSERT_TRUE(slot.valid());
     slot.Append("partial", 7);
-    slot_idx   = slot.slot_idx;
-    generation = slot.generation;
+    slot_idx   = slot.slot_idx();
+    generation = slot.generation();
   }
 
   auto consumer = MakeConsumer();
@@ -211,7 +221,7 @@ TEST_F(RingClientTest, RepeatedAbandonmentDoesNotDrainTheRing) {
   Start("abandon-many", 2, 256);
 
   for (int i = 0; i < 10; ++i) {
-    auto slot = AcquireRingProducerSlot(*client_, kRingId, "producer");
+    auto slot = Producer()->Acquire(kRingId);
     ASSERT_TRUE(slot.valid()) << "ring drained after " << i << " abandoned captures";
   }
 }
@@ -221,14 +231,14 @@ TEST_F(RingClientTest, MovedFromSlotDoesNotDoubleReturnTheReservation) {
 
   core_v1::RingSlotRef ref;
   {
-    auto slot = AcquireRingProducerSlot(*client_, kRingId, "producer");
+    auto slot = Producer()->Acquire(kRingId);
     ASSERT_TRUE(slot.valid());
     slot.Append("abc", 3);
 
-    RingProducerSlot moved = std::move(slot);
+    RingProducer::Slot moved = std::move(slot);
     ASSERT_TRUE(moved.valid());
     EXPECT_FALSE(slot.valid()); // NOLINT(bugprone-use-after-move) — checking the moved-from state
-    ASSERT_TRUE(CommitRingProducerSlot(*client_, moved, &ref));
+    ASSERT_TRUE(moved.Commit(&ref));
   }
 
   // The moved-from handle must not have issued a rescue commit of its
@@ -242,13 +252,13 @@ TEST_F(RingClientTest, MovedFromSlotDoesNotDoubleReturnTheReservation) {
 TEST_F(RingClientTest, MoveAssignmentReturnsTheOverwrittenReservation) {
   Start("move-assign", 2, 256);
 
-  auto first = AcquireRingProducerSlot(*client_, kRingId, "producer");
+  auto first = Producer()->Acquire(kRingId);
   ASSERT_TRUE(first.valid());
-  const uint32_t first_idx = first.slot_idx;
+  const uint32_t first_idx = first.slot_idx();
 
-  auto second = AcquireRingProducerSlot(*client_, kRingId, "producer");
+  auto second = Producer()->Acquire(kRingId);
   ASSERT_TRUE(second.valid());
-  ASSERT_NE(second.slot_idx, first_idx);
+  ASSERT_NE(second.slot_idx(), first_idx);
 
   // Overwriting `first` drops its reservation; it must be handed back
   // rather than stranded.
@@ -262,26 +272,25 @@ TEST_F(RingClientTest, MoveAssignmentReturnsTheOverwrittenReservation) {
 TEST_F(RingClientTest, DoubleCommitIsRefusedLocally) {
   Start("double-commit", 2, 256);
 
-  auto slot = AcquireRingProducerSlot(*client_, kRingId, "producer");
+  auto slot = Producer()->Acquire(kRingId);
   ASSERT_TRUE(slot.valid());
   slot.Append("abc", 3);
 
-  EXPECT_TRUE(CommitRingProducerSlot(*client_, slot, nullptr));
-  EXPECT_FALSE(CommitRingProducerSlot(*client_, slot, nullptr));
-  EXPECT_TRUE(slot.committed);
+  EXPECT_TRUE(slot.Commit(nullptr));
+  EXPECT_FALSE(slot.Commit(nullptr));
 }
 
 TEST_F(RingClientTest, AppendAfterCommitIsIgnored) {
   Start("append-after-commit", 1, 256);
 
-  auto slot = AcquireRingProducerSlot(*client_, kRingId, "producer");
+  auto slot = Producer()->Acquire(kRingId);
   ASSERT_TRUE(slot.valid());
   slot.Append("abc", 3);
-  ASSERT_TRUE(CommitRingProducerSlot(*client_, slot, nullptr));
+  ASSERT_TRUE(slot.Commit(nullptr));
 
   // PM has published the slot and a consumer may be mid-read.
   EXPECT_EQ(slot.Append("def", 3), 0u);
-  EXPECT_EQ(slot.offset, 3u);
+  EXPECT_EQ(slot.size(), 3u);
 }
 
 // ---------------------------------------------------------------------------
@@ -293,10 +302,10 @@ TEST_F(RingClientTest, LeaseBlocksReacquireUntilItGoesOutOfScope) {
 
   core_v1::RingSlotRef ref;
   {
-    auto slot = AcquireRingProducerSlot(*client_, kRingId, "producer");
+    auto slot = Producer()->Acquire(kRingId);
     ASSERT_TRUE(slot.valid());
     slot.Append("abc", 3);
-    ASSERT_TRUE(CommitRingProducerSlot(*client_, slot, &ref));
+    ASSERT_TRUE(slot.Commit(&ref));
   }
 
   auto consumer = MakeConsumer();
@@ -305,12 +314,12 @@ TEST_F(RingClientTest, LeaseBlocksReacquireUntilItGoesOutOfScope) {
     ASSERT_TRUE(lease.has_value());
 
     // The only slot is pinned by the live lease.
-    auto blocked = AcquireRingProducerSlot(*client_, kRingId, "producer");
+    auto blocked = Producer()->Acquire(kRingId);
     EXPECT_FALSE(blocked.valid());
   }
 
   // Lease destructor released it; the producer can recycle the slot again.
-  auto after = AcquireRingProducerSlot(*client_, kRingId, "producer");
+  auto after = Producer()->Acquire(kRingId);
   EXPECT_TRUE(after.valid()) << "lease was never released";
 }
 
@@ -319,9 +328,9 @@ TEST_F(RingClientTest, ExplicitEarlyReleaseIsIdempotent) {
 
   core_v1::RingSlotRef ref;
   {
-    auto slot = AcquireRingProducerSlot(*client_, kRingId, "producer");
+    auto slot = Producer()->Acquire(kRingId);
     ASSERT_TRUE(slot.valid());
-    ASSERT_TRUE(CommitRingProducerSlot(*client_, slot, &ref));
+    ASSERT_TRUE(slot.Commit(&ref));
   }
 
   auto consumer = MakeConsumer();
@@ -333,7 +342,7 @@ TEST_F(RingClientTest, ExplicitEarlyReleaseIsIdempotent) {
     lease->Release(); // no-op
 
     // Released early, so the slot is already acquirable inside the scope.
-    auto reacquired = AcquireRingProducerSlot(*client_, kRingId, "producer");
+    auto reacquired = Producer()->Acquire(kRingId);
     EXPECT_TRUE(reacquired.valid());
   }
 }
@@ -343,9 +352,9 @@ TEST_F(RingClientTest, MovedFromLeaseDoesNotReleaseEarly) {
 
   core_v1::RingSlotRef ref;
   {
-    auto slot = AcquireRingProducerSlot(*client_, kRingId, "producer");
+    auto slot = Producer()->Acquire(kRingId);
     ASSERT_TRUE(slot.valid());
-    ASSERT_TRUE(CommitRingProducerSlot(*client_, slot, &ref));
+    ASSERT_TRUE(slot.Commit(&ref));
   }
 
   auto consumer = MakeConsumer();
@@ -358,11 +367,11 @@ TEST_F(RingClientTest, MovedFromLeaseDoesNotReleaseEarly) {
     EXPECT_FALSE(moved.lease_id().empty());
 
     // The moved-to lease still pins the slot.
-    auto blocked = AcquireRingProducerSlot(*client_, kRingId, "producer");
+    auto blocked = Producer()->Acquire(kRingId);
     EXPECT_FALSE(blocked.valid());
   }
 
-  auto after = AcquireRingProducerSlot(*client_, kRingId, "producer");
+  auto after = Producer()->Acquire(kRingId);
   EXPECT_TRUE(after.valid());
 }
 
@@ -375,15 +384,15 @@ TEST_F(RingClientTest, StaleGenerationIsRefusedNotFatal) {
 
   core_v1::RingSlotRef first;
   {
-    auto slot = AcquireRingProducerSlot(*client_, kRingId, "producer");
+    auto slot = Producer()->Acquire(kRingId);
     ASSERT_TRUE(slot.valid());
-    ASSERT_TRUE(CommitRingProducerSlot(*client_, slot, &first));
+    ASSERT_TRUE(slot.Commit(&first));
   }
   // Producer recycles the same slot before the consumer got to it.
   {
-    auto slot = AcquireRingProducerSlot(*client_, kRingId, "producer");
+    auto slot = Producer()->Acquire(kRingId);
     ASSERT_TRUE(slot.valid());
-    ASSERT_TRUE(CommitRingProducerSlot(*client_, slot, nullptr));
+    ASSERT_TRUE(slot.Commit(nullptr));
   }
 
   auto consumer = MakeConsumer();
@@ -398,14 +407,14 @@ TEST_F(RingClientTest, StaleGenerationSurfacesAsInvalidNotIoError) {
 
   core_v1::RingSlotRef first;
   {
-    auto slot = AcquireRingProducerSlot(*client_, kRingId, "producer");
+    auto slot = Producer()->Acquire(kRingId);
     ASSERT_TRUE(slot.valid());
-    ASSERT_TRUE(CommitRingProducerSlot(*client_, slot, &first));
+    ASSERT_TRUE(slot.Commit(&first));
   }
   {
-    auto slot = AcquireRingProducerSlot(*client_, kRingId, "producer");
+    auto slot = Producer()->Acquire(kRingId);
     ASSERT_TRUE(slot.valid());
-    ASSERT_TRUE(CommitRingProducerSlot(*client_, slot, nullptr));
+    ASSERT_TRUE(slot.Commit(nullptr));
   }
 
   auto refused = client_->LeaseRingSlot(kRingId, first.slot_idx(), first.generation());
@@ -414,15 +423,15 @@ TEST_F(RingClientTest, StaleGenerationSurfacesAsInvalidNotIoError) {
 }
 
 TEST_F(RingClientTest, ExhaustedRingSurfacesAsCapacityError) {
-  // AcquireRingProducerSlot documents that callers tell "ring full" from
+  // RingProducer::Acquire documents that callers tell "ring full" from
   // a broken channel this way.
   Start("exhausted-status", 1, 256);
 
   core_v1::RingSlotRef ref;
   {
-    auto slot = AcquireRingProducerSlot(*client_, kRingId, "producer");
+    auto slot = Producer()->Acquire(kRingId);
     ASSERT_TRUE(slot.valid());
-    ASSERT_TRUE(CommitRingProducerSlot(*client_, slot, &ref));
+    ASSERT_TRUE(slot.Commit(&ref));
   }
 
   auto consumer = MakeConsumer();
@@ -447,10 +456,10 @@ TEST_F(RingClientTest, OversizedWireSizeIsClampedToSlotCapacity) {
 
   core_v1::RingSlotRef ref;
   {
-    auto slot = AcquireRingProducerSlot(*client_, kRingId, "producer");
+    auto slot = Producer()->Acquire(kRingId);
     ASSERT_TRUE(slot.valid());
     slot.Append("abc", 3);
-    ASSERT_TRUE(CommitRingProducerSlot(*client_, slot, &ref));
+    ASSERT_TRUE(slot.Commit(&ref));
   }
 
   auto consumer = MakeConsumer();
@@ -482,6 +491,97 @@ TEST(RingConsumerNullClient, RingOpsNoOpWithoutAClient) {
   EXPECT_FALSE(consumer.EnsureMapped("anything"));
   EXPECT_FALSE(consumer.LeaseAndOpen("anything", 0, 1, 16).has_value());
   consumer.Release("some-lease-id"); // must not crash
+}
+
+// ---------------------------------------------------------------------------
+// Producer mapping cache
+//
+// The producer maps a ring once and reuses it, rather than mapping and
+// unmapping per capture. These cover that cache and the parity it gives
+// RingConsumer; without them the reuse is invisible to the suite and a
+// regression to per-capture mapping would still pass everything above.
+// ---------------------------------------------------------------------------
+
+TEST_F(RingClientTest, ProducerReusesOneMappingAcrossCaptures) {
+  Start("producer-cache", 2, 256);
+
+  // Same slot index, two captures. A producer that mapped per acquire would
+  // hand back a fresh mmap each time and these addresses would differ.
+  std::map<std::uint32_t, void*> first_seen;
+  for (int i = 0; i < 6; ++i) {
+    auto slot = Producer()->Acquire(kRingId);
+    ASSERT_TRUE(slot.valid()) << "capture " << i;
+    void* va = slot.data();
+    ASSERT_NE(va, nullptr);
+
+    auto [it, inserted] = first_seen.emplace(slot.slot_idx(), va);
+    if (!inserted) {
+      EXPECT_EQ(it->second, va) << "slot " << slot.slot_idx() << " was remapped on capture " << i;
+    }
+    ASSERT_TRUE(slot.Commit(nullptr));
+  }
+  EXPECT_EQ(first_seen.size(), 2u) << "expected both slots to come round";
+}
+
+TEST_F(RingClientTest, CommittedSlotDropsItsPointer) {
+  Start("commit-drops-pointer", 1, 256);
+
+  auto slot = Producer()->Acquire(kRingId);
+  ASSERT_TRUE(slot.valid());
+  ASSERT_NE(slot.data(), nullptr);
+
+  ASSERT_TRUE(slot.Commit(nullptr));
+
+  // The mapping is still alive — the producer owns it — but this handle no
+  // longer points at it, so a late write through a stale handle faults
+  // instead of quietly overwriting a slot a consumer is reading.
+  EXPECT_EQ(slot.data(), nullptr);
+  EXPECT_FALSE(slot.valid());
+}
+
+TEST_F(RingClientTest, ProducerEnsureMappedIsIdempotent) {
+  Start("producer-idempotent", 3, 256);
+
+  EXPECT_TRUE(Producer()->EnsureMapped(kRingId));
+  EXPECT_TRUE(Producer()->EnsureMapped(kRingId));
+  EXPECT_TRUE(Producer()->EnsureMapped(kRingId));
+
+  // Still usable after the repeat calls.
+  auto slot = Producer()->Acquire(kRingId);
+  EXPECT_TRUE(slot.valid());
+}
+
+TEST_F(RingClientTest, ProducerUnknownRingFailsToMap) {
+  Start("producer-unknown", 2, 256);
+
+  EXPECT_FALSE(Producer()->EnsureMapped("no_such_ring"));
+  // Acquire maps first, so an unmapped ring yields an invalid slot rather
+  // than a reservation nobody can write to.
+  EXPECT_FALSE(Producer()->Acquire("no_such_ring").valid());
+}
+
+TEST_F(RingClientTest, ProducerSlotSizeTracksAppends) {
+  Start("producer-size", 1, 256);
+
+  auto slot = Producer()->Acquire(kRingId);
+  ASSERT_TRUE(slot.valid());
+  EXPECT_EQ(slot.size(), 0u);
+  EXPECT_EQ(slot.capacity(), 256u);
+
+  slot.Append("abcd", 4);
+  EXPECT_EQ(slot.size(), 4u);
+  slot.Append("ef", 2);
+  EXPECT_EQ(slot.size(), 6u);
+
+  core_v1::RingSlotRef ref;
+  ASSERT_TRUE(slot.Commit(&ref));
+  EXPECT_EQ(ref.size_bytes(), 6u);
+}
+
+TEST(RingProducerNullClient, RingOpsNoOpWithoutAClient) {
+  RingProducer producer(nullptr, RingProducer::Options{.log_prefix = "test"});
+  EXPECT_FALSE(producer.EnsureMapped("anything"));
+  EXPECT_FALSE(producer.Acquire("anything").valid());
 }
 
 } // namespace
