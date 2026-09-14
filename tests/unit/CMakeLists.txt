@@ -65,6 +65,11 @@ if(TARGET payload_manager::client)
   # in-process channel, so it needs the server side as well.
   payload_manager_add_unit_test(payload_manager_unit_client_ring client/ring_client_test.cpp "client;ring;shm")
   target_link_libraries(payload_manager_unit_client_ring PRIVATE payload_manager::client)
+
+  # Drives the client's RPC wrappers against real services over an in-process
+  # channel, so it needs the server side too.
+  payload_manager_add_unit_test(payload_manager_unit_client_rpc client/client_rpc_test.cpp "client;rpc")
+  target_link_libraries(payload_manager_unit_client_rpc PRIVATE payload_manager::client)
 endif()
 
 if(PAYLOAD_MANAGER_ENABLE_OTEL)
