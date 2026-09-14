@@ -155,7 +155,13 @@ Metrics use OTEL resource attribute `service.name`, sourced from OTEL config ser
 
 ## 4. Runtime configuration knobs
 
-`observability.metrics` supports the following controls:
+`observability.metrics` supports the following controls.
+
+**Every toggle below is enabled when absent.** They are declared `optional` in the
+proto, so an unset field keeps its default rather than reading as an explicit `false`;
+set one to `false` to turn it off. You do not need to enumerate them to get metrics —
+`observability.metrics_enabled: true` is enough, and that flag still gates the whole
+pipeline regardless of what this block says.
 
 - **Instrument toggles**
   - `request_metrics_enabled`
@@ -166,7 +172,7 @@ Metrics use OTEL resource attribute `service.name`, sourced from OTEL config ser
   - `request_latency_histograms_enabled`
   - `route_labels_enabled`
   - `tier_labels_enabled`
-- **Collection/export timing**
+- **Collection/export timing** (unlike the toggles, `0` here means "use the default")
   - `min_collection_interval_ms`
   - `collection_interval_ms`
   - `export_timeout_ms`
@@ -192,6 +198,11 @@ Export interval behavior:
 ## 6. Notes and caveats
 
 - Metrics code is compiled behind `ENABLE_OTEL` and is inactive in non-OTEL builds.
+- Before the instrument toggles were declared `optional`, each was read as a bare proto3
+  bool, so a config that enabled metrics without enumerating every toggle disabled all of
+  them. If you carry a config that lists them explicitly, it keeps behaving exactly as
+  before; if you were relying on the old behaviour to keep instruments off, set the ones
+  you want off to `false`.
 - `payload.tier.occupancy_bytes` is emitted through an observable gauge callback; downstream backends typically show point-in-time values based on collection cadence.
 - Ring gauges are sampled on a 1 s timer by `RingMetricsPublisher` and read at collection
   time, so a value can be up to one sampling interval plus one collection interval stale.

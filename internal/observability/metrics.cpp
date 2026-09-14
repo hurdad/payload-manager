@@ -40,6 +40,7 @@
 #include <opentelemetry/sdk/resource/resource.h>
 
 #include "config/config.pb.h"
+#include "internal/observability/metrics_options.hpp"
 
 namespace payload::observability {
 namespace otlp        = opentelemetry::exporter::otlp;
@@ -50,16 +51,6 @@ namespace resource    = opentelemetry::sdk::resource;
 namespace {
 using AttributePair = std::pair<opentelemetry::nostd::string_view, opentelemetry::common::AttributeValue>;
 std::shared_ptr<sdkmetrics::MeterProvider> g_provider;
-
-struct MetricsOptions {
-  bool request_metrics_enabled{true};
-  bool spill_metrics_enabled{true};
-  bool tier_occupancy_metrics_enabled{true};
-  bool ring_metrics_enabled{true};
-  bool request_latency_histograms_enabled{true};
-  bool route_labels_enabled{true};
-  bool tier_labels_enabled{true};
-};
 
 MetricsOptions g_metrics_options;
 
@@ -282,13 +273,9 @@ bool InitializeMetrics(const payload::runtime::config::RuntimeConfig& config) {
 
   metrics_api::Provider::SetMeterProvider(opentelemetry::nostd::shared_ptr<metrics_api::MeterProvider>(g_provider));
 
-  g_metrics_options.request_metrics_enabled            = metric_config.request_metrics_enabled();
-  g_metrics_options.spill_metrics_enabled              = metric_config.spill_metrics_enabled();
-  g_metrics_options.tier_occupancy_metrics_enabled     = metric_config.tier_occupancy_metrics_enabled();
-  g_metrics_options.ring_metrics_enabled               = metric_config.ring_metrics_enabled();
-  g_metrics_options.request_latency_histograms_enabled = metric_config.request_latency_histograms_enabled();
-  g_metrics_options.route_labels_enabled               = metric_config.route_labels_enabled();
-  g_metrics_options.tier_labels_enabled                = metric_config.tier_labels_enabled();
+  // Absent toggles keep their default (on) rather than reading as an
+  // explicit false — see metrics_options.hpp.
+  g_metrics_options = ResolveMetricsOptions(metric_config);
 
   return true;
 }
