@@ -18,6 +18,7 @@ payload_manager_add_unit_test(payload_manager_unit_placement_engine placement_en
 payload_manager_add_unit_test(payload_manager_unit_lease_table lease_table_test.cpp "lease")
 payload_manager_add_unit_test(payload_manager_unit_config_loader config_loader_test.cpp "config")
 payload_manager_add_unit_test(payload_manager_unit_metrics_options metrics_options_test.cpp "config;metrics")
+payload_manager_add_unit_test(payload_manager_unit_logging logging_test.cpp "observability;logging")
 payload_manager_add_unit_test(payload_manager_unit_grpc_status grpc_status_test.cpp "grpc")
 payload_manager_add_unit_test(payload_manager_unit_payload_delete payload_manager_delete_test.cpp "payload")
 payload_manager_add_unit_test(payload_manager_unit_lineage_graph internal/lineage/lineage_graph_test.cpp "lineage")
@@ -86,6 +87,11 @@ if(PAYLOAD_MANAGER_ENABLE_OTEL)
           GTest::gtest_main
   )
   payload_manager_register_test(payload_manager_unit_otel_interceptor "unit;observability;otel")
+
+  # Exercises the enabled paths of tracing.cpp and metrics.cpp — exporter and
+  # provider construction plus every instrument registration — which the rest
+  # of the suite never reaches because it never switches observability on.
+  payload_manager_add_unit_test(payload_manager_unit_observability_init observability_init_test.cpp "observability;otel")
 endif()
 
 if(PAYLOAD_MANAGER_ENABLE_ARROW_CUDA)

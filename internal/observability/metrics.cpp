@@ -213,6 +213,11 @@ bool InitializeMetrics(const OtlpConfig& config) {
 
   sdkmetrics::PeriodicExportingMetricReaderOptions reader_options;
   reader_options.export_interval_millis = std::chrono::milliseconds(1000);
+  // The SDK rejects a timeout that is not shorter than the interval, and on
+  // rejection it discards *both* and reverts to its own 60s/30s defaults. Its
+  // default timeout is 30s, so setting only the interval turned this 1s export
+  // into a 60s one, warning once on stderr and otherwise silently.
+  reader_options.export_timeout_millis = std::chrono::milliseconds(500);
 #ifdef PAYLOAD_OTEL_METRIC_READER_FACTORY
   auto reader = sdkmetrics::PeriodicExportingMetricReaderFactory::Create(std::move(exporter), reader_options);
 #else
@@ -264,10 +269,22 @@ bool InitializeMetrics(const payload::runtime::config::RuntimeConfig& config) {
   sdkmetrics::PeriodicExportingMetricReaderOptions reader_options;
   const auto                                       min_interval_ms = metric_config.min_collection_interval_ms();
   const auto configured_interval_ms     = metric_config.collection_interval_ms() > 0 ? metric_config.collection_interval_ms() : 1000;
-  reader_options.export_interval_millis = std::chrono::milliseconds(std::max(min_interval_ms, configured_interval_ms));
-  if (metric_config.export_timeout_ms() > 0) {
-    reader_options.export_timeout_millis = std::chrono::milliseconds(metric_config.export_timeout_ms());
+  const auto effective_interval_ms      = std::max(min_interval_ms, configured_interval_ms);
+  reader_options.export_interval_millis = std::chrono::milliseconds(effective_interval_ms);
+
+  // A timeout that is not shorter than the interval makes the SDK discard both
+  // and revert to its own 60s/30s defaults, so an unset timeout — whose SDK
+  // default is 30s — silently turned the documented 1s interval into 60s.
+  // Default it to half the interval, and clamp an operator value that would
+  // trip the same rejection rather than letting it take the export interval
+  // with it.
+  auto timeout_ms = metric_config.export_timeout_ms() > 0 ? metric_config.export_timeout_ms() : effective_interval_ms / 2;
+  if (timeout_ms >= effective_interval_ms) {
+    LogWarn("observability.metrics.export_timeout_ms must be shorter than the collection interval; clamping",
+            {{"requested_timeout_ms", std::to_string(timeout_ms)}, {"interval_ms", std::to_string(effective_interval_ms)}});
+    timeout_ms = effective_interval_ms / 2;
   }
+  reader_options.export_timeout_millis = std::chrono::milliseconds(std::max(1u, timeout_ms));
 
 #ifdef PAYLOAD_OTEL_METRIC_READER_FACTORY
   auto reader = sdkmetrics::PeriodicExportingMetricReaderFactory::Create(std::move(exporter), reader_options);
