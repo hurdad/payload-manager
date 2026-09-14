@@ -3,8 +3,8 @@
 # payload-manager for NVIDIA Jetson Orin (aarch64 / L4T R36.2 / JetPack 6),
 # with CUDA and OpenTelemetry enabled.
 #
-# This builds its own Abseil, Protobuf, gRPC, OpenTelemetry, Arrow and libpqxx
-# rather than taking them from a pre-built base image. Ubuntu 22.04 — which is
+# This builds its own Abseil, Protobuf, gRPC, OpenTelemetry, AWS SDK, Arrow and
+# libpqxx rather than taking them from a pre-built base image. Ubuntu 22.04 — which is
 # what JetPack 6 ships — packages none of them at versions this project can
 # use: no opentelemetry-cpp at all, no libarrow with both S3 and CUDA, and a
 # libpqxx four minor versions too old to compile the repository layer.
@@ -49,6 +49,11 @@ ARG ARROW_VERSION=apache-arrow-25.0.1
 # 22.04 ships 6.4, which has neither — the repository layer does not compile
 # against it. 7.10.0 is also what the x86 images link against.
 ARG LIBPQXX_VERSION=7.10.0
+# Exactly the version Arrow 25.0.1 vendors — cpp/thirdparty/versions.txt pins
+# ARROW_AWSSDK_BUILD_VERSION=1.11.778 — so building it here rather than letting
+# Arrow bundle it changes nothing about what Arrow links, while making it a
+# cache layer of its own. Arrow is rebuilt far more often than the SDK is.
+ARG AWS_SDK_VERSION=1.11.778
 ARG BUILD_JOBS=4
 
 # Ubuntu 22.04's cmake is 3.22. Arrow wants newer, so take Kitware's.
@@ -65,7 +70,7 @@ RUN apt-get update \
         libssl-dev zlib1g-dev libcurl4-openssl-dev \
         liblz4-dev libzstd-dev libsnappy-dev libbrotli-dev libbz2-dev \
         libre2-dev libutf8proc-dev libxml2-dev \
-        libpq-dev \
+        libpq-dev uuid-dev \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /deps
@@ -81,6 +86,7 @@ ENV DEPS_CXX_STANDARD=17
 RUN git clone --depth 1 --branch ${ABSEIL_VERSION} https://github.com/abseil/abseil-cpp.git \
     && cmake -S abseil-cpp -B build-absl -G Ninja \
         -DCMAKE_BUILD_TYPE=Release \
+        -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
         -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
         -DCMAKE_CXX_STANDARD=${DEPS_CXX_STANDARD} \
         -DBUILD_SHARED_LIBS=ON \
@@ -97,6 +103,7 @@ RUN git clone --depth 1 --branch ${ABSEIL_VERSION} https://github.com/abseil/abs
 RUN git clone --depth 1 --branch ${PROTOBUF_VERSION} https://github.com/protocolbuffers/protobuf.git \
     && cmake -S protobuf -B build-protobuf -G Ninja \
         -DCMAKE_BUILD_TYPE=Release \
+        -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
         -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
         -DCMAKE_CXX_STANDARD=${DEPS_CXX_STANDARD} \
         -DBUILD_SHARED_LIBS=ON \
@@ -114,6 +121,7 @@ RUN git clone --depth 1 --branch ${GRPC_VERSION} --recurse-submodules --shallow-
         https://github.com/grpc/grpc.git \
     && cmake -S grpc -B build-grpc -G Ninja \
         -DCMAKE_BUILD_TYPE=Release \
+        -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
         -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
         -DCMAKE_CXX_STANDARD=${DEPS_CXX_STANDARD} \
         -DBUILD_SHARED_LIBS=ON \
@@ -141,6 +149,7 @@ RUN git clone --depth 1 --branch ${OTEL_CPP_VERSION} --recurse-submodules --shal
         https://github.com/open-telemetry/opentelemetry-cpp.git \
     && cmake -S opentelemetry-cpp -B build-otel -G Ninja \
         -DCMAKE_BUILD_TYPE=Release \
+        -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
         -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
         -DCMAKE_CXX_STANDARD=${DEPS_CXX_STANDARD} \
         -DBUILD_SHARED_LIBS=ON \
@@ -156,14 +165,37 @@ RUN git clone --depth 1 --branch ${OTEL_CPP_VERSION} --recurse-submodules --shal
     && ldconfig \
     && rm -rf opentelemetry-cpp build-otel
 
+# --- AWS SDK for C++ ------------------------------------------------------
+# Arrow's S3 filesystem needs these six components; the list is Arrow's own
+# from ThirdpartyToolchain.cmake, plus cognito-identity which
+# identity-management pulls in. Shared, so the runtime stage picks it up with
+# the rest of /usr/local.
+RUN git clone --depth 1 --branch ${AWS_SDK_VERSION} https://github.com/aws/aws-sdk-cpp.git \
+    && git -C aws-sdk-cpp submodule update --init --depth 1 --recursive \
+    && cmake -S aws-sdk-cpp -B build-aws -G Ninja \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
+        -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
+        -DCMAKE_INSTALL_PREFIX=/usr/local \
+        -DCMAKE_PREFIX_PATH=/usr/local \
+        -DBUILD_SHARED_LIBS=ON \
+        -DBUILD_ONLY="s3;core;config;transfer;identity-management;sts;cognito-identity" \
+        -DENABLE_TESTING=OFF \
+        -DAUTORUN_UNIT_TESTS=OFF \
+    && cmake --build build-aws -j ${BUILD_JOBS} \
+    && cmake --install build-aws \
+    && ldconfig \
+    && rm -rf aws-sdk-cpp build-aws
+
 # --- Arrow ----------------------------------------------------------------
 # S3 and CUDA are both required: the object tier calls
-# arrow::fs::EnsureS3Initialized and the GPU tier uses arrow::cuda. The AWS SDK
-# is bundled because Ubuntu 22.04 does not package one Arrow accepts. This is
-# the longest step in the image by a wide margin.
+# arrow::fs::EnsureS3Initialized and the GPU tier uses arrow::cuda. AWSSDK_SOURCE
+# is SYSTEM because the step above already installed the exact version Arrow
+# would otherwise have downloaded and built inside this one.
 RUN git clone --depth 1 --branch ${ARROW_VERSION} https://github.com/apache/arrow.git \
     && cmake -S arrow/cpp -B build-arrow -G Ninja \
         -DCMAKE_BUILD_TYPE=Release \
+        -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
         -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
         -DCMAKE_CXX_STANDARD=${DEPS_CXX_STANDARD} \
         -DARROW_BUILD_SHARED=ON \
@@ -172,7 +204,7 @@ RUN git clone --depth 1 --branch ${ARROW_VERSION} https://github.com/apache/arro
         -DARROW_DEPENDENCY_SOURCE=AUTO \
         -DARROW_CUDA=ON \
         -DARROW_S3=ON \
-        -DAWSSDK_SOURCE=BUNDLED \
+        -DAWSSDK_SOURCE=SYSTEM \
         -DARROW_FILESYSTEM=ON \
         -DARROW_COMPUTE=ON \
         -DARROW_JSON=ON \
@@ -195,6 +227,7 @@ RUN git clone --depth 1 --branch ${ARROW_VERSION} https://github.com/apache/arro
 RUN git clone --depth 1 --branch ${LIBPQXX_VERSION} https://github.com/jtv/libpqxx.git \
     && cmake -S libpqxx -B build-pqxx -G Ninja \
         -DCMAKE_BUILD_TYPE=Release \
+        -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
         -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
         -DCMAKE_CXX_STANDARD=${DEPS_CXX_STANDARD} \
         -DBUILD_SHARED_LIBS=ON \
@@ -217,7 +250,7 @@ WORKDIR /workspace
 ARG BUILD_JOBS=4
 
 # Only what is still missing: these three Ubuntu 22.04 does package at usable
-# versions, unlike the six built above. libpqxx is conspicuously absent — see
+# versions, unlike the seven built above. libpqxx is conspicuously absent — see
 # the LIBPQXX_VERSION note.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
@@ -230,6 +263,7 @@ COPY . ./src
 
 RUN cmake -S ./src -B /workspace/build -G Ninja \
         -DCMAKE_BUILD_TYPE=Release \
+        -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
         -DCMAKE_PREFIX_PATH=/usr/local \
         -DPAYLOAD_MANAGER_ENABLE_OTEL=ON \
         -DPAYLOAD_MANAGER_ENABLE_ARROW_CUDA=ON \
@@ -253,7 +287,7 @@ FROM nvcr.io/nvidia/l4t-cuda:12.2.12-runtime AS runtime
 ENV DEBIAN_FRONTEND=noninteractive
 WORKDIR /app
 
-# Runtime halves of what the builder linked against. The six built from source
+# Runtime halves of what the builder linked against. The seven built from source
 # come across as shared objects from /usr/local below — including libpqxx, so
 # no libpqxx package here; libpq5 is the C library it wraps.
 RUN apt-get update \
