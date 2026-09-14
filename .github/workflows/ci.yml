@@ -25,6 +25,18 @@ concurrency:
 permissions:
   contents: read
 
+# The container jobs run on an image whose /bin/sh is dash, and steps were
+# getting it rather than bash. `mapfile` and `< <(process substitution)` are
+# bash-only, so the clang-tidy step died with "Syntax error: redirection
+# unexpected" before running a single check — in this workflow and in the one
+# it replaced. clang-tidy had therefore never actually run in CI.
+#
+# Set it once here rather than per step, so the next thing written with an
+# array or a heredoc does not rediscover this.
+defaults:
+  run:
+    shell: bash
+
 env:
   ARROW_VERSION: "25.0.1"
 
