@@ -84,6 +84,38 @@ if(PAYLOAD_MANAGER_ENABLE_POSTGRES)
     find_package(PkgConfig REQUIRED)
     pkg_check_modules(PQXX REQUIRED libpqxx)
 
+    # Ubuntu 26.04's libpqxx 7.10.0-2build1 SHARED library double-frees in its
+    # library finalizer, so any process linking it aborts at exit — reproduced
+    # with a two-line program. Debian's identical 7.10.0-2 source is clean, as
+    # is upstream built from source, so this is Ubuntu's rebuild. The static
+    # archive shipped in the same package is unaffected, because the fault is on
+    # the __cxa_finalize / _dl_call_fini path that static linking never takes.
+    #
+    # Prefer the static archive. Set PAYLOAD_MANAGER_PQXX_SHARED=ON to opt back
+    # into the shared library once a fixed package exists.
+    option(PAYLOAD_MANAGER_PQXX_SHARED "Link libpqxx as a shared library" OFF)
+
+    if(PAYLOAD_MANAGER_PQXX_SHARED)
+        set(_pqxx_link ${PQXX_LIBRARIES})
+    else()
+        find_library(PQXX_STATIC_LIBRARY
+                NAMES libpqxx.a
+                HINTS ${PQXX_LIBRARY_DIRS}
+                PATHS /usr/lib/${CMAKE_LIBRARY_ARCHITECTURE} /usr/local/lib)
+        if(PQXX_STATIC_LIBRARY)
+            # The archive does not carry libpq itself; pull it in explicitly.
+            pkg_check_modules(PQ libpq)
+            set(_pqxx_link ${PQXX_STATIC_LIBRARY} ${PQ_LIBRARIES})
+            message(STATUS "libpqxx: linking static archive ${PQXX_STATIC_LIBRARY}")
+        else()
+            set(_pqxx_link ${PQXX_LIBRARIES})
+            message(WARNING
+                "libpqxx static archive not found; linking the shared library. "
+                "On Ubuntu 26.04 this aborts at process exit — install libpqxx-dev, "
+                "which ships libpqxx.a.")
+        endif()
+    endif()
+
     target_sources(payload_manager_db PRIVATE
             postgres/pg_pool.cpp
             postgres/pg_tx.cpp
@@ -92,7 +124,7 @@ if(PAYLOAD_MANAGER_ENABLE_POSTGRES)
     )
 
     target_include_directories(payload_manager_db PUBLIC ${PQXX_INCLUDE_DIRS})
-    target_link_libraries(payload_manager_db PUBLIC ${PQXX_LIBRARIES})
+    target_link_libraries(payload_manager_db PUBLIC ${_pqxx_link})
 
 
     target_compile_definitions(payload_manager_db PUBLIC PAYLOAD_DB_POSTGRES=1)
