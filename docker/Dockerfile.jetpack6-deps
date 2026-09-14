@@ -77,12 +77,20 @@ ARG AWS_SDK_VERSION=1.11.778
 # a board with 8 GB and nothing but zram behind it — goes up with each extra job.
 ARG BUILD_JOBS=6
 
-# Ubuntu 22.04's cmake is 3.22. Arrow wants newer, so take Kitware's.
-#
+# Jammy ships CMake 3.22 and Arrow needs newer. This used to add apt.kitware.com;
+# it now takes the upstream binary release instead. apt.kitware.com went
+# unreachable from this board mid-build — three 30s timeouts, zero bytes, while
+# GitHub answered in 0.4s — and the failure surfaced as "gpg: no valid OpenPGP
+# data found", because `wget -q | gpg` hides wget's exit status behind gpg's. A
+# pinned tarball is reproducible, drops an apt key and a deprecation warning, and
+# removes a second host from the critical path: everything else here is already
+# cloned from GitHub.
+ARG CMAKE_VERSION=3.31.6
+
 # The upgrade below is what picks up jammy-security: the base image is dated
 # October 2023 and roughly 170 of its packages have had security updates since.
-# It runs after the Kitware source is added and before anything is built, so
-# every library compiled in this stage links the patched versions.
+# It runs before anything is built, so every library compiled in this stage links
+# the patched versions.
 #
 # nvidia-l4t-*, cuda-* and libnvidia-* are held first. An L4T image carries
 # NVIDIA's own apt source, and the CUDA userspace here is pinned to 12.2.12 to
@@ -91,24 +99,26 @@ ARG BUILD_JOBS=6
 # Nothing in those sets has an update to take today; the hold is so that stays
 # true when NVIDIA next publishes to r36.0.
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends \
-        ca-certificates gnupg wget git \
-    && wget -qO- https://apt.kitware.com/keys/kitware-archive-latest.asc \
-       | gpg --dearmor -o /usr/share/keyrings/kitware-archive-keyring.gpg \
-    && echo "deb [signed-by=/usr/share/keyrings/kitware-archive-keyring.gpg] https://apt.kitware.com/ubuntu/ jammy main" \
-       > /etc/apt/sources.list.d/kitware.list \
-    && apt-get update \
     && dpkg-query -W -f='${Package}\n' \
        | grep -E '^(nvidia-l4t-|cuda-|libnvidia-)' \
        | xargs -r apt-mark hold \
     && apt-get upgrade -y \
     && apt-get install -y --no-install-recommends \
-        build-essential ninja-build cmake pkg-config \
+        ca-certificates wget git \
+        build-essential ninja-build pkg-config \
         libssl-dev zlib1g-dev libcurl4-openssl-dev \
         liblz4-dev libzstd-dev libsnappy-dev libbrotli-dev libbz2-dev \
         libutf8proc-dev libxml2-dev \
         libpq-dev uuid-dev \
     && rm -rf /var/lib/apt/lists/*
+
+# Not piped into tar: a failed download would otherwise reach tar as an empty
+# stream and be reported as a corrupt archive rather than a network error.
+RUN wget --tries=3 --timeout=30 -O /tmp/cmake.tar.gz \
+        "https://github.com/Kitware/CMake/releases/download/v${CMAKE_VERSION}/cmake-${CMAKE_VERSION}-linux-aarch64.tar.gz" \
+    && tar -xzf /tmp/cmake.tar.gz -C /usr/local --strip-components=1 \
+    && rm -f /tmp/cmake.tar.gz \
+    && cmake --version
 
 WORKDIR /deps
 
@@ -249,6 +259,24 @@ RUN git clone --depth 1 --branch ${AWS_SDK_VERSION} https://github.com/aws/aws-s
 # SIMD_LEVEL is stated rather than left at DEFAULT, which already resolves to
 # NEON on aarch64 — it costs nothing and records the intent at the call site.
 #
+# Everything this project does not include a header for is off. Checked against
+# the tree: the only Arrow headers used are filesystem/, gpu/, io/, buffer.h,
+# memory_pool.h, status/result/type.h and util/{compression,key_value_metadata}.h.
+# No arrow/compute, no dataset, no parquet, no csv, no json. Compute is the
+# expensive half of Arrow — scalar_compare, scalar_arithmetic and
+# vector_selection are the translation units that peak near 2 GB — so turning it
+# off is most of the build time and all of the memory risk.
+#
+# IPC stays ON despite nothing including arrow/ipc directly: ARROW_CUDA declares
+# DEPENDS ARROW_IPC, and arrow/gpu/cuda_api.h includes cuda_arrow_ipc.h. Turning
+# it off takes the GPU tier with it.
+#
+# JEMALLOC replaces Arrow's default MIMALLOC as the memory pool backing
+# arrow::default_memory_pool(), which internal/storage reaches through
+# arrow_utils.hpp and ram_arrow_store.cpp. Arrow vendors jemalloc under its own
+# symbol prefix, so this does not collide with a system libjemalloc linked into
+# the service binary.
+#
 # There is deliberately no CUDA architecture here. Arrow 25.0.1 has no
 # ARROW_CUDA_ARCH option, and nothing in the chain would use one: cpp/src/arrow/gpu
 # contains no .cu files and never calls enable_language(CUDA), it only does
@@ -274,12 +302,19 @@ RUN git clone --depth 1 --branch ${ARROW_VERSION} https://github.com/apache/arro
         -DARROW_BUILD_TESTS=OFF \
         -DARROW_DEPENDENCY_SOURCE=AUTO \
         -DARROW_CUDA=ON \
+        -DARROW_IPC=ON \
         -DARROW_S3=ON \
         -DARROW_SIMD_LEVEL=NEON \
         -DAWSSDK_SOURCE=SYSTEM \
         -DARROW_FILESYSTEM=ON \
-        -DARROW_COMPUTE=ON \
-        -DARROW_JSON=ON \
+        -DARROW_JEMALLOC=ON \
+        -DARROW_MIMALLOC=OFF \
+        -DARROW_COMPUTE=OFF \
+        -DARROW_ACERO=OFF \
+        -DARROW_DATASET=OFF \
+        -DARROW_PARQUET=OFF \
+        -DARROW_CSV=OFF \
+        -DARROW_JSON=OFF \
         -DARROW_WITH_ZLIB=ON \
         -DARROW_WITH_ZSTD=ON \
         -DARROW_WITH_LZ4=ON \

@@ -61,7 +61,7 @@ RUN cmake -S ./src -B /workspace/build -G Ninja \
         -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
         -DCMAKE_PREFIX_PATH=/usr/local \
         -DPAYLOAD_MANAGER_ENABLE_OTEL=ON \
-        -DPAYLOAD_MANAGER_ENABLE_ARROW_CUDA=ON \
+        -DPAYLOAD_MANAGER_ENABLE_ARROW_CUDA=OFF \
         -DBUILD_TESTING=ON \
         -DPAYLOAD_MANAGER_BUILD_SERVICE=ON \
         -DPAYLOAD_MANAGER_BUILD_CLIENT=OFF \
@@ -69,6 +69,28 @@ RUN cmake -S ./src -B /workspace/build -G Ninja \
         -DPAYLOAD_MANAGER_BUILD_PAYLOADCTL=OFF \
     && cmake --build /workspace/build -j ${BUILD_JOBS}
 
+# ARROW_CUDA is OFF, which is the whole GPU tier. Not an oversight — CUDA IPC
+# does not work on Tegra, and it fails in the worst possible shape. Measured on
+# an Orin (sm_87, integrated=1, JetPack 6 / CUDA 12.2.12), two processes, same
+# container:
+#
+#   cudaIpcGetMemHandle  -> cudaSuccess
+#   cudaIpcOpenMemHandle -> cudaErrorInvalidValue ("invalid argument")
+#
+# The export half succeeds. So internal/storage/gpu's CudaArrowStore::ExportIPC
+# returns a handle, the server looks healthy, and the failure lands in the client
+# at arrow::cuda::CudaIpcMemHandle::FromBuffer / OpenIpcBuffer as an opaque
+# "invalid argument" with nothing pointing back at the cause. Shipping the tier
+# enabled here would mean advertising GPU placement that no client can consume.
+#
+# The Jetson equivalent is not this tier: the GPU is integrated and the address
+# space is unified, so a consumer gets device-visible memory by mapping the ring
+# tier's /dev/shm segment and calling cudaHostRegister on it. TIER_RAM_RING
+# already does the sharing; no CUDA IPC is involved.
+#
+# The dependency image still carries Arrow CUDA, so flipping this back to ON is
+# one flag if a Tegra-workable path (EGLStream, NvSci) is ever wired up.
+#
 # Tests are not run here: the GPU suites need libcuda.so.1 from the NVIDIA
 # container runtime, which is not present during a build. On-device:
 #   docker build --target builder -t pm:jetpack6-builder -f docker/Dockerfile.jetpack6 .
