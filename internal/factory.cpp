@@ -5,6 +5,7 @@
 #include <memory>
 #include <stdexcept>
 #include <string>
+#include <unordered_set>
 #include <vector>
 
 #include "internal/core/payload_manager.hpp"
@@ -25,6 +26,7 @@
 #include "internal/service/stream_service.hpp"
 #include "internal/spill/spill_scheduler.hpp"
 #include "internal/spill/spill_worker.hpp"
+#include "internal/storage/ram/ram_arrow_store.hpp"
 #include "internal/storage/storage_factory.hpp"
 #include "internal/tiering/pressure_state.hpp"
 #include "internal/tiering/tiering_manager.hpp"
@@ -200,6 +202,47 @@ Application Build(const payload::runtime::config::RuntimeConfig& config) {
 
   auto payload_manager = std::make_shared<core::PayloadManager>(storage_map, lease_mgr, repository, metadata_cache);
   payload_manager->HydrateCaches();
+
+  // ------------------------------------------------------------------
+  // Reclaim shm segments left behind by a previous process.
+  //
+  // Runs once the repository is available, because a segment is only an orphan
+  // if no payload record refers to it. The set covers every tier, not just
+  // TIER_RAM: a payload part-way through a spill still owns its segment.
+  //
+  // With the in-memory repository the set is empty at startup, so every
+  // surviving segment is an orphan by definition — which is correct, since
+  // nothing could refer to them.
+  // ------------------------------------------------------------------
+  if (auto ram_it = storage_map.find(payload::manager::v1::TIER_RAM); ram_it != storage_map.end() && ram_it->second) {
+    if (auto* ram_store = dynamic_cast<storage::RamArrowStore*>(ram_it->second.get())) {
+      std::unordered_set<std::string> known;
+      try {
+        auto tx      = repository->Begin();
+        auto records = repository->ListPayloads(*tx);
+        known.reserve(records.size());
+        for (const auto& r : records) {
+          known.insert(payload::util::ToString(r.id));
+        }
+        tx->Commit();
+      } catch (const std::exception& e) {
+        // Without a reliable known-set a sweep would delete live data, so skip
+        // it rather than guess.
+        PAYLOAD_LOG_WARN("shm orphan sweep skipped; could not list payloads", {payload::observability::StringField("error", e.what())});
+        known.clear();
+        ram_store = nullptr;
+      }
+
+      if (ram_store != nullptr) {
+        const auto removed = ram_store->PurgeOrphans(known);
+        if (removed > 0) {
+          PAYLOAD_LOG_INFO("reclaimed orphaned shm segments",
+                           {payload::observability::IntField("removed", static_cast<int64_t>(removed)),
+                            payload::observability::IntField("known_payloads", static_cast<int64_t>(known.size()))});
+        }
+      }
+    }
+  }
 
   // ------------------------------------------------------------------
   // Spill system

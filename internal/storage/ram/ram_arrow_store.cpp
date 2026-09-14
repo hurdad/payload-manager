@@ -9,8 +9,11 @@
 
 #include <cerrno>
 #include <cstring>
+#include <filesystem>
+#include <iterator>
 #include <stdexcept>
 #include <string>
+#include <system_error>
 
 #include "internal/util/uuid.hpp"
 #include "payload/manager/v1.hpp"
@@ -172,6 +175,54 @@ void RamArrowStore::Write(const PayloadID& id, const std::shared_ptr<arrow::Buff
 
   std::unique_lock lock(mutex_);
   buffers_[Key(id)] = buf;
+}
+
+/*
+  PurgeOrphans: reclaim segments left behind by a previous process.
+
+  POSIX shm segments live in /dev/shm on Linux (glibc's shm_open maps names
+  there directly), so enumerating that directory is how we find ours.
+*/
+std::size_t RamArrowStore::PurgeOrphans(const std::unordered_set<std::string>& known_uuid_hex) {
+  namespace fs = std::filesystem;
+
+  static constexpr const char* kShmDir = "/dev/shm";
+
+  const std::string prefix = shm_prefix_ + "-";
+
+  std::error_code ec;
+  if (!fs::is_directory(kShmDir, ec)) {
+    // No tmpfs to sweep (unusual, but not fatal — Allocate would fail later
+    // with a clearer error than anything we could raise here).
+    return 0;
+  }
+
+  std::size_t removed = 0;
+  for (fs::directory_iterator it(kShmDir, ec), end; !ec && it != end; it.increment(ec)) {
+    const std::string name = it->path().filename().string();
+    if (name.size() <= prefix.size() || name.compare(0, prefix.size(), prefix) != 0) {
+      continue; // not ours
+    }
+
+    const std::string uuid_hex = name.substr(prefix.size());
+    if (known_uuid_hex.count(uuid_hex) != 0) {
+      continue; // live payload
+    }
+
+    // shm_unlink takes the /-prefixed name, not the filesystem path.
+    if (shm_unlink(("/" + name).c_str()) == 0) {
+      ++removed;
+    }
+    // A failure here is benign: another process may have unlinked it first, or
+    // it may belong to a different user. Either way it is not ours to reclaim.
+  }
+
+  std::unique_lock lock(mutex_);
+  for (auto it = buffers_.begin(); it != buffers_.end();) {
+    it = (known_uuid_hex.count(it->first) == 0) ? buffers_.erase(it) : std::next(it);
+  }
+
+  return removed;
 }
 
 /*

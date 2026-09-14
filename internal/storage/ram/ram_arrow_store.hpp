@@ -6,6 +6,7 @@
 #include <shared_mutex>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 
 #include "internal/storage/storage_backend.hpp"
 #include "payload/manager/v1.hpp"
@@ -43,6 +44,28 @@ class RamArrowStore final : public StorageBackend {
   payload::manager::v1::Tier TierType() const override {
     return payload::manager::v1::TIER_RAM;
   }
+
+  /*
+    Unlink shm segments belonging to this prefix that no longer correspond to a
+    known payload, and return how many were removed.
+
+    A crashed or killed container leaves its /dev/shm/<prefix>-* segments
+    behind. Nothing in this process's accounting knows about them, so it keeps
+    accepting allocations until the tmpfs is full — at which point shm_open,
+    ftruncate and mmap all still succeed (they only touch metadata and address
+    space) and the *producer* takes SIGBUS on its first write. Downstream saw
+    7.7G/7.7G with 10,329 orphans.
+
+    `known_uuid_hex` must contain every payload the repository knows about, not
+    only TIER_RAM ones: a payload part-way through a spill still owns its
+    segment. Passing an incomplete set deletes live data.
+
+    Existing client mappings keep working until they munmap, per POSIX.
+
+    Note Read() deliberately relies on segments surviving a restart, so this
+    must run against the repository's set rather than unlinking blindly.
+  */
+  std::size_t PurgeOrphans(const std::unordered_set<std::string>& known_uuid_hex);
 
   // Returns the POSIX shm segment name for a payload ID (starts with '/').
   // Format: /<prefix>-<uuid>.
