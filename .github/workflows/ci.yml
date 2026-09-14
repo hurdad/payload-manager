@@ -509,16 +509,27 @@ jobs:
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: gpu-test-results.xml
-
   # ---------------------------------------------------------------------------
   # Images
   #
   # One matrix in place of six copy-pasted workflows. Gated on the test jobs,
   # so a red main no longer publishes to ghcr.
+  #
+  # Each architecture is built on its own runner and pushed *by digest* only —
+  # no tag. The manifest job below then joins the digests into one multi-arch
+  # tag, so `docker pull ghcr.io/hurdad/payload-manager` resolves to amd64 or
+  # arm64 by itself. The alternative, one job emitting both platforms through
+  # QEMU, emulates an entire C++ build and takes hours; arm64 here is a native
+  # build on the self-hosted board.
+  #
+  # cuda is amd64 only, and deliberately. The only arm64 target is a Jetson,
+  # where the GPU tier cannot work: CUDA IPC is unsupported on Tegra, and it
+  # fails one-sided — cudaIpcGetMemHandle succeeds while the consumer's
+  # cudaIpcOpenMemHandle returns cudaErrorInvalidValue. Measured on an Orin.
   # ---------------------------------------------------------------------------
 
   images:
-    name: Image (${{ matrix.name }})
+    name: Image (${{ matrix.name }}/${{ matrix.arch }})
     # integration-object is absent deliberately — see the commented block above.
     needs: [format, tidy, generated, build-test, python, integration-api, integration-object]
     runs-on: ${{ matrix.runner }}
@@ -532,55 +543,68 @@ jobs:
           - name: payload-manager
             file: docker/Dockerfile
             suffix: ""
+            arch: amd64
+            platform: linux/amd64
             runner: ubuntu-latest
-            platforms: linux/amd64
-            qemu: true
           - name: otel
             file: docker/Dockerfile.otel
             suffix: "-otel"
+            arch: amd64
+            platform: linux/amd64
             runner: ubuntu-latest
-            platforms: linux/amd64
-            qemu: true
           - name: cuda
             file: docker/Dockerfile.cuda
             suffix: "-cuda"
+            arch: amd64
+            platform: linux/amd64
             runner: ubuntu-latest
-            platforms: linux/amd64
-            qemu: true
           - name: payloadctl
             file: docker/Dockerfile.payloadctl
             suffix: "-payloadctl"
+            arch: amd64
+            platform: linux/amd64
             runner: ubuntu-latest
-            platforms: linux/amd64
-            qemu: true
           - name: gateway
             file: docker/Dockerfile.gateway
             suffix: "-gateway"
+            arch: amd64
+            platform: linux/amd64
             runner: ubuntu-latest
-            platforms: linux/amd64
-            qemu: true
-          # Jetson is disabled for now. It builds natively on the ARM64
-          # self-hosted runner, so it needs no QEMU and no cross platform
-          # argument — uncomment this entry to bring it back. The ARM64 label
-          # is still declared in .github/actionlint.yaml for that.
-          #
-          # Its dependencies are not built here: the "Resolve JetPack 6 dependency
-          # images" step below points it at the pair published by
-          # .github/workflows/jetpack6-deps.yml, so this stays a minutes-long
-          # build of the service rather than an hours-long build of Arrow.
-          # - name: jetpack6
-          #   file: docker/Dockerfile.jetpack6
-          #   suffix: "-jetpack6"
-          #   runner: [self-hosted, ARM64]
-          #   platforms: ""
-          #   qemu: false
+
+          # Native arm64 on the self-hosted board. No cuda entry — see above.
+          # docker/Dockerfile and docker/Dockerfile.otel run ctest in their
+          # builder stages, so these also give the suite a native arm64 run,
+          # which nothing else in this pipeline does.
+          - name: payload-manager
+            file: docker/Dockerfile
+            suffix: ""
+            arch: arm64
+            platform: linux/arm64
+            runner: [self-hosted, ARM64]
+          - name: otel
+            file: docker/Dockerfile.otel
+            suffix: "-otel"
+            arch: arm64
+            platform: linux/arm64
+            runner: [self-hosted, ARM64]
+          - name: payloadctl
+            file: docker/Dockerfile.payloadctl
+            suffix: "-payloadctl"
+            arch: arm64
+            platform: linux/arm64
+            runner: [self-hosted, ARM64]
+          - name: gateway
+            file: docker/Dockerfile.gateway
+            suffix: "-gateway"
+            arch: arm64
+            platform: linux/arm64
+            runner: [self-hosted, ARM64]
+    env:
+      IMAGE: ghcr.io/${{ github.repository }}${{ matrix.suffix }}
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up QEMU
-        if: matrix.qemu
-        uses: docker/setup-qemu-action@v3
-
+      # No QEMU: every entry above builds its own architecture natively.
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
@@ -592,46 +616,137 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      # Labels only. Tags belong to the manifest, not to a single-arch build.
       - name: Extract Docker metadata
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ghcr.io/${{ github.repository }}${{ matrix.suffix }}
-          # latest was missing entirely, so `docker pull ghcr.io/<repo>` —
-          # the implicit :latest that every doc example uses — did not resolve.
+          images: ${{ env.IMAGE }}
+
+      # On a pull request nothing is pushed, so there is no digest to join and
+      # the build is validation only.
+      - name: Build (pull request)
+        if: github.event_name == 'pull_request'
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ${{ matrix.file }}
+          platforms: ${{ matrix.platform }}
+          labels: ${{ steps.meta.outputs.labels }}
+          outputs: type=cacheonly
+          cache-from: type=gha,scope=${{ matrix.name }}-${{ matrix.arch }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.name }}-${{ matrix.arch }}
+
+      - name: Build and push by digest
+        id: build
+        if: github.event_name != 'pull_request'
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ${{ matrix.file }}
+          platforms: ${{ matrix.platform }}
+          labels: ${{ steps.meta.outputs.labels }}
+          outputs: type=image,name=${{ env.IMAGE }},push-by-digest=true,name-canonical=true,push=true
+          cache-from: type=gha,scope=${{ matrix.name }}-${{ matrix.arch }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.name }}-${{ matrix.arch }}
+
+      # The filename is the digest; the file itself is empty. The manifest job
+      # only needs the names.
+      - name: Export digest
+        if: github.event_name != 'pull_request'
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/digests
+          digest='${{ steps.build.outputs.digest }}'
+          test -n "$digest"
+          touch "/tmp/digests/${digest#sha256:}"
+
+      - name: Upload digest
+        if: github.event_name != 'pull_request'
+        uses: actions/upload-artifact@v4
+        with:
+          name: digests-${{ matrix.name }}-${{ matrix.arch }}
+          path: /tmp/digests/*
+          if-no-files-found: error
+          retention-days: 1
+
+  # ---------------------------------------------------------------------------
+  # Manifests
+  #
+  # Joins each image's per-architecture digests into one tag. This is the job
+  # that makes `docker pull ghcr.io/hurdad/payload-manager` work on both an x86
+  # server and a Jetson without the caller choosing an architecture.
+  #
+  # cuda passes through with a single digest, which is still a manifest list —
+  # just one with one entry, so the tag shape stays identical across images.
+  # ---------------------------------------------------------------------------
+
+  manifest:
+    name: Manifest (${{ matrix.name }})
+    needs: images
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: payload-manager
+            suffix: ""
+          - name: otel
+            suffix: "-otel"
+          - name: cuda
+            suffix: "-cuda"
+          - name: payloadctl
+            suffix: "-payloadctl"
+          - name: gateway
+            suffix: "-gateway"
+    env:
+      IMAGE: ghcr.io/${{ github.repository }}${{ matrix.suffix }}
+    steps:
+      - name: Download digests
+        uses: actions/download-artifact@v4
+        with:
+          path: /tmp/digests
+          pattern: digests-${{ matrix.name }}-*
+          merge-multiple: true
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # latest was missing entirely before this pipeline existed, so
+      # `docker pull ghcr.io/<repo>` — the implicit :latest every doc example
+      # uses — did not resolve.
+      - name: Extract Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.IMAGE }}
           tags: |
             type=ref,event=branch
             type=ref,event=tag
             type=sha
             type=raw,value=latest,enable={{is_default_branch}}
 
-      # Derives the same tag jetpack6-deps.yml derives, from the same file, so
-      # the two cannot drift without a cross-workflow `needs` that GitHub does
-      # not offer. Every other image builds its dependencies from apt and this
-      # step does not run, leaving build-args empty.
-      - name: Resolve JetPack 6 dependency images
-        if: matrix.name == 'jetpack6'
-        id: jetpack6_deps
+      - name: Create and push manifest list
+        working-directory: /tmp/digests
         run: |
           set -euo pipefail
-          tag="$(sha256sum docker/Dockerfile.jetpack6-deps | cut -c1-12)"
-          {
-            echo "build_args<<ARGS_EOF"
-            echo "DEPS_DEV_IMAGE=ghcr.io/${{ github.repository }}-jetpack6-deps-dev:${tag}"
-            echo "DEPS_RUNTIME_IMAGE=ghcr.io/${{ github.repository }}-jetpack6-deps-runtime:${tag}"
-            echo "BUILD_JOBS=6"
-            echo "ARGS_EOF"
-          } >> "$GITHUB_OUTPUT"
+          ls -1 | sed 's/^/  digest: /'
+          # shellcheck disable=SC2046
+          docker buildx imagetools create \
+            $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \
+            $(printf "${IMAGE}@sha256:%s " *)
 
-      - name: Build and push
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          file: ${{ matrix.file }}
-          build-args: ${{ steps.jetpack6_deps.outputs.build_args }}
-          platforms: ${{ matrix.platforms }}
-          push: ${{ github.event_name != 'pull_request' }}
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+      - name: Inspect
+        run: |
+          docker buildx imagetools inspect "${IMAGE}:${{ steps.meta.outputs.version }}"

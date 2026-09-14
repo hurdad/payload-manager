@@ -139,8 +139,10 @@ All Dockerfiles and Compose manifests now live under [`docker/`](docker/README.m
 | `docker/Dockerfile.otel` | On | Off | Production image with OpenTelemetry |
 | `docker/Dockerfile.cuda` | On | On | GPU-capable image with OpenTelemetry |
 | `docker/Dockerfile.gateway` | — | — | gRPC-Gateway + embedded Svelte UI |
-| `docker/Dockerfile.jetpack6` | On | On | NVIDIA Jetson (aarch64 / JetPack 6) |
-| `docker/Dockerfile.jetpack6-deps` | — | — | Dependency images the Jetson build sits on ([details](docker/README.md#jetpack-6)) |
+
+All images except `Dockerfile.cuda` publish as multi-arch tags (`linux/amd64`
+and `linux/arm64`), so the same tag serves an x86 server and a Jetson. CUDA is
+amd64 only — see [Architectures](docker/README.md#architectures).
 
 ```bash
 # No-OTEL image (default)
@@ -154,9 +156,6 @@ docker build -f docker/Dockerfile.cuda -t payload-manager:cuda .
 
 # payloadctl CLI image
 docker build -f docker/Dockerfile.payloadctl -t payloadctl:latest .
-
-# Jetson image (build on the device; dependencies come from published images)
-docker build -f docker/Dockerfile.jetpack6 -t payload-manager:jetpack6 .
 ```
 
 ### Docker Compose
