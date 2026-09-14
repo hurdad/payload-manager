@@ -12,9 +12,10 @@ def group(x, y, w, h, title, cls):
     P.append(f'<rect class="grp {cls}" x="{x}" y="{y}" width="{w}" height="{h}" rx="10"/>')
     # Opaque backing: edges routed into the group would otherwise run straight
     # through the label.
-    tw = 8.2 * len(title) + 16
-    L.append(f'<rect class="lblbg" x="{x+9}" y="{y+11}" width="{tw}" height="21" rx="4"/>')
-    L.append(f'<text class="grpt {cls}t" x="{x+16}" y="{y+26}">{esc(title)}</text>')
+    tw = 7.6 * len(title) + 14
+    L.append(f'<rect class="lblbg" x="{x+9}" y="{y-10}" width="{tw}" height="19" rx="4"/>')
+    L.append(f'<text class="grpt {cls}t" x="{x+16}" y="{y+4}">{esc(title)}</text>')
+    BANDS.append((x + 9, y - 10, x + 9 + tw, y + 9, title))
 
 # Conservative per-character widths. The browser picks a font from the stack in
 # the stylesheet and it will not be the one this script renders with, so the
@@ -22,6 +23,8 @@ def group(x, y, w, h, title, cls):
 # anywhere, which is what stops text spilling out of its box on GitHub.
 BOLD_CH, SUB_CH, PAD = 8.4, 6.5, 18
 OVERFLOW = []
+BANDS = []      # (x1,y1,x2,y2,title) — the opaque strip behind each group label
+COLLIDE = []
 
 def check_fit(w, lines, where):
     for i, ln in enumerate(lines):
@@ -31,6 +34,12 @@ def check_fit(w, lines, where):
 
 def box(x, y, w, h, lines, cls="node", anchor_note=None):
     check_fit(w, lines, f"({x},{y})")
+    BOXES.append((x, y, x + w, y + h, lines[0]))
+    # A box under a group label would be painted over by the label's opaque
+    # backing, which shows up as a white notch across the top of the box.
+    for bx1, by1, bx2, by2, title in BANDS:
+        if x < bx2 and x + w > bx1 and y < by2 and y + h > by1:
+            COLLIDE.append((f"({x},{y})", lines[0], title))
     P.append(f'<rect class="{cls}" x="{x}" y="{y}" width="{w}" height="{h}" rx="7"/>')
     n = len(lines)
     # first line bold, rest small
@@ -48,7 +57,56 @@ def cyl(x, y, w, h, label):
     P.append(f'<path class="storetop" d="M{x} {y+ry} a{w/2} {ry} 0 0 1 {w} 0"/>')
     P.append(f'<text class="lbl" x="{x+w/2}" y="{y+h/2+9}">{esc(label)}</text>')
 
+EDGE_HITS = []
+BOXES = []      # (x1,y1,x2,y2,label) for every drawn box
+THROUGH = []
+
+def _seg_rect(x1, y1, x2, y2, r):
+    """True when the segment passes through rect r, endpoints on its edge aside."""
+    rx1, ry1, rx2, ry2, _ = r
+    inset = 2.0
+    rx1, ry1, rx2, ry2 = rx1 + inset, ry1 + inset, rx2 - inset, ry2 - inset
+    if rx1 >= rx2 or ry1 >= ry2:
+        return False
+    # Liang-Barsky
+    dx, dy = x2 - x1, y2 - y1
+    t0, t1 = 0.0, 1.0
+    for pq in ((-dx, x1 - rx1), (dx, rx2 - x1), (-dy, y1 - ry1), (dy, ry2 - y1)):
+        pp, qq = pq
+        if pp == 0:
+            if qq < 0:
+                return False
+        else:
+            t = qq / pp
+            if pp < 0:
+                if t > t1: return False
+                if t > t0: t0 = t
+            else:
+                if t < t0: return False
+                if t < t1: t1 = t
+    return t0 < t1
+
+def _through_check(x1, y1, x2, y2):
+    for r in BOXES:
+        if _seg_rect(x1, y1, x2, y2, r):
+            THROUGH.append((f"({x1},{y1})->({x2},{y2})", r[4]))
+
+def polyline(pts, cls="thin", marker=True):
+    """Draw an orthogonal route and check every leg."""
+    for (ax, ay), (bx, by) in zip(pts, pts[1:]):
+        _through_check(ax, ay, bx, by)
+    d = f"M{pts[0][0]} {pts[0][1]} " + " ".join(f"L{x} {y}" for x, y in pts[1:])
+    m = f' marker-end="url(#a-{cls})"' if marker else ""
+    P.append(f'<path class="{cls}" d="{d}"{m} fill="none"/>')
+
+def _edge_band_check(x1, y1, x2, y2):
+    for bx1, by1, bx2, by2, title in BANDS:
+        if min(x1, x2) < bx2 and max(x1, x2) > bx1 and min(y1, y2) < by2 and max(y1, y2) > by1:
+            EDGE_HITS.append((f"({x1},{y1})->({x2},{y2})", title))
+
 def arrow(x1, y1, x2, y2, cls="edge", label=None, lx=None, ly=None, dash=False):
+    _edge_band_check(x1, y1, x2, y2)
+    _through_check(x1, y1, x2, y2)
     d = ' stroke-dasharray="5 4"' if dash else ''
     P.append(f'<line class="{cls}" x1="{x1}" y1="{y1}" x2="{x2}" y2="{y2}"{d} marker-end="url(#a-{cls})"/>')
     if label:
@@ -96,7 +154,7 @@ box(652, 642, 458, 44, ["N pre-allocated /dev/shm slots per ring",
 # ------------------------------------------------------------- telemetry
 # Two lanes out of Alloy so no edge has to cross a box: metrics along the top
 # to Prometheus, traces along the bottom to Tempo, both read by Grafana.
-group(300, 726, 834, 170, "Telemetry  —  docker-compose.observability.yml", "g5")
+group(300, 726, 834, 170, "Telemetry", "g5")
 box(330, 788, 270, 60, ["Grafana Alloy", "OTLP receiver", "gRPC :4317 · HTTP :4318"], "obs")
 box(650, 756, 214, 56, ["Prometheus", "remote_write  ·  :9090"], "obs")
 box(650, 828, 214, 56, ["Tempo", "OTLP traces  ·  :3200"], "obs")
@@ -109,18 +167,19 @@ arrow(864, 856, 910, 834, "obsedge", "query", 888, 864)
 
 # ------------------------------------------------------------------- edges
 arrow(170, 84, 170, 94)                        # browser runs the UI
-arrow(170, 134, 170, 196, "edge", "REST / JSON", 216, 170)
+P.append('<path class="edge" d="M170 134 V 150 H 320 V 196" marker-end="url(#a-edge)" fill="none"/>')
+P.append('<text class="elbl" x="374" y="176">REST / JSON</text>')
 arrow(202, 242, 202, 266)                      # gateway -> servers
 # The native client never goes through the gateway; that is a browser path.
-arrow(440, 84, 440, 266, "edge", "gRPC, direct", 494, 176)
+arrow(440, 90, 440, 266, "edge", "gRPC, direct", 497, 188)
 arrow(177, 312, 177, 336)                      # servers -> service layer
 arrow(442, 312, 442, 336)                      # servers -> ring service
 arrow(177, 398, 177, 424)                      # service -> repository
 arrow(140, 470, 118, 490)                      # repo -> memory
 arrow(215, 470, 240, 490)                      # repo -> postgres
 arrow(177, 534, 177, 560)                      # catalogs column -> tiering
-arrow(302, 583, 628, 368, "thin")              # tiering -> tier group
-P.append('<path class="thin" d="M442 398 V 657 H 628" marker-end="url(#a-thin)" fill="none"/>')
+arrow(302, 556, 628, 368, "thin")              # tiering -> tier group
+polyline([(442, 398), (442, 430), (576, 430), (576, 657), (628, 657)], "thin")
 
 # data plane
 arrow(442, 622, 442, 788, "obsedge", "OTLP  ·  push", 516, 706)
@@ -170,6 +229,18 @@ svg = (f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {W} {H}" width="{W
 
 import pathlib
 pathlib.Path("docs/architecture.svg").write_text(svg)
+if THROUGH:
+    print("EDGES PASSING THROUGH A BOX:")
+    for e, lbl in THROUGH:
+        print(f"  {e} crosses {lbl!r}")
+if EDGE_HITS:
+    print("EDGES CROSSING A GROUP LABEL (the backing will break the line):")
+    for e, title in EDGE_HITS:
+        print(f"  {e} crosses {title!r}")
+if COLLIDE:
+    print("BOXES UNDER A GROUP LABEL (the label backing will white them out):")
+    for where, lbl, title in COLLIDE:
+        print(f"  {where}  {lbl!r} sits under {title!r}")
 if OVERFLOW:
     print("LABELS THAT MAY OVERFLOW IN A WIDER FONT:")
     for where, ln, est, w in OVERFLOW:
