@@ -1,55 +1,215 @@
 # Dockerfile.jetson
 #
-# Builds payload-manager for NVIDIA Jetson Orin (aarch64 / L4T R36 / JetPack 6)
-# with both CUDA and OpenTelemetry enabled.
+# payload-manager for NVIDIA Jetson Orin (aarch64 / L4T R36.2 / JetPack 6),
+# with CUDA and OpenTelemetry enabled.
 #
-# Uses pre-built base images from ghcr.io/hurdad/docker-jetpack6-{dev,runtime},
-# which provide Arrow 23.0.1 (CUDA+S3), gRPC v1.66.2, Protobuf v27.3,
-# OpenTelemetry v1.26.0, spdlog, jemalloc, Abseil, FlatBuffers, nats.c —
-# all pre-compiled for JetPack 6 / L4T R36 / CUDA 12.2 / aarch64.
+# This builds its own Abseil, Protobuf, gRPC, OpenTelemetry and Arrow rather
+# than taking them from a pre-built base image. Ubuntu 22.04 — which is what
+# JetPack 6 ships — packages none of them at versions this project can use:
+# no opentelemetry-cpp at all, and no libarrow with both S3 and CUDA, which
+# the object tier and the GPU tier respectively require.
 #
-# Those are installed packages, which is what the project now expects
-# everywhere; there are no vendored submodules any more.
+# Base images: nvcr.io/nvidia/l4t-cuda, tagged by CUDA version rather than by
+# L4T release. 12.2.12 is the CUDA that ships with L4T R36.2 / JetPack 6.
+# There is no l4t-cuda:r36.2.0 tag.
 #
-# Build:
-#   docker build \
-#     --platform linux/arm64 \
-#     -f docker/Dockerfile.jetson \
-#     -t payload-manager:jetson \
-#     .
+# Layering: dependencies are their own stage, so editing the project's own
+# sources does not rebuild them. That matters here — from-source Arrow with a
+# bundled AWS SDK is the bulk of a build measured in hours on Jetson hardware,
+# and considerably worse under x86 emulation.
 #
-# On a Jetson device the --platform flag is unnecessary.  When cross-building
-# from an x86 host install binfmt support first:
+# Build on a Jetson device:
+#   docker build -f docker/Dockerfile.jetson -t payload-manager:jetson .
+#
+# Cross-building from x86 needs binfmt and a great deal of patience:
 #   docker run --privileged --rm tonistiigi/binfmt --install arm64
+#   docker build --platform linux/arm64 -f docker/Dockerfile.jetson -t payload-manager:jetson .
 
 # ============================================================
-# Stage 1 – builder
+# Stage 1 – dependencies built from source
 # ============================================================
-FROM ghcr.io/hurdad/docker-jetpack6-dev:latest AS builder
+FROM nvcr.io/nvidia/l4t-cuda:12.2.12-devel AS deps
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Pinned together on purpose. gRPC constrains Protobuf, Protobuf constrains
+# Abseil, and picking them independently is how you end up debugging a link
+# error in generated code. This set is the one the previous JetPack 6 base
+# image shipped, so it is known to build this project on aarch64.
+ARG ABSEIL_VERSION=20240722.0
+ARG PROTOBUF_VERSION=v27.3
+ARG GRPC_VERSION=v1.66.2
+ARG OTEL_CPP_VERSION=v1.23.0
+# Must be >= 23.0: CMakeLists.txt fails the configure below that, and it would
+# do so only after the longest build step in the image. 25.0.1 is what the x86
+# images pin, so the tiers behave identically on both architectures.
+ARG ARROW_VERSION=apache-arrow-25.0.1
+ARG BUILD_JOBS=4
+
+# Ubuntu 22.04's cmake is 3.22. Arrow wants newer, so take Kitware's.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        ca-certificates gnupg wget git \
+    && wget -qO- https://apt.kitware.com/keys/kitware-archive-latest.asc \
+       | gpg --dearmor -o /usr/share/keyrings/kitware-archive-keyring.gpg \
+    && echo "deb [signed-by=/usr/share/keyrings/kitware-archive-keyring.gpg] https://apt.kitware.com/ubuntu/ jammy main" \
+       > /etc/apt/sources.list.d/kitware.list \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends \
+        build-essential ninja-build cmake pkg-config \
+        libssl-dev zlib1g-dev libcurl4-openssl-dev \
+        liblz4-dev libzstd-dev libsnappy-dev libbrotli-dev libbz2-dev \
+        libre2-dev libutf8proc-dev libxml2-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /deps
+
+# C++17 for every dependency: that is what distribution packages of these
+# libraries are built with, and therefore the configuration this project
+# already links against on x86. The project itself is C++20; mixing is fine
+# here because both standards alias absl::string_view to std::string_view,
+# which is where an Abseil ABI mismatch would otherwise bite.
+ENV DEPS_CXX_STANDARD=17
+
+# --- Abseil ---------------------------------------------------------------
+RUN git clone --depth 1 --branch ${ABSEIL_VERSION} https://github.com/abseil/abseil-cpp.git \
+    && cmake -S abseil-cpp -B build-absl -G Ninja \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
+        -DCMAKE_CXX_STANDARD=${DEPS_CXX_STANDARD} \
+        -DBUILD_SHARED_LIBS=ON \
+        -DABSL_PROPAGATE_CXX_STD=ON \
+        -DABSL_ENABLE_INSTALL=ON \
+        -DBUILD_TESTING=OFF \
+    && cmake --build build-absl -j ${BUILD_JOBS} \
+    && cmake --install build-absl \
+    && rm -rf abseil-cpp build-absl
+
+# --- Protobuf -------------------------------------------------------------
+# Against the Abseil just installed, not a bundled copy, so gRPC and Arrow
+# below resolve one protobuf and one Abseil.
+RUN git clone --depth 1 --branch ${PROTOBUF_VERSION} https://github.com/protocolbuffers/protobuf.git \
+    && cmake -S protobuf -B build-protobuf -G Ninja \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
+        -DCMAKE_CXX_STANDARD=${DEPS_CXX_STANDARD} \
+        -DBUILD_SHARED_LIBS=ON \
+        -Dprotobuf_BUILD_TESTS=OFF \
+        -Dprotobuf_ABSL_PROVIDER=package \
+    && cmake --build build-protobuf -j ${BUILD_JOBS} \
+    && cmake --install build-protobuf \
+    && ldconfig \
+    && rm -rf protobuf build-protobuf
+
+# --- gRPC -----------------------------------------------------------------
+# Needs its submodules for the pieces not provided as packages (c-ares,
+# re2 is taken from the system, upb ships in-tree).
+RUN git clone --depth 1 --branch ${GRPC_VERSION} --recurse-submodules --shallow-submodules \
+        https://github.com/grpc/grpc.git \
+    && cmake -S grpc -B build-grpc -G Ninja \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
+        -DCMAKE_CXX_STANDARD=${DEPS_CXX_STANDARD} \
+        -DBUILD_SHARED_LIBS=ON \
+        -DgRPC_INSTALL=ON \
+        -DgRPC_BUILD_TESTS=OFF \
+        -DgRPC_ABSL_PROVIDER=package \
+        -DgRPC_PROTOBUF_PROVIDER=package \
+        -DgRPC_SSL_PROVIDER=package \
+        -DgRPC_ZLIB_PROVIDER=package \
+        -DgRPC_RE2_PROVIDER=package \
+        -DgRPC_BUILD_GRPC_CSHARP_PLUGIN=OFF \
+        -DgRPC_BUILD_GRPC_NODE_PLUGIN=OFF \
+        -DgRPC_BUILD_GRPC_OBJECTIVE_C_PLUGIN=OFF \
+        -DgRPC_BUILD_GRPC_PHP_PLUGIN=OFF \
+        -DgRPC_BUILD_GRPC_RUBY_PLUGIN=OFF \
+    && cmake --build build-grpc -j ${BUILD_JOBS} \
+    && cmake --install build-grpc \
+    && ldconfig \
+    && rm -rf grpc build-grpc
+
+# --- OpenTelemetry --------------------------------------------------------
+# All six OTLP exporters, because CMakeLists.txt aliases every one of them and
+# find_package(opentelemetry-cpp REQUIRED) fails the build if any is absent.
+RUN git clone --depth 1 --branch ${OTEL_CPP_VERSION} --recurse-submodules --shallow-submodules \
+        https://github.com/open-telemetry/opentelemetry-cpp.git \
+    && cmake -S opentelemetry-cpp -B build-otel -G Ninja \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
+        -DCMAKE_CXX_STANDARD=${DEPS_CXX_STANDARD} \
+        -DBUILD_SHARED_LIBS=ON \
+        -DWITH_OTLP_GRPC=ON \
+        -DWITH_OTLP_HTTP=ON \
+        -DWITH_ABSEIL=ON \
+        -DWITH_EXAMPLES=OFF \
+        -DWITH_FUNC_TESTS=OFF \
+        -DBUILD_TESTING=OFF \
+        -DOPENTELEMETRY_INSTALL=ON \
+    && cmake --build build-otel -j ${BUILD_JOBS} \
+    && cmake --install build-otel \
+    && ldconfig \
+    && rm -rf opentelemetry-cpp build-otel
+
+# --- Arrow ----------------------------------------------------------------
+# S3 and CUDA are both required: the object tier calls
+# arrow::fs::EnsureS3Initialized and the GPU tier uses arrow::cuda. The AWS SDK
+# is bundled because Ubuntu 22.04 does not package one Arrow accepts. This is
+# the longest step in the image by a wide margin.
+RUN git clone --depth 1 --branch ${ARROW_VERSION} https://github.com/apache/arrow.git \
+    && cmake -S arrow/cpp -B build-arrow -G Ninja \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
+        -DCMAKE_CXX_STANDARD=${DEPS_CXX_STANDARD} \
+        -DARROW_BUILD_SHARED=ON \
+        -DARROW_BUILD_STATIC=OFF \
+        -DARROW_BUILD_TESTS=OFF \
+        -DARROW_DEPENDENCY_SOURCE=AUTO \
+        -DARROW_CUDA=ON \
+        -DARROW_S3=ON \
+        -DAWSSDK_SOURCE=BUNDLED \
+        -DARROW_FILESYSTEM=ON \
+        -DARROW_COMPUTE=ON \
+        -DARROW_JSON=ON \
+        -DARROW_WITH_ZLIB=ON \
+        -DARROW_WITH_ZSTD=ON \
+        -DARROW_WITH_LZ4=ON \
+        -DARROW_WITH_SNAPPY=ON \
+        -DARROW_WITH_BROTLI=ON \
+        -DARROW_WITH_BZ2=ON \
+        -DARROW_WITH_RE2=ON \
+        -DARROW_WITH_UTF8PROC=ON \
+    && cmake --build build-arrow -j ${BUILD_JOBS} \
+    && cmake --install build-arrow \
+    && ldconfig \
+    && rm -rf arrow build-arrow
+
+# ============================================================
+# Stage 2 – builder
+# ============================================================
+FROM deps AS builder
 
 ENV DEBIAN_FRONTEND=noninteractive
 WORKDIR /workspace
 
-# The dev base image already provides: cmake (Kitware), ninja, build-essential,
-# git, pkg-config, protobuf v27.3, gRPC v1.66.2, Arrow 23.0.1 (CUDA+S3),
-# OpenTelemetry v1.26.0, spdlog, Abseil, jemalloc, FlatBuffers, nats.c,
-# and all codec libs (zlib, zstd, snappy, lz4, brotli, ssl, curl).
-# Only install what is not already present.
+# Re-declared: ARG scope is per-stage, so the one set in `deps` is not visible
+# here and ${BUILD_JOBS} would expand to nothing, leaving an unbounded -j.
+ARG BUILD_JOBS=4
+
+# Only what is still missing: these three Ubuntu 22.04 does package at usable
+# versions, unlike the five built above.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         libyaml-cpp-dev \
         libpqxx-dev \
+        libspdlog-dev \
         libgtest-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy the entire source tree.
 COPY . ./src
 
-# All heavy dependencies (Arrow, gRPC, OTel, Protobuf, spdlog) are pre-installed
-# at /usr/local so no FetchContent downloads occur.
 RUN cmake -S ./src -B /workspace/build -G Ninja \
-        -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
         -DCMAKE_BUILD_TYPE=Release \
+        -DCMAKE_PREFIX_PATH=/usr/local \
         -DPAYLOAD_MANAGER_ENABLE_OTEL=ON \
         -DPAYLOAD_MANAGER_ENABLE_ARROW_CUDA=ON \
         -DBUILD_TESTING=ON \
@@ -57,31 +217,36 @@ RUN cmake -S ./src -B /workspace/build -G Ninja \
         -DPAYLOAD_MANAGER_BUILD_CLIENT=OFF \
         -DPAYLOAD_MANAGER_BUILD_EXAMPLES=OFF \
         -DPAYLOAD_MANAGER_BUILD_PAYLOADCTL=OFF \
-    && cmake --build /workspace/build \
-    && cmake --build /workspace/build --target payload-manager
-# Note: unit tests are not run during docker build because they require
-# libcuda.so.1 from the NVIDIA container runtime.  To run tests on-device:
+    && cmake --build /workspace/build -j ${BUILD_JOBS}
+
+# Tests are not run here: the GPU suites need libcuda.so.1 from the NVIDIA
+# container runtime, which is not present during a build. On-device:
 #   docker run --rm --runtime=nvidia payload-manager:jetson \
-#     ctest --test-dir /workspace/build -L unit -E payload_manager_integration_api
+#     ctest --test-dir /workspace/build -L unit
 
 # ============================================================
-# Stage 2 – runtime
+# Stage 3 – runtime
 # ============================================================
-FROM ghcr.io/hurdad/docker-jetpack6-runtime:latest AS runtime
+FROM nvcr.io/nvidia/l4t-cuda:12.2.12-runtime AS runtime
 
 ENV DEBIAN_FRONTEND=noninteractive
 WORKDIR /app
 
-# The runtime base image already provides: libstdc++6, libssl3, zlib1g,
-# libzstd1, libsnappy1v5, liblz4-1, libbrotli1, libboost-filesystem1.74.0,
-# libutf8proc2, libcurl4, ca-certificates, and all /usr/local/lib .so files
-# (grpc, protobuf, arrow, otel, spdlog, jemalloc, etc.).
+# Runtime halves of what the builder linked against. The five built from source
+# come across as shared objects from /usr/local below.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
-        libyaml-cpp0.7 \
-        libpqxx-6.4 \
+        ca-certificates \
+        libssl3 zlib1g libcurl4 \
+        liblz4-1 libzstd1 libsnappy1v5 libbrotli1 libbz2-1.0 \
+        libre2-9 libutf8proc2 libxml2 \
+        libyaml-cpp0.7 libpqxx-6.4 \
     && rm -rf /var/lib/apt/lists/*
+
+COPY --from=deps /usr/local/lib/ /usr/local/lib/
+RUN ldconfig
 
 COPY --from=builder /workspace/build/bin/payload-manager ./payload-manager
 
+EXPOSE 50051
 ENTRYPOINT ["./payload-manager"]
