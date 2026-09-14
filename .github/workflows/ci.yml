@@ -249,11 +249,21 @@ jobs:
       - name: Fail if the committed Python stubs are stale
         if: ${{ !cancelled() }}
         run: |
+          set -uo pipefail
           cmake --build build --target sync_python_client
-          if ! git diff --exit-code -- client/python; then
+          changed=$(git status --porcelain -- client/python)
+          if [ -n "$changed" ]; then
             echo "::error::Committed Python stubs are out of date. Run the sync_python_client target and commit the result."
+            echo "--- toolchain ---"
+            python3 -c "import importlib.metadata as m,sys; print('python', sys.version.split()[0]); print('grpcio-tools', m.version('grpcio-tools')); print('protobuf', m.version('protobuf'))"
+            echo "--- changed or untracked ---"
+            echo "$changed"
+            echo "--- diff ---"
+            git --no-pager diff --stat -- client/python
+            git --no-pager diff -- client/python | head -200
             exit 1
           fi
+          echo "committed Python stubs match the protos"
 
       # Runs even when the suite failed — a red run is exactly when the
       # per-test breakdown is worth having.
