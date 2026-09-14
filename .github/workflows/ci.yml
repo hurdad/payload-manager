@@ -534,10 +534,25 @@ jobs:
       - name: Build the CUDA builder stage
         run: docker build --target builder -t pm:cuda-builder -f docker/Dockerfile.cuda .
 
+      # Separated from the tests so "no usable device" cannot masquerade as a
+      # CUDA failure. The image asks only for compute,utility capabilities, so
+      # a mount error naming a graphics library (libnvidia-egl-gbm, libnvidia-gl,
+      # libEGL_nvidia) is the host's device spec, not anything in this repo:
+      # the toolkit pins absolute versioned paths, and a driver or
+      # libnvidia-egl-gbm1 upgrade leaves them pointing at files that no longer
+      # exist. Regenerating the spec is what fixes it, and it needs doing after
+      # every driver upgrade.
       - name: Confirm a device is visible
         run: |
-          docker run --rm --gpus all pm:cuda-builder nvidia-smi \
-            --query-gpu=name,driver_version,compute_cap --format=csv
+          if ! docker run --rm --gpus all pm:cuda-builder nvidia-smi \
+                 --query-gpu=name,driver_version,compute_cap --format=csv; then
+            echo "::error::No usable GPU. If the failure above is a mount error naming a driver library, the host's NVIDIA device spec is stale — on the runner: sudo ldconfig && sudo nvidia-ctk cdi generate --output=/etc/cdi/nvidia.yaml && sudo systemctl restart docker"
+            echo "--- host driver libraries the toolkit would mount ---"
+            ls -l /usr/lib/x86_64-linux-gnu/libnvidia-egl-gbm.so* 2>&1 || true
+            nvidia-smi --query-gpu=name,driver_version --format=csv 2>&1 || true
+            nvidia-ctk cdi list 2>&1 | head -20 || true
+            exit 1
+          fi
 
       # CUDA 13 requires a Turing-or-newer device (sm_75+) and an r580+ driver;
       # a mismatch shows up here rather than as a confusing test failure.
