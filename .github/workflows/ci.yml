@@ -477,6 +477,14 @@ jobs:
       # image links against the libcuda stub and its in-build ctest skips every
       # GPU case. Build the builder stage (which keeps the test binaries) and
       # run the gpu-labelled suites against a real device.
+      # This build is uncached and multi-GB, and the runner is long-lived. Show
+      # what is left before starting, so "no space left on device" 25 minutes in
+      # is diagnosable from the log rather than only from the box.
+      - name: Disk space before build
+        run: |
+          df -h / /var/lib/docker 2>/dev/null | sort -u
+          docker system df
+
       - name: Build the CUDA builder stage
         run: docker build --target builder -t pm:cuda-builder -f docker/Dockerfile.cuda .
 
@@ -514,6 +522,24 @@ jobs:
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: gpu-test-results.xml
+
+      # Every run retags pm:cuda-builder, which leaves the previous image
+      # dangling, and nothing here uses a registry cache that would bound the
+      # growth. Unreclaimed, this filled the runner's disk and the build failed
+      # 25 minutes in with "no space left on device".
+      #
+      # Scoped deliberately: this runner is not necessarily exclusive to this
+      # repository. `docker image prune` without -a removes only dangling
+      # layers, never a tagged image something else may depend on, and the
+      # builder cache is capped rather than emptied so the next run still starts
+      # warm. A blanket `docker system prune -af` would be the wrong tool.
+      - name: Reclaim disk space
+        if: ${{ always() }}
+        run: |
+          docker rmi -f pm:cuda-builder 2>/dev/null || true
+          docker image prune -f
+          docker builder prune -f --keep-storage=10GB || docker builder prune -f
+          df -h / /var/lib/docker 2>/dev/null | sort -u
   # ---------------------------------------------------------------------------
   # Images
   #
