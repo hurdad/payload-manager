@@ -32,54 +32,49 @@ const (
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type PayloadRingServiceClient interface {
+	// Reserve the next available slot in `ring_id`. PM picks the slot
+	// (round-robin over slots whose refcount has hit zero since they
+	// were last committed); the returned (slot_idx, generation) is the
+	// triple the producer will write into the downstream event's
+	// RingSlotRef.
 	//
-	//Reserve the next available slot in `ring_id`. PM picks the slot
-	//(round-robin over slots whose refcount has hit zero since they
-	//were last committed); the returned (slot_idx, generation) is the
-	//triple the producer will write into the downstream event's
-	//RingSlotRef.
-	//
-	//Fails with RESOURCE_EXHAUSTED when no slot is available (every
-	//slot is currently leased by at least one consumer) and the ring's
-	//exhaustion_policy is DROP_NEW. With BLOCK the call waits.
+	// Fails with RESOURCE_EXHAUSTED when no slot is available (every
+	// slot is currently leased by at least one consumer) and the ring's
+	// exhaustion_policy is DROP_NEW. With BLOCK the call waits.
 	AcquireRingSlot(ctx context.Context, in *v1.AcquireRingSlotRequest, opts ...grpc.CallOption) (*v1.AcquireRingSlotResponse, error)
+	// Publish the just-written slot. PM marks the slot ready-for-lease
+	// so consumers' LeaseRingSlot calls succeed. The producer publishes
+	// the downstream domain event (e.g. RadioCaptureEvent) on NATS
+	// carrying the RingSlotRef in parallel; consumers see the event
+	// and call LeaseRingSlot to take the read lease.
 	//
-	//Publish the just-written slot. PM marks the slot ready-for-lease
-	//so consumers' LeaseRingSlot calls succeed. The producer publishes
-	//the downstream domain event (e.g. RadioCaptureEvent) on NATS
-	//carrying the RingSlotRef in parallel; consumers see the event
-	//and call LeaseRingSlot to take the read lease.
-	//
-	//Fails with FAILED_PRECONDITION if (slot_idx, generation) doesn't
-	//match the producer's last AcquireRingSlot — guards against
-	//double-commit or commits on stale handles.
+	// Fails with FAILED_PRECONDITION if (slot_idx, generation) doesn't
+	// match the producer's last AcquireRingSlot — guards against
+	// double-commit or commits on stale handles.
 	CommitRingSlot(ctx context.Context, in *v1.CommitRingSlotRequest, opts ...grpc.CallOption) (*v1.CommitRingSlotResponse, error)
+	// One-time discovery on consumer startup. Returns the ring's slot
+	// count + per-slot shm names so the consumer can mmap (and, for GPU
+	// consumers, cudaHostRegister + cudaHostGetDevicePointer) every
+	// slot ahead of the hot path. The returned shm names are stable
+	// for the lifetime of the PM process; clients should not poll
+	// MapRing per-capture.
 	//
-	//One-time discovery on consumer startup. Returns the ring's slot
-	//count + per-slot shm names so the consumer can mmap (and, for GPU
-	//consumers, cudaHostRegister + cudaHostGetDevicePointer) every
-	//slot ahead of the hot path. The returned shm names are stable
-	//for the lifetime of the PM process; clients should not poll
-	//MapRing per-capture.
-	//
-	//Fails with NOT_FOUND if the ring isn't configured in PM's static
-	//config.
+	// Fails with NOT_FOUND if the ring isn't configured in PM's static
+	// config.
 	MapRing(ctx context.Context, in *v1.MapRingRequest, opts ...grpc.CallOption) (*v1.MapRingResponse, error)
+	// Bump the slot's refcount and grant a read lease. Lightweight —
+	// no bytes cross the wire, only the (ring_id, slot_idx, generation)
+	// triple and the returned opaque lease_id.
 	//
-	//Bump the slot's refcount and grant a read lease. Lightweight —
-	//no bytes cross the wire, only the (ring_id, slot_idx, generation)
-	//triple and the returned opaque lease_id.
-	//
-	//Fails with FAILED_PRECONDITION if the generation no longer matches
-	//the slot's current generation (consumer was too slow, producer
-	//already recycled the slot). The consumer should skip this capture
-	//and wait for the next event.
+	// Fails with FAILED_PRECONDITION if the generation no longer matches
+	// the slot's current generation (consumer was too slow, producer
+	// already recycled the slot). The consumer should skip this capture
+	// and wait for the next event.
 	LeaseRingSlot(ctx context.Context, in *v1.LeaseRingSlotRequest, opts ...grpc.CallOption) (*v1.LeaseRingSlotResponse, error)
-	//
-	//Drop the lease, decrement the slot's refcount. When the refcount
-	//reaches zero the slot is eligible for the producer's next
-	//AcquireRingSlot. Idempotent: releasing an already-released lease
-	//is a no-op.
+	// Drop the lease, decrement the slot's refcount. When the refcount
+	// reaches zero the slot is eligible for the producer's next
+	// AcquireRingSlot. Idempotent: releasing an already-released lease
+	// is a no-op.
 	ReleaseRingSlot(ctx context.Context, in *v1.ReleaseRingSlotRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 }
 
@@ -145,54 +140,49 @@ func (c *payloadRingServiceClient) ReleaseRingSlot(ctx context.Context, in *v1.R
 // All implementations must embed UnimplementedPayloadRingServiceServer
 // for forward compatibility.
 type PayloadRingServiceServer interface {
+	// Reserve the next available slot in `ring_id`. PM picks the slot
+	// (round-robin over slots whose refcount has hit zero since they
+	// were last committed); the returned (slot_idx, generation) is the
+	// triple the producer will write into the downstream event's
+	// RingSlotRef.
 	//
-	//Reserve the next available slot in `ring_id`. PM picks the slot
-	//(round-robin over slots whose refcount has hit zero since they
-	//were last committed); the returned (slot_idx, generation) is the
-	//triple the producer will write into the downstream event's
-	//RingSlotRef.
-	//
-	//Fails with RESOURCE_EXHAUSTED when no slot is available (every
-	//slot is currently leased by at least one consumer) and the ring's
-	//exhaustion_policy is DROP_NEW. With BLOCK the call waits.
+	// Fails with RESOURCE_EXHAUSTED when no slot is available (every
+	// slot is currently leased by at least one consumer) and the ring's
+	// exhaustion_policy is DROP_NEW. With BLOCK the call waits.
 	AcquireRingSlot(context.Context, *v1.AcquireRingSlotRequest) (*v1.AcquireRingSlotResponse, error)
+	// Publish the just-written slot. PM marks the slot ready-for-lease
+	// so consumers' LeaseRingSlot calls succeed. The producer publishes
+	// the downstream domain event (e.g. RadioCaptureEvent) on NATS
+	// carrying the RingSlotRef in parallel; consumers see the event
+	// and call LeaseRingSlot to take the read lease.
 	//
-	//Publish the just-written slot. PM marks the slot ready-for-lease
-	//so consumers' LeaseRingSlot calls succeed. The producer publishes
-	//the downstream domain event (e.g. RadioCaptureEvent) on NATS
-	//carrying the RingSlotRef in parallel; consumers see the event
-	//and call LeaseRingSlot to take the read lease.
-	//
-	//Fails with FAILED_PRECONDITION if (slot_idx, generation) doesn't
-	//match the producer's last AcquireRingSlot — guards against
-	//double-commit or commits on stale handles.
+	// Fails with FAILED_PRECONDITION if (slot_idx, generation) doesn't
+	// match the producer's last AcquireRingSlot — guards against
+	// double-commit or commits on stale handles.
 	CommitRingSlot(context.Context, *v1.CommitRingSlotRequest) (*v1.CommitRingSlotResponse, error)
+	// One-time discovery on consumer startup. Returns the ring's slot
+	// count + per-slot shm names so the consumer can mmap (and, for GPU
+	// consumers, cudaHostRegister + cudaHostGetDevicePointer) every
+	// slot ahead of the hot path. The returned shm names are stable
+	// for the lifetime of the PM process; clients should not poll
+	// MapRing per-capture.
 	//
-	//One-time discovery on consumer startup. Returns the ring's slot
-	//count + per-slot shm names so the consumer can mmap (and, for GPU
-	//consumers, cudaHostRegister + cudaHostGetDevicePointer) every
-	//slot ahead of the hot path. The returned shm names are stable
-	//for the lifetime of the PM process; clients should not poll
-	//MapRing per-capture.
-	//
-	//Fails with NOT_FOUND if the ring isn't configured in PM's static
-	//config.
+	// Fails with NOT_FOUND if the ring isn't configured in PM's static
+	// config.
 	MapRing(context.Context, *v1.MapRingRequest) (*v1.MapRingResponse, error)
+	// Bump the slot's refcount and grant a read lease. Lightweight —
+	// no bytes cross the wire, only the (ring_id, slot_idx, generation)
+	// triple and the returned opaque lease_id.
 	//
-	//Bump the slot's refcount and grant a read lease. Lightweight —
-	//no bytes cross the wire, only the (ring_id, slot_idx, generation)
-	//triple and the returned opaque lease_id.
-	//
-	//Fails with FAILED_PRECONDITION if the generation no longer matches
-	//the slot's current generation (consumer was too slow, producer
-	//already recycled the slot). The consumer should skip this capture
-	//and wait for the next event.
+	// Fails with FAILED_PRECONDITION if the generation no longer matches
+	// the slot's current generation (consumer was too slow, producer
+	// already recycled the slot). The consumer should skip this capture
+	// and wait for the next event.
 	LeaseRingSlot(context.Context, *v1.LeaseRingSlotRequest) (*v1.LeaseRingSlotResponse, error)
-	//
-	//Drop the lease, decrement the slot's refcount. When the refcount
-	//reaches zero the slot is eligible for the producer's next
-	//AcquireRingSlot. Idempotent: releasing an already-released lease
-	//is a no-op.
+	// Drop the lease, decrement the slot's refcount. When the refcount
+	// reaches zero the slot is eligible for the producer's next
+	// AcquireRingSlot. Idempotent: releasing an already-released lease
+	// is a no-op.
 	ReleaseRingSlot(context.Context, *v1.ReleaseRingSlotRequest) (*emptypb.Empty, error)
 	mustEmbedUnimplementedPayloadRingServiceServer()
 }
