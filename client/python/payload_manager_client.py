@@ -19,14 +19,17 @@ from payload.manager.catalog.v1 import lineage_pb2
 from payload.manager.core.v1 import id_pb2
 from payload.manager.core.v1 import placement_pb2
 from payload.manager.core.v1 import policy_pb2
+from payload.manager.core.v1 import ring_slot_pb2
 from payload.manager.core.v1 import types_pb2
 from payload.manager.runtime.v1 import lease_pb2
 from payload.manager.runtime.v1 import lifecycle_pb2
+from payload.manager.runtime.v1 import ring_pb2
 from payload.manager.runtime.v1 import stream_pb2
 from payload.manager.runtime.v1 import tiering_pb2
 from payload.manager.services.v1 import payload_admin_service_pb2_grpc
 from payload.manager.services.v1 import payload_catalog_service_pb2_grpc
 from payload.manager.services.v1 import payload_data_service_pb2_grpc
+from payload.manager.services.v1 import payload_ring_service_pb2_grpc
 from payload.manager.services.v1 import payload_stream_service_pb2_grpc
 
 PayloadIdLike = Union[id_pb2.PayloadID, bytes, bytearray, memoryview, str, uuidlib.UUID]
@@ -534,3 +537,285 @@ def _trace_metadata() -> list[tuple[str, str]]:
         return list(headers.items())
     except ImportError:
         return []
+
+
+# ---------------------------------------------------------------------------
+# TIER_RAM_RING
+#
+# The ring tier is not the catalog.  Every other tier hands out UUID-addressed
+# payloads the repository tracks through allocate, commit, spill and delete.  A
+# ring slot has no PayloadID and no database row: it is one of N shm segments
+# pre-allocated at startup from static config and rewritten in place, addressed
+# by position as ``(ring_id, slot_idx, generation)``.
+#
+# These mirror the C++ ``RingProducer`` / ``RingConsumer`` in client/cpp/ring.h,
+# including the part that matters most: both map a ring once and reuse the
+# mapping, rather than mapping per capture.
+# ---------------------------------------------------------------------------
+
+
+class RingSlot:
+    """A slot acquired for writing.  Context manager; commits on exit.
+
+    The reservation lives on the server.  PM leaves an acquired slot WRITING
+    and reclaims nothing before ``slot_write_timeout_ms``, so a slot dropped
+    without a commit is out of the ring until then.  ``__exit__`` therefore
+    commits at length zero when nothing committed it — consumers skip an empty
+    payload, which is cheaper than losing a slot.
+    """
+
+    def __init__(self, producer: "RingProducer", ring_id: str, slot_idx: int, generation: int, view: memoryview):
+        self._producer = producer
+        self.ring_id = ring_id
+        self.slot_idx = slot_idx
+        self.generation = generation
+        self._view = view
+        self._offset = 0
+        self._committed = False
+
+    @property
+    def capacity(self) -> int:
+        return len(self._view) if self._view is not None else 0
+
+    @property
+    def size(self) -> int:
+        """Bytes appended so far; what ``commit`` reports as ``size_bytes``."""
+        return self._offset
+
+    @property
+    def buffer(self) -> Optional[memoryview]:
+        """Writable view of the slot, or ``None`` once committed.
+
+        The mapping stays alive — the producer owns it — so dropping the view
+        is what keeps a late write from silently overwriting a slot a consumer
+        is already reading.
+        """
+        return self._view
+
+    def append(self, data: Union[bytes, bytearray, memoryview]) -> int:
+        """Copy ``data`` in at the current offset.  Truncates at capacity."""
+        if self._committed or self._view is None:
+            return 0
+        room = self.capacity - self._offset
+        n = min(len(data), room)
+        if n <= 0:
+            return 0
+        self._view[self._offset : self._offset + n] = bytes(data)[:n]
+        self._offset += n
+        return n
+
+    def commit(self) -> ring_slot_pb2.RingSlotRef:
+        """Publish the slot and return the ref a consumer needs."""
+        if self._committed:
+            raise RuntimeError("ring slot already committed")
+        self._producer._commit(self.ring_id, self.slot_idx, self.generation, self._offset)
+        self._committed = True
+        self._view = None
+        return ring_slot_pb2.RingSlotRef(
+            ring_id=self.ring_id,
+            slot_idx=self.slot_idx,
+            generation=self.generation,
+            size_bytes=self._offset,
+        )
+
+    def __enter__(self) -> "RingSlot":
+        return self
+
+    def __exit__(self, exc_type, exc, tb) -> bool:
+        if not self._committed:
+            # Rescue commit: hand the reservation back rather than retire it.
+            try:
+                self._producer._commit(self.ring_id, self.slot_idx, self.generation, 0)
+            except Exception:
+                pass
+            self._committed = True
+            self._view = None
+        return False
+
+
+class RingLease:
+    """A granted read lease.  Context manager; releases on exit.
+
+    A held lease keeps the slot's refcount above zero and blocks the producer
+    from reusing it, and PM expires nothing before ``lease_ttl_ms`` — so hold
+    it for the read and no longer.
+    """
+
+    def __init__(self, consumer: "RingConsumer", lease_id: bytes, view: memoryview, size_bytes: int):
+        self._consumer = consumer
+        self.lease_id = lease_id
+        self.buffer = view
+        self.size_bytes = size_bytes
+        self._released = False
+
+    def release(self) -> None:
+        """Release now rather than on scope exit.  Idempotent."""
+        if self._released:
+            return
+        self._released = True
+        self.buffer = None
+        try:
+            self._consumer._release(self.lease_id)
+        except Exception:
+            pass
+
+    def __enter__(self) -> "RingLease":
+        return self
+
+    def __exit__(self, exc_type, exc, tb) -> bool:
+        self.release()
+        return False
+
+
+class _RingMapper:
+    """Shared MapRing + per-slot mmap cache."""
+
+    def __init__(self, channel: grpc.Channel, writable: bool):
+        self._stub = payload_ring_service_pb2_grpc.PayloadRingServiceStub(channel)
+        self._writable = writable
+        self._lock = threading.Lock()
+        self._rings: dict[str, list[memoryview]] = {}
+        self._maps: dict[str, list[mmap.mmap]] = {}
+
+    def ensure_mapped(self, ring_id: str) -> bool:
+        """Map ``ring_id`` if not already mapped.  Idempotent."""
+        with self._lock:
+            if ring_id in self._rings:
+                return True
+        try:
+            resp = self._stub.MapRing(ring_pb2.MapRingRequest(ring_id=ring_id), metadata=_trace_metadata())
+        except grpc.RpcError:
+            return False
+
+        # n_slots and slot_shm_names are independent wire fields; indexing a
+        # list sized by one with a bound taken from the other is how that
+        # disagreement turns into an IndexError at capture time.
+        if resp.n_slots == 0 or resp.slot_capacity_bytes == 0:
+            return False
+        if len(resp.slot_shm_names) != resp.n_slots:
+            return False
+
+        views: list[memoryview] = []
+        maps: list[mmap.mmap] = []
+        access = mmap.ACCESS_WRITE if self._writable else mmap.ACCESS_READ
+        flags = os.O_RDWR if self._writable else os.O_RDONLY
+        try:
+            for name in resp.slot_shm_names:
+                fd = os.open(_shm_path(name), flags)
+                try:
+                    m = mmap.mmap(fd, resp.slot_capacity_bytes, access=access)
+                finally:
+                    os.close(fd)
+                maps.append(m)
+                views.append(memoryview(m))
+        except OSError:
+            for m in maps:
+                m.close()
+            return False
+
+        with self._lock:
+            if ring_id in self._rings:  # lost a race; keep the published one
+                for m in maps:
+                    m.close()
+                return True
+            self._rings[ring_id] = views
+            self._maps[ring_id] = maps
+        return True
+
+    def _slot_view(self, ring_id: str, slot_idx: int) -> Optional[memoryview]:
+        with self._lock:
+            views = self._rings.get(ring_id)
+        if views is None or slot_idx >= len(views):
+            return None
+        return views[slot_idx]
+
+    def close(self) -> None:
+        with self._lock:
+            rings, maps = self._rings, self._maps
+            self._rings, self._maps = {}, {}
+        for views in rings.values():
+            for v in views:
+                v.release()
+        for ms in maps.values():
+            for m in ms:
+                m.close()
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc, tb) -> bool:
+        self.close()
+        return False
+
+
+class RingProducer(_RingMapper):
+    """Write side of the ring tier.  Maps each ring once and reuses it."""
+
+    def __init__(self, channel: grpc.Channel):
+        super().__init__(channel, writable=True)
+
+    def acquire(self, ring_id: str) -> Optional[RingSlot]:
+        """Acquire a slot, mapping the ring on first use.
+
+        Returns ``None`` when the ring is exhausted — every slot still leased.
+        That is the documented steady state under DROP_NEW, not an error: count
+        it and drop the capture.
+        """
+        if not self.ensure_mapped(ring_id):
+            return None
+        try:
+            resp = self._stub.AcquireRingSlot(ring_pb2.AcquireRingSlotRequest(ring_id=ring_id), metadata=_trace_metadata())
+        except grpc.RpcError:
+            return None
+
+        view = self._slot_view(ring_id, resp.slot_idx)
+        if view is None:
+            # The reservation exists server-side; hand it straight back.
+            try:
+                self._commit(ring_id, resp.slot_idx, resp.generation, 0)
+            except Exception:
+                pass
+            return None
+        # A grant claiming more than the mapping would let append run past it.
+        capacity = min(resp.capacity_bytes, len(view))
+        return RingSlot(self, ring_id, resp.slot_idx, resp.generation, view[:capacity])
+
+    def _commit(self, ring_id: str, slot_idx: int, generation: int, size_bytes: int) -> None:
+        self._stub.CommitRingSlot(
+            ring_pb2.CommitRingSlotRequest(ring_id=ring_id, slot_idx=slot_idx, generation=generation, size_bytes=size_bytes),
+            metadata=_trace_metadata(),
+        )
+
+
+class RingConsumer(_RingMapper):
+    """Read side of the ring tier.  Maps each ring once and reuses it."""
+
+    def __init__(self, channel: grpc.Channel):
+        super().__init__(channel, writable=False)
+
+    def lease(self, ref: ring_slot_pb2.RingSlotRef) -> Optional[RingLease]:
+        """Lease the slot named by ``ref`` and return a view of its bytes.
+
+        Returns ``None`` when the lease is refused, which is the expected
+        outcome for a stale generation — the producer recycled the slot before
+        this consumer reached it.  Treat it as "drop this capture", not an
+        error.
+        """
+        if not self.ensure_mapped(ref.ring_id):
+            return None
+        view = self._slot_view(ref.ring_id, ref.slot_idx)
+        if view is None:
+            return None
+        try:
+            resp = self._stub.LeaseRingSlot(
+                ring_pb2.LeaseRingSlotRequest(ring_id=ref.ring_id, slot_idx=ref.slot_idx, generation=ref.generation),
+                metadata=_trace_metadata(),
+            )
+        except grpc.RpcError:
+            return None
+        # size_bytes comes off the wire; clamp it to what is actually mapped.
+        size = min(ref.size_bytes, len(view))
+        return RingLease(self, resp.lease_id, view[:size], size)
+
+    def _release(self, lease_id: bytes) -> None:
+        self._stub.ReleaseRingSlot(ring_pb2.ReleaseRingSlotRequest(lease_id=lease_id), metadata=_trace_metadata())

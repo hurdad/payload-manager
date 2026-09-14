@@ -29,6 +29,7 @@ run metadata_example.py      "$ENDPOINT"
 run catalog_admin_example.py "$ENDPOINT"
 run stream_example.py        "$ENDPOINT"
 run list_example.py          "$ENDPOINT" "all"
+run ring_example.py          "$ENDPOINT"
 
 # Spill example needs a pre-existing payload UUID; use round_trip output
 # The round_trip example prints the UUID on its last line as "UUID: <uuid>".

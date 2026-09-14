@@ -28,6 +28,7 @@ run payload_manager_example_metadata      "$ENDPOINT" ""
 run payload_manager_example_catalog_admin "$ENDPOINT" ""
 run payload_manager_example_stream        "$ENDPOINT" ""
 run payload_manager_example_list          "$ENDPOINT" "all" ""
+run payload_manager_example_ring          "$ENDPOINT" "example" ""
 
 # Allocate a payload, then verify with read and spill
 echo ""
