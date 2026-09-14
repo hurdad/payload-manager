@@ -7,6 +7,17 @@ database:
     max_connections: 32
 
 storage:
+  # A small ring so the ring tier is exercised by the examples stacks rather
+  # than only described. Rings are static — created at startup from this list,
+  # never over the API — so a consumer's MapRing only sees what is declared
+  # here. 4 x 64 KiB is negligible against the RAM tier budget below, which is
+  # reduced by whatever rings reserve.
+  ring:
+    rings:
+      - ring_id: "example"
+        n_slots: 4
+        slot_size_bytes: 65536
+
   ram:
     capacity_bytes: 8589934592  # 8 GiB
     use_hugepages: false
