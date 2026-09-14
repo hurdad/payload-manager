@@ -1,0 +1,49 @@
+name: Set up C++ build dependencies
+description: >-
+  Installs the apt packages needed to configure and build payload-manager
+  inside the ubuntu:26.04 container the C++ jobs run in.
+
+  This exists because the same ~15-line apt incantation was copy-pasted into
+  every C++ job, and the Arrow repository step in particular is easy to get
+  subtly wrong in one copy and not the others.
+
+inputs:
+  arrow-version:
+    description: libarrow-dev version to pin, matching what the images build against.
+    required: false
+    default: "25.0.1"
+  extra-packages:
+    description: Space-separated apt packages to install alongside the base set.
+    required: false
+    default: ""
+
+runs:
+  using: composite
+  steps:
+    - name: Install build dependencies
+      shell: bash
+      run: |
+        set -euo pipefail
+
+        # opentelemetry-cpp-dev lives in universe, which the base image
+        # does not enable.
+        sed -i 's/^Components: main$/Components: main universe/' /etc/apt/sources.list.d/ubuntu.sources
+        apt-get update
+        DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends ca-certificates wget
+
+        # Ubuntu universe's libarrow-dev is built ARROW_S3=OFF, which cannot
+        # link the object tier or the client. Use the Apache repo instead.
+        wget -q -O /tmp/arrow-apt-source.deb \
+          https://apache.jfrog.io/artifactory/arrow/ubuntu/apache-arrow-apt-source-latest-resolute.deb
+        DEBIAN_FRONTEND=noninteractive apt-get install -y -V /tmp/arrow-apt-source.deb
+        apt-get update
+
+        DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+          build-essential cmake ninja-build pkg-config git ca-certificates \
+          protobuf-compiler protobuf-compiler-grpc libprotobuf-dev libgrpc++-dev libgrpc-dev \
+          libyaml-cpp-dev libpqxx-dev libpq-dev libspdlog-dev libcurl4-openssl-dev \
+          libssl-dev zlib1g-dev liblz4-dev libzstd-dev libsnappy-dev libbrotli-dev libbz2-dev \
+          libre2-dev libutf8proc-dev libxml2-dev libgtest-dev \
+          opentelemetry-cpp-dev \
+          "libarrow-dev=${{ inputs.arrow-version }}-1" \
+          ${{ inputs.extra-packages }}

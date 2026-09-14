@@ -1,8 +1,10 @@
 # Codecov configuration.
 #
-# Coverage is collected by .github/workflows/quality.yml, which builds with
-# -DPAYLOAD_MANAGER_ENABLE_COVERAGE=ON and runs the unit lane (integration
-# suites need live Postgres/MinIO and are excluded there).
+# Coverage is collected by the build-test job in .github/workflows/ci.yml,
+# which builds with -DPAYLOAD_MANAGER_ENABLE_COVERAGE=ON and runs the unit
+# lane plus the Postgres repository-parity suite. The remaining integration
+# suites and the end-to-end stack run in their own jobs against compose
+# stacks, uninstrumented, so they contribute no coverage.
 
 coverage:
   precision: 1

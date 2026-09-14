@@ -1,0 +1,596 @@
+name: CI
+
+# One pipeline for everything: lint, generated-code drift, unit tests and
+# coverage, the integration and end-to-end stacks, GPU tests, and the six
+# container images. This replaces quality.yml plus six near-identical
+# docker-*.yml workflows that differed only in image name and Dockerfile.
+#
+# The images publish only after the test jobs pass. Previously they ran in
+# parallel with the tests, so a red main still pushed to ghcr.
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+# A new push to the same ref makes the in-flight run redundant. Never cancel
+# on main or on a tag: those runs publish images.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+env:
+  ARROW_VERSION: "25.0.1"
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Lint
+  # ---------------------------------------------------------------------------
+
+  format:
+    name: clang-format
+    runs-on: ubuntu-latest
+    container:
+      image: ubuntu:26.04
+    steps:
+      - name: Install clang-format
+        run: |
+          apt-get update
+          DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+            clang-format cmake git ca-certificates
+
+      - uses: actions/checkout@v4
+
+      - name: Check formatting
+        run: |
+          cmake -DCLANG_FORMAT_EXE="$(command -v clang-format)" \
+                -DSOURCE_DIR="$PWD" -DCHECK=ON \
+                -P cmake/RunClangFormat.cmake
+
+  tidy:
+    name: clang-tidy
+    runs-on: ubuntu-latest
+    container:
+      image: ubuntu:26.04
+    steps:
+      - name: Bootstrap
+        run: |
+          apt-get update
+          DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+            ca-certificates git wget
+
+      - uses: actions/checkout@v4
+
+      - uses: ./.github/actions/setup-cpp-deps
+        with:
+          arrow-version: ${{ env.ARROW_VERSION }}
+          extra-packages: clang-tidy clang-tools
+
+      # clang-tidy needs compile_commands.json plus every generated header.
+      - name: Configure and generate protos
+        run: |
+          cmake -S . -B build -G Ninja -DPAYLOAD_MANAGER_ENABLE_OTEL=ON -DBUILD_TESTING=ON
+          cmake --build build --target generate_protos
+
+      # Drive the file list from compile_commands.json rather than git, so we
+      # only analyse translation units actually in this build configuration.
+      # Analysing one that is not (e.g. the CUDA store when CUDA is off) makes
+      # clang-tidy fall back to default flags and report spurious
+      # "file not found" errors.
+      - name: Run clang-tidy on our sources
+        run: |
+          mapfile -t files < <(python3 -c "
+          import json
+          keep = ('/internal/', '/client/cpp/', '/cmd/')
+          seen = set()
+          for e in json.load(open('build/compile_commands.json')):
+              f = e['file']
+              if any(k in f for k in keep) and '.pb.cc' not in f and f not in seen:
+                  seen.add(f); print(f)
+          ")
+          printf 'Analysing %d translation units\n' "${#files[@]}"
+          # -DFMT_CONSTEVAL= : spdlog's headers use fmt's consteval format-string
+          # checking, which the clang frontend cannot constant-evaluate in code
+          # compiled for GCC. Without this every TU including spdlog reports a
+          # spurious clang-diagnostic-error.
+          run-clang-tidy -p build -quiet -j"$(nproc)" \
+            -extra-arg=-DFMT_CONSTEVAL= "${files[@]}"
+
+  # ---------------------------------------------------------------------------
+  # Generated code
+  #
+  # buf generate silently produced nothing for months after the proto roots
+  # were consolidated, and nobody noticed because nothing checked. The Go
+  # stubs simply froze. This job is the check that was missing.
+  # ---------------------------------------------------------------------------
+
+  generated:
+    name: Generated code is current
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: gateway/go.mod
+          cache-dependency-path: gateway/go.sum
+
+      - uses: bufbuild/buf-setup-action@v1
+        with:
+          version: 1.73.0
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+
+      # Pinned to the versions the committed stubs name in their own headers,
+      # so a diff here means the schema moved — not that the generator did.
+      # grpc-gateway tracks the version gateway/go.mod depends on.
+      - name: Install protoc plugins
+        run: |
+          set -euo pipefail
+          go install google.golang.org/protobuf/cmd/protoc-gen-go@v1.36.11
+          go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@v1.6.1
+          go install github.com/grpc-ecosystem/grpc-gateway/v2/protoc-gen-grpc-gateway@v2.28.0
+          go install github.com/grpc-ecosystem/grpc-gateway/v2/protoc-gen-openapiv2@v2.28.0
+
+      - name: Regenerate Go stubs
+        run: buf generate
+
+      - name: Fail if the committed stubs are stale
+        run: |
+          if ! git diff --exit-code -- gateway/gen gateway/openapi; then
+            echo "::error::Generated Go stubs are out of date. Run 'buf generate' and commit the result."
+            exit 1
+          fi
+
+      - name: Gateway builds against the generated stubs
+        run: |
+          # main.go embeds ./static, which is produced by the UI build. The
+          # image build does that; here a placeholder is enough to compile.
+          mkdir -p gateway/static && echo '<!doctype html>' > gateway/static/index.html
+          cd gateway && go build ./... && go vet ./gen/...
+
+  # ---------------------------------------------------------------------------
+  # Build, unit tests, coverage, repository parity
+  # ---------------------------------------------------------------------------
+
+  build-test:
+    name: Build, unit tests and coverage
+    runs-on: ubuntu-latest
+    container:
+      image: ubuntu:26.04
+      # The RAM and ring tiers allocate POSIX shm; the default 64 MB is too
+      # small for the tier-accounting and ring suites.
+      options: --shm-size=1g
+    services:
+      # Only the repository parity suite uses this. Everything else is
+      # in-process against the in-memory repository.
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: payload
+          POSTGRES_PASSWORD: payload
+          POSTGRES_DB: payload_manager
+        options: >-
+          --health-cmd "pg_isready -U payload -d payload_manager"
+          --health-interval 10s --health-timeout 5s --health-retries 10
+    steps:
+      - name: Bootstrap
+        run: |
+          apt-get update
+          DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+            ca-certificates git wget
+
+      - uses: actions/checkout@v4
+
+      - uses: ./.github/actions/setup-cpp-deps
+        with:
+          arrow-version: ${{ env.ARROW_VERSION }}
+          extra-packages: gcovr python3-pip
+
+      # The Python stub check below compares committed output byte for byte,
+      # so the generator has to be pinned. Left to whatever grpcio-tools the
+      # runner happens to carry, the check would report the toolchain moving
+      # rather than the schema. This pin is what produced the committed stubs
+      # and dictates the floors in client/python/setup.py — the three move
+      # together.
+      #
+      # --break-system-packages because Ubuntu marks its interpreter
+      # externally managed; the container is thrown away after the job, and
+      # installing into it is what lets CMake's own Python3 detection find
+      # grpc_tools without a second interpreter to keep in step.
+      - name: Pin the Python proto toolchain
+        run: pip3 install --break-system-packages --quiet "grpcio-tools==1.75.1"
+
+      # PAYLOAD_MANAGER_ENABLE_PYTHON_PROTO=ON rather than relying on
+      # autodetection: without it a missing toolchain silently drops the
+      # sync_python_client target, and the check below fails as "no rule to
+      # make target" instead of saying what is actually wrong.
+      - name: Configure
+        run: |
+          cmake -S . -B build -G Ninja \
+            -DPAYLOAD_MANAGER_ENABLE_COVERAGE=ON \
+            -DPAYLOAD_MANAGER_ENABLE_OTEL=ON \
+            -DPAYLOAD_MANAGER_ENABLE_PYTHON_PROTO=ON \
+            -DBUILD_TESTING=ON
+
+      - name: Build
+        run: cmake --build build
+
+      # Integration suites need the live stacks and run in their own jobs, so
+      # a missing service here cannot look like a test failure.
+      - name: Unit tests
+        run: ctest --test-dir build --output-on-failure -E "integration" --output-junit test-results.xml
+
+      # Parity is the one integration suite that needs nothing but a database,
+      # and it creates its own schema.
+      - name: Repository parity against Postgres
+        env:
+          PAYLOAD_TEST_POSTGRES_URI: "postgresql://payload:payload@postgres:5432/payload_manager"
+        run: ctest --test-dir build --output-on-failure -L parity
+
+      # The committed Python stubs are generated from these protos. Same
+      # reasoning as the Go check above.
+      - name: Fail if the committed Python stubs are stale
+        run: |
+          cmake --build build --target sync_python_client
+          if ! git diff --exit-code -- client/python; then
+            echo "::error::Committed Python stubs are out of date. Run the sync_python_client target and commit the result."
+            exit 1
+          fi
+
+      # Runs even when the suite failed — a red run is exactly when the
+      # per-test breakdown is worth having.
+      - name: Upload test results to Codecov
+        if: ${{ !cancelled() }}
+        uses: codecov/test-results-action@v1
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: build/test-results.xml
+
+      # `build` is passed explicitly rather than relying on gcovr searching
+      # from the working directory: with no search path a build tree it cannot
+      # find yields a perfectly valid report measuring nothing, which uploads
+      # cleanly and silently drops the project status to 0%. The guard turns
+      # that into a failure instead.
+      - name: Generate coverage report
+        run: |
+          set -euo pipefail
+          gcovr --root . build \
+            --exclude '.*/build/.*' \
+            --exclude '.*/tests/.*' \
+            --exclude '.*\.pb\.(h|cc)$' \
+            --exclude '.*/proto/google/.*' \
+            --xml-pretty --output coverage.xml \
+            --print-summary
+
+          lines=$(python3 -c "
+          import xml.etree.ElementTree as ET
+          r = ET.parse('coverage.xml').getroot()
+          print(sum(len(c.findall('lines/line')) for c in r.findall('.//class')))
+          ")
+          echo "coverage.xml describes $lines lines"
+          if [ "$lines" -eq 0 ]; then
+            echo "::error::Coverage report is empty — gcovr found no .gcda data. Refusing to upload 0%."
+            exit 1
+          fi
+
+      - name: Upload to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: coverage.xml
+          fail_ci_if_error: true
+
+  # ---------------------------------------------------------------------------
+  # Python client
+  # ---------------------------------------------------------------------------
+
+  python:
+    name: Python client tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      # Installs the floors setup.py declares, which are the ones the
+      # committed stubs actually require.
+      - name: Install the client
+        run: pip install ./client/python
+
+      - name: Run tests
+        run: python -m unittest discover -s tests/unit/python -p '*_test.py' -v
+
+  # ---------------------------------------------------------------------------
+  # Live stacks
+  #
+  # These use the repository's own compose overlays rather than reimplementing
+  # them here. The API and object-spill suites skip silently when their
+  # environment is unset, so running them without the stack would be a false
+  # green — the compose files are what guarantee the services are really there.
+  # ---------------------------------------------------------------------------
+
+  integration-api:
+    name: Integration (API)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # `--exit-code-from` reports 0 when the named container never starts,
+      # so a stack that dies on a dependency looks like a pass with no tests
+      # run. Observed exactly that: payload-manager exited 2, the test
+      # container produced no output, and compose still returned 0. Assert the
+      # container actually ran and record its real exit status.
+      - name: Run the API integration suite
+        run: |
+          set -euo pipefail
+          COMPOSE=(docker compose
+            -f docker/docker-compose.postgres.yml
+            -f docker/docker-compose.test.yml)
+
+          "${COMPOSE[@]}" up --build --abort-on-container-exit --exit-code-from integration-test || true
+
+          cid=$("${COMPOSE[@]}" ps -a -q integration-test)
+          if [ -z "$cid" ]; then
+            echo "::error::integration-test container was never created — the stack failed to come up."
+            exit 1
+          fi
+          status=$(docker inspect -f '{{.State.Status}}:{{.State.ExitCode}}' "$cid")
+          echo "integration-test => $status"
+          case "$status" in
+            exited:0) echo "integration suite passed" ;;
+            *) echo "::error::integration-test did not pass (state $status)"; exit 1 ;;
+          esac
+
+      - name: Dump logs on failure
+        if: failure()
+        run: docker compose -f docker/docker-compose.postgres.yml -f docker/docker-compose.test.yml logs --no-color
+
+      - name: Tear down
+        if: always()
+        run: |
+          docker compose \
+            -f docker/docker-compose.postgres.yml \
+            -f docker/docker-compose.test.yml \
+            down -v --remove-orphans
+
+  integration-object:
+    name: Integration (object tier / MinIO)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Same false-green guard as the API suite above.
+      - name: Run the object-spill suite
+        run: |
+          set -euo pipefail
+          COMPOSE=(docker compose
+            -f docker/docker-compose.postgres.yml
+            -f docker/docker-compose.minio.yml
+            -f docker/docker-compose.minio.test.yml)
+
+          "${COMPOSE[@]}" up --build --abort-on-container-exit --exit-code-from object-spill-test || true
+
+          cid=$("${COMPOSE[@]}" ps -a -q object-spill-test)
+          if [ -z "$cid" ]; then
+            echo "::error::object-spill-test container was never created — the stack failed to come up."
+            exit 1
+          fi
+          status=$(docker inspect -f '{{.State.Status}}:{{.State.ExitCode}}' "$cid")
+          echo "object-spill-test => $status"
+          case "$status" in
+            exited:0) echo "object-spill suite passed" ;;
+            *) echo "::error::object-spill-test did not pass (state $status)"; exit 1 ;;
+          esac
+
+      - name: Dump logs on failure
+        if: failure()
+        run: |
+          docker compose \
+            -f docker/docker-compose.postgres.yml \
+            -f docker/docker-compose.minio.yml \
+            -f docker/docker-compose.minio.test.yml \
+            logs --no-color
+
+      - name: Tear down
+        if: always()
+        run: |
+          docker compose \
+            -f docker/docker-compose.postgres.yml \
+            -f docker/docker-compose.minio.yml \
+            -f docker/docker-compose.minio.test.yml \
+            down -v --remove-orphans
+
+  e2e:
+    name: End-to-end (gateway + UI)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Same false-green guard as the integration suites above.
+      - name: Run Playwright against the gateway
+        run: |
+          set -euo pipefail
+          COMPOSE=(docker compose -f docker/docker-compose.e2e.yml)
+
+          "${COMPOSE[@]}" up --build --abort-on-container-exit --exit-code-from e2e || true
+
+          cid=$("${COMPOSE[@]}" ps -a -q e2e)
+          if [ -z "$cid" ]; then
+            echo "::error::e2e container was never created — the stack failed to come up."
+            exit 1
+          fi
+          status=$(docker inspect -f '{{.State.Status}}:{{.State.ExitCode}}' "$cid")
+          echo "e2e => $status"
+          case "$status" in
+            exited:0) echo "e2e suite passed" ;;
+            *) echo "::error::e2e did not pass (state $status)"; exit 1 ;;
+          esac
+
+      - name: Dump logs on failure
+        if: failure()
+        run: docker compose -f docker/docker-compose.e2e.yml logs --no-color
+
+      # Screenshots and video are captured only on failure, which is when
+      # they are worth keeping.
+      - name: Upload Playwright report
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: |
+            ui/playwright-report
+            ui/test-results
+          if-no-files-found: ignore
+          retention-days: 7
+
+      - name: Tear down
+        if: always()
+        run: docker compose -f docker/docker-compose.e2e.yml down -v --remove-orphans
+
+  # ---------------------------------------------------------------------------
+  # GPU
+  # ---------------------------------------------------------------------------
+
+  gpu:
+    name: GPU tests
+    # Self-hosted runner with an NVIDIA device. Needs Docker and the NVIDIA
+    # Container Toolkit; the CUDA toolkit itself comes from the image.
+    runs-on: [self-hosted, gpu]
+    steps:
+      - uses: actions/checkout@v4
+
+      # Docker build has no GPU access — there is no --gpus for build — so the
+      # image links against the libcuda stub and its in-build ctest skips every
+      # GPU case. Build the builder stage (which keeps the test binaries) and
+      # run the gpu-labelled suites against a real device.
+      - name: Build the CUDA builder stage
+        run: docker build --target builder -t pm:cuda-builder -f docker/Dockerfile.cuda .
+
+      - name: Confirm a device is visible
+        run: |
+          docker run --rm --gpus all pm:cuda-builder nvidia-smi \
+            --query-gpu=name,driver_version,compute_cap --format=csv
+
+      # CUDA 13 requires a Turing-or-newer device (sm_75+) and an r580+ driver;
+      # a mismatch shows up here rather than as a confusing test failure.
+      - name: Run GPU tests
+        run: |
+          docker run --rm --gpus all -v "$PWD:/out" pm:cuda-builder \
+            ctest --test-dir /workspace/build -L gpu --output-on-failure \
+                  --output-junit /out/gpu-test-results.xml
+
+      - name: Upload GPU test results to Codecov
+        if: ${{ !cancelled() }}
+        uses: codecov/test-results-action@v1
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: gpu-test-results.xml
+
+  # ---------------------------------------------------------------------------
+  # Images
+  #
+  # One matrix in place of six copy-pasted workflows. Gated on the test jobs,
+  # so a red main no longer publishes to ghcr.
+  # ---------------------------------------------------------------------------
+
+  images:
+    name: Image (${{ matrix.name }})
+    needs: [format, tidy, generated, build-test, python, integration-api, integration-object, e2e]
+    runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: payload-manager
+            file: docker/Dockerfile
+            suffix: ""
+            runner: ubuntu-latest
+            platforms: linux/amd64
+            qemu: true
+          - name: otel
+            file: docker/Dockerfile.otel
+            suffix: "-otel"
+            runner: ubuntu-latest
+            platforms: linux/amd64
+            qemu: true
+          - name: cuda
+            file: docker/Dockerfile.cuda
+            suffix: "-cuda"
+            runner: ubuntu-latest
+            platforms: linux/amd64
+            qemu: true
+          - name: payloadctl
+            file: docker/Dockerfile.payloadctl
+            suffix: "-payloadctl"
+            runner: ubuntu-latest
+            platforms: linux/amd64
+            qemu: true
+          - name: gateway
+            file: docker/Dockerfile.gateway
+            suffix: "-gateway"
+            runner: ubuntu-latest
+            platforms: linux/amd64
+            qemu: true
+          # Jetson is disabled for now. It builds natively on the ARM64
+          # self-hosted runner, so it needs no QEMU and no cross platform
+          # argument — uncomment this entry to bring it back. The ARM64 label
+          # is still declared in .github/actionlint.yaml for that.
+          # - name: jetson
+          #   file: docker/Dockerfile.jetson
+          #   suffix: "-jetson"
+          #   runner: [self-hosted, ARM64]
+          #   platforms: ""
+          #   qemu: false
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        if: matrix.qemu
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository }}${{ matrix.suffix }}
+          # latest was missing entirely, so `docker pull ghcr.io/<repo>` —
+          # the implicit :latest that every doc example uses — did not resolve.
+          tags: |
+            type=ref,event=branch
+            type=ref,event=tag
+            type=sha
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ${{ matrix.file }}
+          platforms: ${{ matrix.platforms }}
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

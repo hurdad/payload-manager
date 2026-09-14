@@ -1,0 +1,6 @@
+# Labels for this project's self-hosted runners, so actionlint does not
+# report them as typos against the hosted-runner list.
+self-hosted-runner:
+  labels:
+    - gpu
+    - ARM64
