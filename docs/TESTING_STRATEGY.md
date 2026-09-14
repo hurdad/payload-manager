@@ -124,12 +124,13 @@ Scenarios:
 
 - Run repository contract suite against:
   - PostgreSQL (containerized service)
-- Verify migrations apply cleanly and schema version checks behave as expected.
+- Verify the schema bootstrap applies cleanly to a fresh database and replays
+  safely against one that already has it.
 
 Focus files:
 
 - `internal/db/postgres/*`
-- `internal/db/migrations/*`
+- `internal/db/postgres/pg_schema.*`
 
 ### gRPC API integration
 

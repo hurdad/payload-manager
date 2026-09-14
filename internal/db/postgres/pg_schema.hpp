@@ -3,10 +3,11 @@
 // Postgres schema bootstrap.
 //
 // One definition of the schema, shared by the service and by the tests that
-// run against a real database. It lived inline in factory::Build, and the
-// repository-parity test carried its own hand-written copy alongside the
-// .sql files under internal/db/migrations — three descriptions of the same
-// tables, free to drift.
+// run against a real database. It lived inline in factory::Build, the
+// repository-parity test carried its own hand-written copy, and a set of
+// numbered .sql files sat under internal/db/migrations that nothing loaded —
+// three descriptions of the same tables, free to drift. The .sql files are
+// gone; this is the only one left.
 //
 // They did. The test's copy never gained min_residency_tier or
 // require_durable, typed ids as TEXT where the service uses UUID, and left

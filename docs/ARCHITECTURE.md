@@ -56,7 +56,18 @@ Implementations:
 - `internal/db/memory`: in-process testing backend.
 - `internal/db/postgres`: multi-node catalog backend.
 
-Migrations live under `internal/db/migrations`.
+The Postgres schema is created and upgraded by `db::postgres::BootstrapSchema`
+(`internal/db/postgres/pg_schema.hpp`), called once at startup by
+`factory::BuildRepository` and again by the repository parity test, so there is
+exactly one description of the schema. Every statement is idempotent —
+`CREATE ... IF NOT EXISTS`, `ADD COLUMN IF NOT EXISTS`, guarded `DO $$` blocks
+for renames and type changes — so it is safe to replay against a fresh database
+or one created by an older build.
+
+There is no migration runner. A versioned one becomes worth building at the
+first change idempotent DDL cannot express — a dropped column, a split table, a
+data backfill, anything order-dependent. Until then a second, ordered
+description of the schema would only be something to keep in step.
 
 ### Storage tier abstraction
 
