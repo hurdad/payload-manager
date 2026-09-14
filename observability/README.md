@@ -26,7 +26,7 @@ already using:
 
 ```bash
 docker compose \
-  -f docker/docker-compose.otel.postgres.yml \
+  -f docker/docker-compose.postgres.yml -f docker/docker-compose.otel.yml \
   -f docker/docker-compose.observability.yml \
   up --build
 ```

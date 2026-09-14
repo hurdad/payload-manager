@@ -146,9 +146,14 @@ everything else.
 
 Base stacks:
 
-- `docker-compose.postgres.yml`
-- `docker-compose.otel.postgres.yml`
-- `docker-compose.gpu.postgres.yml`
+- `docker-compose.memory.yml` — in-memory catalog; one container, no database.
+- `docker-compose.postgres.yml` — PostgreSQL catalog.
+- `docker-compose.gpu.postgres.yml` — PostgreSQL catalog, GPU tier.
+
+Stacks are named for the catalog backend. Observability is not a stack: since
+OpenTelemetry was folded into the single service image, the only thing that
+separated a "with OTEL" deployment from a plain one was the config it mounted,
+so `docker-compose.otel.yml` overrides that and nothing else.
 
 Gateway stack (self-contained):
 
@@ -174,7 +179,7 @@ docker compose -f docker/docker-compose.gateway.yml up --build
 docker compose -f docker/docker-compose.postgres.yml up --build
 
 # With observability
-docker compose -f docker/docker-compose.otel.postgres.yml -f docker/docker-compose.observability.yml up --build
+docker compose -f docker/docker-compose.postgres.yml -f docker/docker-compose.otel.yml -f docker/docker-compose.observability.yml up --build
 ```
 
 > Note: Compose files set `build.context: ..` and `dockerfile: docker/...` so they can be executed via `-f docker/<file>.yml` while still building from the repository root context.

@@ -174,19 +174,32 @@ stack *configures* observability, not whether the image supports it: every
 service image has OpenTelemetry compiled in, and it stays inert until
 `observability.metrics_enabled` or `.tracing_enabled` is set.
 
-| Compose file | Database | OTEL configured | GPU | Host port |
-|---|---|---|---|---|
-| `docker/docker-compose.postgres.yml` | Postgres | Off | Off | 50051 |
-| `docker/docker-compose.otel.postgres.yml` | Postgres | On | Off | 50055 |
-| `docker/docker-compose.gpu.postgres.yml` | Postgres | Off | On | 50056 |
-| `docker/docker-compose.gateway.yml` | Postgres | Off | Off | 8080 (HTTP) |
+Stacks are organised by catalog backend. Observability is an overlay rather
+than a stack of its own: OpenTelemetry is compiled into the one service image,
+so what used to distinguish a "with OTEL" deployment is only which config it
+mounts.
+
+| Compose file | Database | GPU | Host port |
+|---|---|---|---|
+| `docker/docker-compose.memory.yml` | **memory** — no DB container | Off | 50052 |
+| `docker/docker-compose.postgres.yml` | PostgreSQL | Off | 50051 |
+| `docker/docker-compose.gpu.postgres.yml` | PostgreSQL | On | 50056 |
+| `docker/docker-compose.gateway.yml` | PostgreSQL | Off | 8080 (HTTP) |
+
+| Overlay | Effect |
+|---|---|
+| `docker/docker-compose.otel.yml` | Swaps in a config with metrics and tracing enabled |
+| `docker/docker-compose.observability.yml` | Adds Alloy, Prometheus, Grafana and Tempo to receive it |
 
 ```bash
-# Postgres, observability not configured
+# Memory catalog — one container, no database to run
+docker compose -f docker/docker-compose.memory.yml up --build
+
+# PostgreSQL, observability not configured
 docker compose -f docker/docker-compose.postgres.yml up --build
 
 # Postgres + OTEL (add observability stack)
-docker compose -f docker/docker-compose.otel.postgres.yml -f docker/docker-compose.observability.yml up --build
+docker compose -f docker/docker-compose.postgres.yml -f docker/docker-compose.otel.yml -f docker/docker-compose.observability.yml up --build
 
 # GPU + Postgres. Its config does not enable observability, so the overlay
 # below has nothing to receive — use docker-compose.gateway.gpu.yml or the

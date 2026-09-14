@@ -1,0 +1,41 @@
+# The same deployment as docker-compose.postgres.yml with the in-memory catalog
+# instead of PostgreSQL, which means there is no database container at all —
+# this stack is one service and nothing else, and is the shortest way to get a
+# payload-manager listening.
+#
+# Payload references do not survive a restart. That is the whole trade: no
+# database to run, and a catalog that is gone when the process is. Use
+# docker-compose.postgres.yml for anything that needs to outlive the container.
+#
+#   docker compose -f docker/docker-compose.memory.yml up --build
+#
+# Port 50052 rather than 50051 so it can run alongside the PostgreSQL stack.
+
+services:
+  payload-manager:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    restart: unless-stopped
+    hostname: payload-manager
+    command: ["./payload-manager", "--config", "/app/conf/runtime-docker-memory.yaml"]
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c '</dev/tcp/localhost/50051'"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 10s
+    # Shares the host IPC namespace so clients on the host can map the RAM and
+    # ring tiers' shm segments — the same reason every other stack here does.
+    ipc: host
+    ports:
+      - "50052:50051"
+    volumes:
+      - ../config/runtime-docker-memory.yaml:/app/conf/runtime-docker-memory.yaml:ro
+      - payload-memory-data:/var/lib/payload-manager
+
+volumes:
+  # The disk tier still persists; only the catalog is in memory. Keeping the
+  # volume means a restart leaves orphaned files the fresh catalog knows nothing
+  # about, which is precisely the trade this stack is making visible.
+  payload-memory-data:

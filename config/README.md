@@ -29,6 +29,9 @@ the first restart, so it is worth saying which one you meant.
 
 ### Observability not configured
 
+- `runtime-docker-memory.yaml` - in-memory catalog, no GPU. Used by
+  `docker-compose.memory.yml`, which needs no database container.
+
 - `runtime-docker-postgres.yaml` - no GPU.
 - `runtime-docker-postgres-minio.yaml` - no GPU + MinIO object store.
 - `runtime-docker-gpu-postgres.yaml` - GPU-enabled.

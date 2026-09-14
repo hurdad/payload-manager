@@ -1,0 +1,26 @@
+# Observability overlay: swaps in a config with metrics and tracing enabled.
+#
+# This is not a stack. Since OpenTelemetry was folded into the one service
+# image, the only thing that separated a "with OTEL" deployment from a plain one
+# was which config file it mounted — so this overrides that and nothing else,
+# rather than duplicating a whole stack to express it.
+#
+# Layer it on either database backend:
+#
+#   docker compose -f docker/docker-compose.postgres.yml \
+#                  -f docker/docker-compose.otel.yml \
+#                  -f docker/docker-compose.observability.yml up --build
+#
+# The third file is what actually receives the telemetry — Alloy, Prometheus,
+# Grafana and Tempo. Without it the service exports to an endpoint nobody is
+# listening on and logs the failures.
+#
+# Note the config below is PostgreSQL-backed, so this composes with
+# docker-compose.postgres.yml. The memory stack has no observability-enabled
+# config of its own; add one if you want that combination.
+
+services:
+  payload-manager:
+    command: ["./payload-manager", "--config", "/app/conf/runtime-docker-otel-postgres.yaml"]
+    volumes:
+      - ../config/runtime-docker-otel-postgres.yaml:/app/conf/runtime-docker-otel-postgres.yaml:ro
