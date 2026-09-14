@@ -48,6 +48,43 @@ std::string_view TierName(Tier tier) {
 
 } // namespace
 
+uint64_t PayloadManager::TierLimit(Tier tier) const {
+  if (!pressure_state_) {
+    return std::numeric_limits<uint64_t>::max();
+  }
+  switch (tier) {
+    case TIER_RAM:
+      return pressure_state_->ram_limit;
+    case TIER_GPU:
+      return pressure_state_->gpu_limit;
+    case TIER_DISK:
+      return pressure_state_->disk_limit;
+    default:
+      // TIER_OBJECT is remote and TIER_VOID discards, so neither is capped here.
+      return std::numeric_limits<uint64_t>::max();
+  }
+}
+
+PayloadManager::TierReservation PayloadManager::ReserveTierBytes(Tier tier, uint64_t size_bytes) {
+  const uint64_t limit = TierLimit(tier);
+
+  {
+    std::lock_guard<std::mutex> lock(tier_bytes_guard_);
+    auto&                       current = tier_bytes_[static_cast<int>(tier)];
+
+    // Compare as limit-current to avoid overflowing on current+size_bytes.
+    if (limit != std::numeric_limits<uint64_t>::max() && (current > limit || size_bytes > limit - current)) {
+      payload::observability::Metrics::Instance().RecordAllocationFailure(TierName(tier));
+      throw payload::util::ResourceExhausted("allocate payload: " + std::string(TierName(tier)) + " tier is full (" + std::to_string(current) +
+                                             " + " + std::to_string(size_bytes) + " bytes would exceed the configured capacity of " +
+                                             std::to_string(limit) + " bytes)");
+    }
+    current += size_bytes;
+  }
+
+  return TierReservation(this, tier, size_bytes);
+}
+
 void PayloadManager::UpdateTierBytes(Tier tier, int64_t delta) {
   uint64_t bytes = 0;
   {
@@ -338,6 +375,12 @@ PayloadDescriptor PayloadManager::Allocate(uint64_t size_bytes, Tier preferred, 
     throw payload::util::InvalidArgument("allocate payload: size_bytes exceeds maximum allowed size (128 GiB)");
   }
 
+  // Admission control before any backend allocation: refusing here is what
+  // turns a tmpfs overcommit into a RESOURCE_EXHAUSTED for the caller instead
+  // of a SIGBUS in the producer on first write. Released automatically unless
+  // the payload is durably recorded below.
+  auto reservation = ReserveTierBytes(preferred, size_bytes);
+
   PayloadDescriptor desc;
   *desc.mutable_payload_id() = payload::util::ToProto(payload::util::GenerateUUID());
   desc.set_tier(preferred);
@@ -436,7 +479,7 @@ PayloadDescriptor PayloadManager::Allocate(uint64_t size_bytes, Tier preferred, 
   }
 
   CacheSnapshot(desc);
-  UpdateTierBytes(preferred, static_cast<int64_t>(size_bytes));
+  reservation.Commit(); // bytes were reserved up-front; keep them
   UpdateTierCount(preferred, 1);
   return desc;
 }

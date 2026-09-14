@@ -11,6 +11,7 @@
 #include "internal/db/api/repository.hpp"
 #include "internal/metadata/metadata_cache.hpp"
 #include "internal/storage/storage_factory.hpp"
+#include "internal/tiering/pressure_state.hpp"
 #include "internal/util/uuid.hpp"
 #include "payload/manager/core/v1/id.pb.h"
 #include "payload/manager/core/v1/placement.pb.h"
@@ -127,6 +128,64 @@ class PayloadManager {
 
   void UpdateTierBytes(payload::manager::v1::Tier tier, int64_t delta);
   void UpdateTierCount(payload::manager::v1::Tier tier, int64_t delta);
+
+  /*
+    Admission control for a tier's hard cap.
+
+    Without this, an allocation that does not fit still succeeds: shm_open,
+    ftruncate and mmap only touch metadata and address space, so the tmpfs
+    overcommit is not discovered until the *producer* writes into the mapping
+    and takes SIGBUS. Refusing here turns that into a RESOURCE_EXHAUSTED the
+    caller can act on.
+
+    The check and the increment happen under one lock, so concurrent
+    allocations cannot each observe room for the last slot and both proceed.
+    The returned guard releases the reservation unless Commit() is called, so
+    a failed backend allocation or database insert does not leak tier bytes.
+  */
+  class TierReservation {
+   public:
+    TierReservation(PayloadManager* owner, payload::manager::v1::Tier tier, uint64_t bytes) : owner_(owner), tier_(tier), bytes_(bytes) {
+    }
+    TierReservation(TierReservation&& other) noexcept : owner_(other.owner_), tier_(other.tier_), bytes_(other.bytes_) {
+      other.owner_ = nullptr;
+    }
+    TierReservation(const TierReservation&)            = delete;
+    TierReservation& operator=(const TierReservation&) = delete;
+    TierReservation& operator=(TierReservation&&)      = delete;
+
+    ~TierReservation() {
+      if (owner_ != nullptr) {
+        owner_->UpdateTierBytes(tier_, -static_cast<int64_t>(bytes_));
+      }
+    }
+
+    // Keep the bytes: the payload is now durably recorded.
+    void Commit() {
+      owner_ = nullptr;
+    }
+
+   private:
+    PayloadManager*            owner_;
+    payload::manager::v1::Tier tier_;
+    uint64_t                   bytes_;
+  };
+
+  // Throws payload::util::ResourceExhausted when the tier cannot take the bytes.
+  TierReservation ReserveTierBytes(payload::manager::v1::Tier tier, uint64_t size_bytes);
+
+  // Hard cap for a tier, or UINT64_MAX when uncapped / not configured.
+  uint64_t TierLimit(payload::manager::v1::Tier tier) const;
+
+  // Optional: when unset (the default, and the case in most unit tests) no
+  // admission control is applied and behaviour matches the original code.
+  std::shared_ptr<payload::tiering::PressureState> pressure_state_;
+
+ public:
+  // Wired by the factory once the configured tier limits are known.
+  void SetPressureState(std::shared_ptr<payload::tiering::PressureState> state) {
+    pressure_state_ = std::move(state);
+  }
 };
 
 } // namespace payload::core

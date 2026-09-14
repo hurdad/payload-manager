@@ -298,6 +298,18 @@ Application Build(const payload::runtime::config::RuntimeConfig& config) {
   }
   pressure_state->gpu_evict_pct = resolve_pct(gpu_pct);
 
+  // Hand the resolved limits to the manager so Allocate can refuse requests a
+  // tier cannot take, rather than letting the producer discover it as SIGBUS.
+  payload_manager->SetPressureState(pressure_state);
+
+  PAYLOAD_LOG_INFO("resolved tier limits",
+                   {payload::observability::IntField("ram_capacity_bytes", static_cast<int64_t>(pressure_state->ram_limit)),
+                    payload::observability::IntField("ram_evict_at_bytes", static_cast<int64_t>(pressure_state->RamEvictThreshold())),
+                    payload::observability::IntField("disk_capacity_bytes", static_cast<int64_t>(pressure_state->disk_limit)),
+                    payload::observability::IntField("disk_evict_at_bytes", static_cast<int64_t>(pressure_state->DiskEvictThreshold())),
+                    payload::observability::IntField("gpu_capacity_bytes", static_cast<int64_t>(pressure_state->gpu_limit)),
+                    payload::observability::IntField("gpu_evict_at_bytes", static_cast<int64_t>(pressure_state->GpuEvictThreshold()))});
+
   auto tiering_policy = std::make_shared<tiering::TieringPolicy>(
       metadata_cache,
       // RAM eviction: only consider payloads currently resident in RAM.

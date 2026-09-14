@@ -16,6 +16,7 @@
 #include "internal/storage/storage_backend.hpp"
 #include "internal/tiering/pressure_state.hpp"
 #include "internal/tiering/tiering_policy.hpp"
+#include "internal/util/errors.hpp"
 #include "payload/manager/v1.hpp"
 
 namespace {
@@ -267,4 +268,79 @@ TEST(TieringPressure, HighWaterDoesNotOverflowOnHugeCaps) {
   const auto         t     = payload::tiering::PressureState::EvictionThreshold(kHuge, 80);
   EXPECT_GT(t, kHuge / 2) << "threshold must not wrap around";
   EXPECT_LT(t, kHuge) << "threshold must still be below the hard cap";
+}
+
+// ---------------------------------------------------------------------------
+// Hard cap / admission control.
+//
+// Before this, an allocation that did not fit still succeeded: shm_open,
+// ftruncate and mmap only touch metadata and address space, so a tmpfs
+// overcommit was not discovered until the *producer* wrote into the mapping and
+// took SIGBUS — in the producer, with nothing in this service's logs pointing
+// at it. Allocate now refuses with ResourceExhausted, which the gRPC layer maps
+// to RESOURCE_EXHAUSTED.
+// ---------------------------------------------------------------------------
+
+TEST(TieringCapacity, AllocateSucceedsWithinTheHardCap) {
+  Fixture f;
+  auto    state    = std::make_shared<payload::tiering::PressureState>();
+  state->ram_limit = 1024;
+  f.manager->SetPressureState(state);
+
+  EXPECT_NO_THROW((void)f.manager->Allocate(1024, TIER_RAM)) << "an allocation that exactly fills the tier must be allowed";
+}
+
+TEST(TieringCapacity, AllocateRefusesBeyondTheHardCap) {
+  Fixture f;
+  auto    state    = std::make_shared<payload::tiering::PressureState>();
+  state->ram_limit = 1024;
+  f.manager->SetPressureState(state);
+
+  EXPECT_THROW((void)f.manager->Allocate(1025, TIER_RAM), payload::util::ResourceExhausted);
+}
+
+TEST(TieringCapacity, RefusalAccountsForBytesAlreadyResident) {
+  Fixture f;
+  auto    state    = std::make_shared<payload::tiering::PressureState>();
+  state->ram_limit = 1024;
+  f.manager->SetPressureState(state);
+
+  (void)f.manager->Allocate(768, TIER_RAM);
+  EXPECT_THROW((void)f.manager->Allocate(512, TIER_RAM), payload::util::ResourceExhausted) << "768 + 512 exceeds 1024 and must be refused";
+  EXPECT_NO_THROW((void)f.manager->Allocate(256, TIER_RAM)) << "but the remaining 256 bytes are still available";
+}
+
+TEST(TieringCapacity, RefusedAllocationDoesNotConsumeTierBytes) {
+  Fixture f;
+  auto    state    = std::make_shared<payload::tiering::PressureState>();
+  state->ram_limit = 1024;
+  f.manager->SetPressureState(state);
+
+  (void)f.manager->Allocate(512, TIER_RAM);
+  EXPECT_THROW((void)f.manager->Allocate(4096, TIER_RAM), payload::util::ResourceExhausted);
+
+  // A refusal that leaked its reservation would make the tier appear fuller
+  // than it is and wedge every later allocation.
+  const auto bytes = f.manager->GetTierBytes();
+  const auto it    = bytes.find(static_cast<int>(TIER_RAM));
+  ASSERT_NE(it, bytes.end());
+  EXPECT_EQ(it->second, 512u) << "a refused allocation must not consume capacity";
+
+  EXPECT_NO_THROW((void)f.manager->Allocate(512, TIER_RAM));
+}
+
+TEST(TieringCapacity, UnsetPressureStateAppliesNoAdmissionControl) {
+  Fixture f; // no SetPressureState call
+  EXPECT_NO_THROW((void)f.manager->Allocate(64ull * 1024 * 1024, TIER_RAM)) << "without configured limits behaviour must match the original code";
+}
+
+TEST(TieringCapacity, EachTierIsCappedIndependently) {
+  Fixture f;
+  auto    state     = std::make_shared<payload::tiering::PressureState>();
+  state->ram_limit  = 512;
+  state->disk_limit = 4096;
+  f.manager->SetPressureState(state);
+
+  EXPECT_THROW((void)f.manager->Allocate(1024, TIER_RAM), payload::util::ResourceExhausted);
+  EXPECT_NO_THROW((void)f.manager->Allocate(1024, TIER_DISK)) << "a full RAM tier must not block the disk tier";
 }
