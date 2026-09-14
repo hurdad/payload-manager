@@ -480,10 +480,23 @@ jobs:
       # This build is uncached and multi-GB, and the runner is long-lived. Show
       # what is left before starting, so "no space left on device" 25 minutes in
       # is diagnosable from the log rather than only from the box.
-      - name: Disk space before build
+      #
+      # Bytes are not the only way to get ENOSPC, and a run that failed with it
+      # left no trace on the host afterwards, so capture all three candidates:
+      # free space, free inodes, and the container's /dev/shm. Docker defaults
+      # shm to 64 MB, and the builder stage runs ctest inside the build — a ring
+      # test allocating a POSIX shm segment larger than that fails with exactly
+      # "no space left on device" while the host disk sits idle.
+      - name: Capacity before build
         run: |
+          echo "--- free space ---"
           df -h / /var/lib/docker 2>/dev/null | sort -u
+          echo "--- free inodes ---"
+          df -i / /var/lib/docker 2>/dev/null | sort -u
+          echo "--- docker ---"
           docker system df
+          echo "--- container /dev/shm default ---"
+          docker run --rm --entrypoint df ubuntu:26.04 -h /dev/shm 2>&1 || true
 
       - name: Build the CUDA builder stage
         run: docker build --target builder -t pm:cuda-builder -f docker/Dockerfile.cuda .
