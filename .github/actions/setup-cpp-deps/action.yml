@@ -25,6 +25,19 @@ inputs:
 runs:
   using: composite
   steps:
+    # The container jobs run as root over a workspace actions/checkout created
+    # as another user, so git refuses to touch it:
+    #
+    #   fatal: detected dubious ownership in repository at '/__w/...'
+    #
+    # Any step running git then exits 128. That is what the Python stub check
+    # was actually hitting — and because its predecessor tested `if ! git diff`,
+    # git crashing was indistinguishable from files differing, so it reported
+    # "stubs are out of date" for three runs while the stubs were fine.
+    - name: Trust the workspace
+      shell: bash
+      run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
     - name: Install build dependencies
       shell: bash
       run: |
