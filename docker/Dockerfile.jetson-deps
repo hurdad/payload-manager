@@ -69,6 +69,18 @@ ARG AWS_SDK_VERSION=1.11.778
 ARG BUILD_JOBS=4
 
 # Ubuntu 22.04's cmake is 3.22. Arrow wants newer, so take Kitware's.
+#
+# The upgrade below is what picks up jammy-security: the base image is dated
+# October 2023 and roughly 170 of its packages have had security updates since.
+# It runs after the Kitware source is added and before anything is built, so
+# every library compiled in this stage links the patched versions.
+#
+# nvidia-l4t-*, cuda-* and libnvidia-* are held first. An L4T image carries
+# NVIDIA's own apt source, and the CUDA userspace here is pinned to 12.2.12 to
+# match the driver the container runtime bind-mounts from the host — letting apt
+# move it is how the container ends up with a CUDA that does not match the board.
+# Nothing in those sets has an update to take today; the hold is so that stays
+# true when NVIDIA next publishes to r36.0.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         ca-certificates gnupg wget git \
@@ -77,6 +89,10 @@ RUN apt-get update \
     && echo "deb [signed-by=/usr/share/keyrings/kitware-archive-keyring.gpg] https://apt.kitware.com/ubuntu/ jammy main" \
        > /etc/apt/sources.list.d/kitware.list \
     && apt-get update \
+    && dpkg-query -W -f='${Package}\n' \
+       | grep -E '^(nvidia-l4t-|cuda-|libnvidia-)' \
+       | xargs -r apt-mark hold \
+    && apt-get upgrade -y \
     && apt-get install -y --no-install-recommends \
         build-essential ninja-build cmake pkg-config \
         libssl-dev zlib1g-dev libcurl4-openssl-dev \
@@ -220,6 +236,16 @@ RUN git clone --depth 1 --branch ${AWS_SDK_VERSION} https://github.com/aws/aws-s
 # arrow::fs::EnsureS3Initialized and the GPU tier uses arrow::cuda. AWSSDK_SOURCE
 # is SYSTEM because the step above already installed the exact version Arrow
 # would otherwise have downloaded and built inside this one.
+#
+# SIMD_LEVEL is stated rather than left at DEFAULT, which already resolves to
+# NEON on aarch64 — it costs nothing and records the intent at the call site.
+#
+# There is deliberately no CUDA architecture here. Arrow 25.0.1 has no
+# ARROW_CUDA_ARCH option, and nothing in the chain would use one: cpp/src/arrow/gpu
+# contains no .cu files and never calls enable_language(CUDA), it only does
+# find_package(CUDAToolkit) and links CUDA::cuda_driver. This project compiles no
+# device code either. sm_87 would have nothing to apply to, and naming it would
+# tie the image to Orin for no gain.
 RUN git clone --depth 1 --branch ${ARROW_VERSION} https://github.com/apache/arrow.git \
     && cmake -S arrow/cpp -B build-arrow -G Ninja \
         -DCMAKE_BUILD_TYPE=Release \
@@ -232,6 +258,7 @@ RUN git clone --depth 1 --branch ${ARROW_VERSION} https://github.com/apache/arro
         -DARROW_DEPENDENCY_SOURCE=AUTO \
         -DARROW_CUDA=ON \
         -DARROW_S3=ON \
+        -DARROW_SIMD_LEVEL=NEON \
         -DAWSSDK_SOURCE=SYSTEM \
         -DARROW_FILESYSTEM=ON \
         -DARROW_COMPUTE=ON \
@@ -286,10 +313,17 @@ FROM nvcr.io/nvidia/l4t-cuda:12.2.12-runtime AS runtime
 
 ENV DEBIAN_FRONTEND=noninteractive
 
+# Upgraded and held on the same terms as the dev stage above; this base is the
+# same vintage and carries the same backlog.
+#
 # Runtime halves of what the dev stage links against. re2, Abseil, Protobuf,
 # gRPC, OpenTelemetry, the AWS SDK, Arrow and libpqxx are not here — they arrive
 # as shared objects in the COPY below. libpq5 is the C library libpqxx wraps.
 RUN apt-get update \
+    && dpkg-query -W -f='${Package}\n' \
+       | grep -E '^(nvidia-l4t-|cuda-|libnvidia-)' \
+       | xargs -r apt-mark hold \
+    && apt-get upgrade -y \
     && apt-get install -y --no-install-recommends \
         ca-certificates \
         libssl3 zlib1g libcurl4 \

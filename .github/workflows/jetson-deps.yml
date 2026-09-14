@@ -31,9 +31,12 @@ on:
         type: boolean
         default: false
 
+# A newer dependency recipe supersedes an in-flight build of the old one: the
+# tag it was producing is content-derived and nothing will reference it again.
+# Left false, a second push would queue behind a build measured in hours.
 concurrency:
   group: jetson-deps-${{ github.ref }}
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 permissions:
   contents: read
