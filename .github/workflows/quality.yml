@@ -170,8 +170,8 @@ jobs:
 
   gpu:
     name: GPU tests
-    # Self-hosted runner with an NVIDIA device. Adjust these labels to match the
-    # runner's registration; the Jetson workflow uses [self-hosted, ARM64].
+    # Self-hosted runner with an NVIDIA device. Needs Docker and the NVIDIA
+    # Container Toolkit; the CUDA toolkit itself comes from the image.
     runs-on: [self-hosted, gpu]
     steps:
       - name: Checkout
