@@ -175,6 +175,21 @@ class Ring {
   };
   std::vector<SlotSnapshot> Snapshot() const;
 
+  // Aggregate slot accounting, computed under one lock. Feeds both the
+  // admin Stats RPC and the ring metric gauges; both want the same
+  // numbers, and deriving them from Snapshot() would allocate a vector
+  // per poll for no reason.
+  struct Stats {
+    uint32_t slots_total         = 0;
+    uint32_t slots_available     = 0; // acquirable right now — the headroom number
+    uint32_t slots_writing       = 0; // held by a producer that has not committed
+    uint32_t slots_leased        = 0; // refcount > 0
+    uint64_t leases_active       = 0; // sum of refcounts; >= slots_leased
+    uint64_t slots_reclaimed     = 0; // cumulative, see reclaimed_writing_slots()
+    uint64_t slot_capacity_bytes = 0;
+  };
+  Stats GetStats() const;
+
   // Diagnostics: how many slots this ring has had to take back from a
   // producer that never committed. Non-zero means a producer died (or
   // slot_write_timeout is set below its honest worst case) — worth an

@@ -54,6 +54,18 @@ class SpanScope {
 #endif
 };
 
+// Per-ring slot accounting, pushed into the ring gauges. Mirrors
+// payload::ring::Ring::Stats, restated here so observability does not
+// depend on internal/ring.
+struct RingMetrics {
+  std::uint64_t slots_total     = 0;
+  std::uint64_t slots_available = 0;
+  std::uint64_t slots_writing   = 0;
+  std::uint64_t slots_leased    = 0;
+  std::uint64_t leases_active   = 0;
+  std::uint64_t slots_reclaimed = 0;
+};
+
 class Metrics {
  public:
   static Metrics& Instance();
@@ -72,6 +84,10 @@ class Metrics {
   void SetShmBytes(std::uint64_t total, std::uint64_t free_bytes);
   void RecordAllocationFailure(std::string_view tier);
   void SetSpillQueueDepth(std::size_t depth);
+  // Latest slot accounting for one ring, labelled by ring_id. Pushed on a
+  // timer rather than on state change: ring state moves at capture rate
+  // (up to 1 kHz), and every gauge here is a level, not an event.
+  void SetRingStats(std::string_view ring_id, const RingMetrics& stats);
 
  private:
   Metrics();
@@ -165,6 +181,9 @@ inline void Metrics::RecordAllocationFailure(std::string_view) {
 }
 
 inline void Metrics::SetSpillQueueDepth(std::size_t) {
+}
+
+inline void Metrics::SetRingStats(std::string_view, const RingMetrics&) {
 }
 #endif
 

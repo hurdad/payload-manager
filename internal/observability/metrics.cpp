@@ -13,6 +13,7 @@
 #include <unistd.h>
 
 #include <algorithm>
+#include <array>
 #include <chrono>
 #include <cstdlib>
 #include <limits>
@@ -54,6 +55,7 @@ struct MetricsOptions {
   bool request_metrics_enabled{true};
   bool spill_metrics_enabled{true};
   bool tier_occupancy_metrics_enabled{true};
+  bool ring_metrics_enabled{true};
   bool request_latency_histograms_enabled{true};
   bool route_labels_enabled{true};
   bool tier_labels_enabled{true};
@@ -171,6 +173,20 @@ struct Metrics::Impl {
   opentelemetry::nostd::shared_ptr<metrics_api::ObservableInstrument>   shm_bytes_total_gauge;
   opentelemetry::nostd::shared_ptr<metrics_api::ObservableInstrument>   shm_bytes_free_gauge;
 
+  // One observable gauge per RingMetrics field, each labelled by ring_id.
+  // The callbacks all walk the same map, so they need to know which field
+  // to read; that is what the binding carries, and the bindings live here
+  // because AddCallback keeps the void* for the instrument's lifetime.
+  static constexpr std::size_t                                                                     kRingGaugeCount = 6;
+  std::array<opentelemetry::nostd::shared_ptr<metrics_api::ObservableInstrument>, kRingGaugeCount> ring_gauges;
+  struct RingGaugeBinding {
+    Impl*         impl                 = nullptr;
+    std::uint64_t RingMetrics::* field = nullptr;
+  };
+  std::array<RingGaugeBinding, kRingGaugeCount> ring_gauge_bindings;
+  std::mutex                                    ring_mutex;
+  std::unordered_map<std::string, RingMetrics>  ring_values;
+
   std::mutex                                    tier_occupancy_mutex;
   std::unordered_map<std::string, std::int64_t> tier_occupancy_values;
   std::mutex                                    tier_count_mutex;
@@ -269,6 +285,7 @@ bool InitializeMetrics(const payload::runtime::config::RuntimeConfig& config) {
   g_metrics_options.request_metrics_enabled            = metric_config.request_metrics_enabled();
   g_metrics_options.spill_metrics_enabled              = metric_config.spill_metrics_enabled();
   g_metrics_options.tier_occupancy_metrics_enabled     = metric_config.tier_occupancy_metrics_enabled();
+  g_metrics_options.ring_metrics_enabled               = metric_config.ring_metrics_enabled();
   g_metrics_options.request_latency_histograms_enabled = metric_config.request_latency_histograms_enabled();
   g_metrics_options.route_labels_enabled               = metric_config.route_labels_enabled();
   g_metrics_options.tier_labels_enabled                = metric_config.tier_labels_enabled();
@@ -325,6 +342,42 @@ Metrics::Metrics() : impl_(std::make_unique<Impl>()) {
         int_result->Observe(impl->shm_bytes_free.load());
       },
       impl_.get());
+
+  // Ring gauges. Every one is a level rather than an event, including
+  // slots_reclaimed_total: the ring owns the running count, so reporting
+  // it as a gauge keeps the client side of this stateless. Backends that
+  // want a rate can difference it.
+  struct RingGaugeSpec {
+    const char*   name;
+    const char*   description;
+    std::uint64_t RingMetrics::* field;
+  };
+  static constexpr RingGaugeSpec kRingGaugeSpecs[Impl::kRingGaugeCount] = {
+      {"payload.ring.slots_total", "Configured slots in the ring", &RingMetrics::slots_total},
+      {"payload.ring.slots_available", "Slots AcquireRingSlot could take right now", &RingMetrics::slots_available},
+      {"payload.ring.slots_writing", "Slots held by a producer that has not committed", &RingMetrics::slots_writing},
+      {"payload.ring.slots_leased", "Slots pinned by at least one consumer read lease", &RingMetrics::slots_leased},
+      {"payload.ring.leases_active", "Sum of per-slot read-lease refcounts", &RingMetrics::leases_active},
+      {"payload.ring.slots_reclaimed_total", "Slots taken back from a producer that never committed", &RingMetrics::slots_reclaimed},
+  };
+  for (std::size_t i = 0; i < Impl::kRingGaugeCount; ++i) {
+    impl_->ring_gauges[i]         = impl_->meter->CreateInt64ObservableGauge(kRingGaugeSpecs[i].name, kRingGaugeSpecs[i].description, "1");
+    impl_->ring_gauge_bindings[i] = Impl::RingGaugeBinding{impl_.get(), kRingGaugeSpecs[i].field};
+    impl_->ring_gauges[i]->AddCallback(
+        [](metrics_api::ObserverResult result, void* state) {
+          auto*                       binding = static_cast<Impl::RingGaugeBinding*>(state);
+          std::lock_guard<std::mutex> lock(binding->impl->ring_mutex);
+          auto int_result = opentelemetry::nostd::get<opentelemetry::nostd::shared_ptr<metrics_api::ObserverResultT<std::int64_t>>>(result);
+          for (const auto& [ring_id, stats] : binding->impl->ring_values) {
+            // ring_id is always attached: these numbers mean nothing
+            // pooled across rings, and the label set is bounded by static
+            // config rather than by traffic.
+            const std::initializer_list<AttributePair> attributes = {{"ring_id", ring_id}};
+            int_result->Observe(static_cast<std::int64_t>(stats.*(binding->field)), attributes);
+          }
+        },
+        &impl_->ring_gauge_bindings[i]);
+  }
 
   impl_->tier_occupancy_gauge->AddCallback(
       [](metrics_api::ObserverResult result, void* state) {
@@ -449,6 +502,14 @@ void Metrics::SetSpillQueueDepth(std::size_t depth) {
   }
 
   impl_->spill_queue_depth.store(static_cast<std::int64_t>(depth));
+}
+
+void Metrics::SetRingStats(std::string_view ring_id, const RingMetrics& stats) {
+  if (!impl_ || !impl_->ring_gauges[0] || !g_metrics_options.ring_metrics_enabled) {
+    return;
+  }
+  std::lock_guard<std::mutex> lock(impl_->ring_mutex);
+  impl_->ring_values[std::string(ring_id)] = stats;
 }
 
 void Metrics::SetTierOccupancyBytes(std::string_view tier, std::uint64_t bytes) {

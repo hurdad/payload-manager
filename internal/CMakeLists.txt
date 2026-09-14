@@ -49,6 +49,7 @@ set(INTERNAL_SRC
         ring/ring.cpp
         ring/ring_lease_table.cpp
         ring/ring_tier_manager.cpp
+        ring/ring_metrics_publisher.cpp
         service/ring_service.cpp
         grpc/ring_server.cpp
         tiering/tiering_manager.cpp

@@ -100,6 +100,10 @@ message ObservabilityConfig {
     bool request_metrics_enabled = 1;
     bool spill_metrics_enabled = 2;
     bool tier_occupancy_metrics_enabled = 3;
+    // Per-ring slot gauges for TIER_RAM_RING. Cardinality is one series
+    // per ring per gauge, and rings are named in static config, so this is
+    // bounded by configuration rather than by traffic.
+    bool ring_metrics_enabled = 10;
 
     // Cost / cardinality controls
     bool request_latency_histograms_enabled = 4;

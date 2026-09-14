@@ -236,6 +236,25 @@ void Ring::Release(uint32_t slot_idx, uint64_t generation) {
   // on refcount==0 regardless of status.)
 }
 
+Ring::Stats Ring::GetStats() const {
+  std::lock_guard<std::mutex> lk(mu_);
+  Stats                       out;
+  out.slots_total         = cfg_.n_slots;
+  out.slots_reclaimed     = reclaimed_writing_;
+  out.slot_capacity_bytes = cfg_.slot_size_bytes;
+  for (const auto& s : slots_) {
+    if (s.status == SlotStatus::kWriting) ++out.slots_writing;
+    if (s.refcount > 0) {
+      ++out.slots_leased;
+      out.leases_active += s.refcount;
+    }
+    // Mirrors PickAcquireSlot_ exactly: anything it would hand out is
+    // headroom. Keep the two in step if that predicate ever changes.
+    if (s.status != SlotStatus::kWriting && s.refcount == 0) ++out.slots_available;
+  }
+  return out;
+}
+
 uint64_t Ring::reclaimed_writing_slots() const {
   std::lock_guard<std::mutex> lk(mu_);
   return reclaimed_writing_;

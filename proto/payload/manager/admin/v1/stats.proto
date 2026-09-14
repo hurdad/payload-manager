@@ -8,6 +8,40 @@ package payload.manager.admin.v1;
 */
 message StatsRequest {}
 
+/*
+  Per-ring slot accounting for TIER_RAM_RING.
+
+  Rings are not payloads: slots are pre-allocated and recycled in place,
+  so the payload counts and tier bytes above never describe them. What an
+  operator needs instead is headroom (how many slots can be acquired right
+  now) and whether reservations are being lost.
+*/
+message RingStats {
+  string ring_id = 1;
+
+  // Configured slot count, and how many of those AcquireRingSlot could
+  // take right now. slots_available hitting 0 is what makes a producer
+  // see RESOURCE_EXHAUSTED and drop a capture.
+  uint32 slots_total = 2;
+  uint32 slots_available = 3;
+
+  // Where the unavailable ones went: held by a producer mid-write, or
+  // pinned by at least one consumer's read lease.
+  uint32 slots_writing = 4;
+  uint32 slots_leased = 5;
+
+  // Sum of per-slot refcounts — several consumers may hold the same slot,
+  // so this can exceed slots_leased.
+  uint64 leases_active = 6;
+
+  // Cumulative count of slots this ring has had to take back from a
+  // producer that never committed, i.e. one that died mid-capture.
+  // Monotonic for the life of the process; any increase is worth an alert.
+  uint64 slots_reclaimed = 7;
+
+  uint64 slot_capacity_bytes = 8;
+}
+
 message StatsResponse {
   uint64 payloads_gpu = 1;
   uint64 payloads_ram = 2;
@@ -18,4 +52,7 @@ message StatsResponse {
   uint64 bytes_ram = 5;
   uint64 bytes_disk = 6;
   uint64 bytes_object = 8;
+
+  // One entry per configured ring; empty when no ring tier is configured.
+  repeated RingStats rings = 9;
 }

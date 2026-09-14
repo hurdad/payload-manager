@@ -6,6 +6,7 @@
 #include "internal/db/api/repository.hpp"
 #include "internal/observability/logging.hpp"
 #include "internal/observability/spans.hpp"
+#include "internal/ring/ring_tier_manager.hpp"
 #include "payload/manager/v1.hpp"
 
 namespace payload::service {
@@ -55,6 +56,27 @@ StatsResponse AdminService::Stats(const StatsRequest&) {
     resp.set_bytes_disk(get_bytes(TIER_DISK));
     resp.set_bytes_gpu(get_bytes(TIER_GPU));
     resp.set_bytes_object(get_bytes(TIER_OBJECT));
+
+    // Ring slots are pre-allocated and recycled in place, so they appear in
+    // none of the payload counts or tier bytes above. Report them
+    // separately, or an operator reading Stats sees a ring tier that looks
+    // like it holds nothing.
+    if (ctx_.ring_mgr) {
+      for (const auto& ring_id : ctx_.ring_mgr->RingIds()) {
+        auto* ring = ctx_.ring_mgr->GetRing(ring_id);
+        if (!ring) continue;
+        const auto stats = ring->GetStats();
+        auto*      out   = resp.add_rings();
+        out->set_ring_id(ring_id);
+        out->set_slots_total(stats.slots_total);
+        out->set_slots_available(stats.slots_available);
+        out->set_slots_writing(stats.slots_writing);
+        out->set_slots_leased(stats.slots_leased);
+        out->set_leases_active(stats.leases_active);
+        out->set_slots_reclaimed(stats.slots_reclaimed);
+        out->set_slot_capacity_bytes(stats.slot_capacity_bytes);
+      }
+    }
 
     payload::observability::Metrics::Instance().RecordRequest("AdminService.Stats", true);
     payload::observability::Metrics::Instance().ObserveRequestLatencyMs(

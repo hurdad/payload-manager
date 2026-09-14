@@ -22,6 +22,7 @@
 #include "internal/lineage/lineage_graph.hpp"
 #include "internal/metadata/metadata_cache.hpp"
 #include "internal/observability/logging.hpp"
+#include "internal/ring/ring_metrics_publisher.hpp"
 #include "internal/service/admin_service.hpp"
 #include "internal/service/catalog_service.hpp"
 #include "internal/service/data_service.hpp"
@@ -441,7 +442,24 @@ Application Build(const payload::runtime::config::RuntimeConfig& config) {
   // Note: expiration is handled by TieringManager::Loop (calls ExpireStale
   // every 100 ms), so a separate ExpirationWorker is not needed here.
   // ------------------------------------------------------------------
+
+  // ------------------------------------------------------------------
+  // Ring tier (TIER_RAM_RING)
+  //
+  // Slots share the tmpfs with the UUID-addressed RAM tier, and are named
+  // /<prefix>-ring-<ring_id>-slot<i> so they cannot collide with /<prefix>-<uuid>.
+  // RingTierManager::Build is a no-op when no rings are configured.
+  //
+  // Built before the ServiceContext because AdminService::Stats reports
+  // per-ring slot accounting and needs the manager in ctx.
+  // ------------------------------------------------------------------
+  const std::string ring_default_prefix = !config.storage().ram().shm_prefix().empty() ? config.storage().ram().shm_prefix() : "pm";
+  auto              ring_manager        = ring::RingTierManager::Build(config.storage().ring(), ring_default_prefix);
+  auto              ring_lease_table    = std::make_shared<ring::RingLeaseTable>();
+  auto              ring_service        = std::make_shared<service::RingService>(ring_manager.get(), ring_lease_table.get());
+
   service::ServiceContext ctx;
+  ctx.ring_mgr              = ring_manager.get();
   ctx.manager               = payload_manager;
   ctx.metadata              = metadata_cache;
   ctx.lineage               = lineage_graph;
@@ -458,18 +476,6 @@ Application Build(const payload::runtime::config::RuntimeConfig& config) {
   // ------------------------------------------------------------------
   // gRPC servers
   // ------------------------------------------------------------------
-  // ------------------------------------------------------------------
-  // Ring tier (TIER_RAM_RING)
-  //
-  // Slots share the tmpfs with the UUID-addressed RAM tier, and are named
-  // /<prefix>-ring-<ring_id>-slot<i> so they cannot collide with /<prefix>-<uuid>.
-  // RingTierManager::Build is a no-op when no rings are configured.
-  // ------------------------------------------------------------------
-  const std::string ring_default_prefix = !config.storage().ram().shm_prefix().empty() ? config.storage().ram().shm_prefix() : "pm";
-  auto              ring_manager        = ring::RingTierManager::Build(config.storage().ring(), ring_default_prefix);
-  auto              ring_lease_table    = std::make_shared<ring::RingLeaseTable>();
-  auto              ring_service        = std::make_shared<service::RingService>(ring_manager.get(), ring_lease_table.get());
-
   app.grpc_services.push_back(std::make_unique<grpc::DataServer>(data_service));
   app.grpc_services.push_back(std::make_unique<grpc::RingServer>(ring_service));
   app.grpc_services.push_back(std::make_unique<grpc::CatalogServer>(catalog_service));
@@ -478,7 +484,14 @@ Application Build(const payload::runtime::config::RuntimeConfig& config) {
   const auto     poll_interval = poll_ms > 0 ? std::chrono::milliseconds(poll_ms) : grpc::StreamServer::kDefaultPollInterval;
   app.grpc_services.push_back(std::make_unique<grpc::StreamServer>(stream_service, poll_interval));
 
-  // RingService holds non-owning pointers into these, so they must outlive it.
+  // Sample ring slot accounting into the gauges. Started before the
+  // manager moves into Application: it holds a raw pointer, and moving a
+  // unique_ptr does not move what it points at.
+  auto ring_metrics_publisher = std::make_shared<ring::RingMetricsPublisher>(ring_manager.get());
+  ring_metrics_publisher->Start();
+
+  // RingService and RingMetricsPublisher hold non-owning pointers into
+  // these, so they must outlive both.
   app.ring_manager     = std::move(ring_manager);
   app.ring_lease_table = std::move(ring_lease_table);
 
@@ -486,6 +499,7 @@ Application Build(const payload::runtime::config::RuntimeConfig& config) {
   // TieringManager is stopped first so it stops enqueuing new tasks before
   // the spill workers drain and exit.
   app.background_workers.push_back(tiering_manager);
+  app.background_workers.push_back(ring_metrics_publisher);
   for (auto& w : spill_worker_pool) {
     app.background_workers.push_back(w);
   }
