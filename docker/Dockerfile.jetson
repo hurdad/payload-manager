@@ -40,6 +40,13 @@ ARG ABSEIL_VERSION=20240722.0
 ARG PROTOBUF_VERSION=v27.3
 ARG GRPC_VERSION=v1.66.2
 ARG OTEL_CPP_VERSION=v1.23.0
+# Jammy packages re2 20220201, which installs a pkg-config file and no CMake
+# config at all — gRPC below is configured with gRPC_RE2_PROVIDER=package and
+# its find_package(re2 REQUIRED) cannot see a .pc file. Letting gRPC fall back
+# to its bundled copy would instead put two re2 implementations in one process,
+# gRPC's statically linked one and the system libre2 Arrow resolves, with the
+# same unversioned symbols in both. One shared re2 in /usr/local settles both.
+ARG RE2_VERSION=2024-07-02
 # Must be >= 23.0: CMakeLists.txt fails the configure below that, and it would
 # do so only after the longest build step in the image. 25.0.1 is what the x86
 # images pin, so the tiers behave identically on both architectures.
@@ -69,7 +76,7 @@ RUN apt-get update \
         build-essential ninja-build cmake pkg-config \
         libssl-dev zlib1g-dev libcurl4-openssl-dev \
         liblz4-dev libzstd-dev libsnappy-dev libbrotli-dev libbz2-dev \
-        libre2-dev libutf8proc-dev libxml2-dev \
+        libutf8proc-dev libxml2-dev \
         libpq-dev uuid-dev \
     && rm -rf /var/lib/apt/lists/*
 
@@ -96,6 +103,22 @@ RUN git clone --depth 1 --branch ${ABSEIL_VERSION} https://github.com/abseil/abs
     && cmake --build build-absl -j ${BUILD_JOBS} \
     && cmake --install build-absl \
     && rm -rf abseil-cpp build-absl
+
+# --- re2 ------------------------------------------------------------------
+# After Abseil: re2 has depended on it since 2023 and links absl::base and
+# friends. Before gRPC and Arrow, which both resolve it from /usr/local.
+RUN git clone --depth 1 --branch ${RE2_VERSION} https://github.com/google/re2.git \
+    && cmake -S re2 -B build-re2 -G Ninja \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
+        -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
+        -DCMAKE_CXX_STANDARD=${DEPS_CXX_STANDARD} \
+        -DBUILD_SHARED_LIBS=ON \
+        -DRE2_BUILD_TESTING=OFF \
+    && cmake --build build-re2 -j ${BUILD_JOBS} \
+    && cmake --install build-re2 \
+    && ldconfig \
+    && rm -rf re2 build-re2
 
 # --- Protobuf -------------------------------------------------------------
 # Against the Abseil just installed, not a bundled copy, so gRPC and Arrow
@@ -295,7 +318,7 @@ RUN apt-get update \
         ca-certificates \
         libssl3 zlib1g libcurl4 \
         liblz4-1 libzstd1 libsnappy1v5 libbrotli1 libbz2-1.0 \
-        libre2-9 libutf8proc2 libxml2 \
+        libutf8proc2 libxml2 \
         libyaml-cpp0.7 libpq5 \
     && rm -rf /var/lib/apt/lists/*
 
