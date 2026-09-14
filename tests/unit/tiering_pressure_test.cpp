@@ -6,6 +6,7 @@
 
 #include <cstring>
 #include <memory>
+#include <optional>
 #include <stdexcept>
 #include <unordered_map>
 
@@ -26,7 +27,7 @@ using payload::lease::LeaseManager;
 using payload::manager::v1::TIER_DISK;
 using payload::manager::v1::TIER_RAM;
 
-class SimpleBackend final : public payload::storage::StorageBackend {
+class SimpleBackend : public payload::storage::StorageBackend {
  public:
   explicit SimpleBackend(payload::manager::v1::Tier tier) : tier_(tier) {
   }
@@ -55,6 +56,20 @@ class SimpleBackend final : public payload::storage::StorageBackend {
  private:
   payload::manager::v1::Tier                                      tier_;
   std::unordered_map<std::string, std::shared_ptr<arrow::Buffer>> bufs_;
+};
+
+// Mirrors RamArrowStore, which reports real /dev/shm free space. The configured
+// cap cannot see consumption by anything outside this process.
+class LimitedSpaceBackend final : public SimpleBackend {
+ public:
+  LimitedSpaceBackend(payload::manager::v1::Tier tier, uint64_t available) : SimpleBackend(tier), available_(available) {
+  }
+  std::optional<uint64_t> AvailableBytes() const override {
+    return available_;
+  }
+
+ private:
+  uint64_t available_;
 };
 
 struct Fixture {
@@ -343,4 +358,36 @@ TEST(TieringCapacity, EachTierIsCappedIndependently) {
 
   EXPECT_THROW((void)f.manager->Allocate(1024, TIER_RAM), payload::util::ResourceExhausted);
   EXPECT_NO_THROW((void)f.manager->Allocate(1024, TIER_DISK)) << "a full RAM tier must not block the disk tier";
+}
+
+TEST(TieringCapacity, RefusesWhenTheMediumIsFullEvenIfTheCapAllows) {
+  // The exact shape of the production bug: the configured capacity has room,
+  // but the tmpfs underneath does not. Without consulting live free space the
+  // allocation "succeeds" and the producer takes SIGBUS on first write.
+  auto lease_mgr = std::make_shared<LeaseManager>();
+  auto repo      = std::make_shared<payload::db::memory::MemoryRepository>();
+  auto ram       = std::make_shared<LimitedSpaceBackend>(TIER_RAM, /*available=*/256);
+
+  payload::storage::StorageFactory::TierMap s;
+  s[TIER_RAM]  = ram;
+  auto manager = std::make_shared<PayloadManager>(s, lease_mgr, repo);
+
+  auto state       = std::make_shared<payload::tiering::PressureState>();
+  state->ram_limit = 1024 * 1024; // configured cap has plenty of room
+  manager->SetPressureState(state);
+
+  EXPECT_THROW((void)manager->Allocate(4096, TIER_RAM), payload::util::ResourceExhausted)
+      << "an allocation larger than the medium's free space must be refused";
+  EXPECT_NO_THROW((void)manager->Allocate(256, TIER_RAM)) << "what does fit must still be allowed";
+}
+
+TEST(TieringCapacity, BackendsWithoutFreeSpaceReportingAreUnaffected) {
+  // SimpleBackend returns nullopt from AvailableBytes, like the disk and object
+  // tiers; admission control must then rest on the configured cap alone.
+  Fixture f;
+  auto    state    = std::make_shared<payload::tiering::PressureState>();
+  state->ram_limit = 4096;
+  f.manager->SetPressureState(state);
+
+  EXPECT_NO_THROW((void)f.manager->Allocate(4096, TIER_RAM));
 }

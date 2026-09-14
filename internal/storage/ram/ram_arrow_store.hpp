@@ -2,7 +2,9 @@
 
 #include <arrow/buffer.h>
 
+#include <chrono>
 #include <memory>
+#include <optional>
 #include <shared_mutex>
 #include <string>
 #include <unordered_map>
@@ -44,6 +46,22 @@ class RamArrowStore final : public StorageBackend {
   payload::manager::v1::Tier TierType() const override {
     return payload::manager::v1::TIER_RAM;
   }
+
+  /*
+    Free bytes on the tmpfs backing /dev/shm, cached briefly.
+
+    The configured RAM capacity only bounds what this process has handed out.
+    Anything else sharing the tmpfs — another container on the same ipc
+    namespace, a leaked mapping — consumes it invisibly, and the shortfall only
+    shows up as SIGBUS in whichever process writes next. Consulting the real
+    free space closes that gap.
+
+    Cached for kCacheTtl so a burst of allocations does not syscall per request.
+  */
+  std::optional<uint64_t> AvailableBytes() const override;
+
+  // Total size of the tmpfs backing /dev/shm, or nullopt if it cannot be read.
+  static std::optional<uint64_t> ShmTotalBytes();
 
   /*
     Unlink shm segments belonging to this prefix that no longer correspond to a
@@ -91,6 +109,12 @@ class RamArrowStore final : public StorageBackend {
 
   mutable std::shared_mutex                                mutex_;
   std::unordered_map<UUID, std::shared_ptr<arrow::Buffer>> buffers_;
+
+  // statvfs is cheap but not free, and Allocate can be called in tight bursts.
+  static constexpr std::chrono::milliseconds    kCacheTtl{100};
+  mutable std::mutex                            avail_guard_;
+  mutable std::chrono::steady_clock::time_point avail_checked_at_{};
+  mutable std::optional<uint64_t>               avail_cached_{};
 };
 
 } // namespace payload::storage

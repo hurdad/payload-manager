@@ -298,6 +298,24 @@ Application Build(const payload::runtime::config::RuntimeConfig& config) {
   }
   pressure_state->gpu_evict_pct = resolve_pct(gpu_pct);
 
+  // Clamp the RAM capacity to the tmpfs that actually backs /dev/shm.
+  //
+  // A capacity larger than the medium is unserviceable: this service would
+  // happily accept allocations up to the configured figure, and the kernel
+  // would SIGBUS a producer partway through. The mismatch is easy to arrive at
+  // — compose's shm_size defaults to 64m, and WSL2 sizes /dev/shm from host
+  // memory — so clamp down and say so loudly rather than failing later and
+  // somewhere else. The eviction threshold is derived from the limit, so it
+  // follows automatically.
+  if (const auto shm_total = storage::RamArrowStore::ShmTotalBytes(); shm_total.has_value()) {
+    if (pressure_state->ram_limit != std::numeric_limits<uint64_t>::max() && pressure_state->ram_limit > *shm_total) {
+      PAYLOAD_LOG_WARN("configured RAM capacity exceeds the tmpfs backing /dev/shm; clamping",
+                       {payload::observability::IntField("configured_bytes", static_cast<int64_t>(pressure_state->ram_limit)),
+                        payload::observability::IntField("tmpfs_bytes", static_cast<int64_t>(*shm_total))});
+      pressure_state->ram_limit = *shm_total;
+    }
+  }
+
   // Hand the resolved limits to the manager so Allocate can refuse requests a
   // tier cannot take, rather than letting the producer discover it as SIGBUS.
   payload_manager->SetPressureState(pressure_state);

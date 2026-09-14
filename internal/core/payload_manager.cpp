@@ -68,6 +68,23 @@ uint64_t PayloadManager::TierLimit(Tier tier) const {
 PayloadManager::TierReservation PayloadManager::ReserveTierBytes(Tier tier, uint64_t size_bytes) {
   const uint64_t limit = TierLimit(tier);
 
+  // Live free space, where the backend can report it. The configured cap only
+  // bounds what this process has handed out; another container sharing the same
+  // /dev/shm, or a leaked mapping, consumes it invisibly. Without this a
+  // correctly-configured tier can still overcommit the medium, and the producer
+  // finds out as SIGBUS on first write.
+  //
+  // Deliberately outside the tier_bytes_ lock: the backend caches the syscall,
+  // but there is no reason to hold a hot mutex across it.
+  if (const auto storage_it = storage_.find(tier); storage_it != storage_.end() && storage_it->second) {
+    if (const auto available = storage_it->second->AvailableBytes(); available.has_value() && *available < size_bytes) {
+      payload::observability::Metrics::Instance().RecordAllocationFailure(TierName(tier));
+      throw payload::util::ResourceExhausted("allocate payload: " + std::string(TierName(tier)) + " tier has only " + std::to_string(*available) +
+                                             " bytes free on the underlying medium, " + std::to_string(size_bytes) +
+                                             " requested (something outside this service may be consuming it)");
+    }
+  }
+
   {
     std::lock_guard<std::mutex> lock(tier_bytes_guard_);
     auto&                       current = tier_bytes_[static_cast<int>(tier)];

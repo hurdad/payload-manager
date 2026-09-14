@@ -2,7 +2,9 @@
 
 #include <arrow/buffer.h>
 
+#include <cstdint>
 #include <memory>
+#include <optional>
 #include <string>
 
 #include "payload/manager/core/v1/id.pb.h"
@@ -94,6 +96,26 @@ class StorageBackend {
     Only implemented by durable tiers (disk, object).  RAM/GPU ignore it.
   */
   virtual void WriteSidecar(const payload::manager::v1::PayloadID&, const payload::manager::catalog::v1::PayloadArchiveMetadata&) {
+  }
+
+  // ------------------------------------------------------------------
+  // Live free space
+  // ------------------------------------------------------------------
+  /*
+    Bytes this tier can still accept right now, if the backend can tell.
+
+    This is deliberately distinct from the configured capacity. The configured
+    cap only bounds what *this* process has handed out; something else sharing
+    the same medium — another container on the same /dev/shm, a leaked
+    mapping — can consume it without this process ever knowing. For TIER_RAM
+    that matters: once the tmpfs is full, shm_open, ftruncate and mmap all still
+    succeed, and the producer discovers the problem as SIGBUS on first write.
+
+    Returns nullopt when the backend has no cheap answer, in which case the
+    caller falls back to the configured capacity alone.
+  */
+  virtual std::optional<uint64_t> AvailableBytes() const {
+    return std::nullopt;
   }
 
   // ------------------------------------------------------------------

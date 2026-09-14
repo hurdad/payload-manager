@@ -5,12 +5,15 @@
 #include <fcntl.h>
 #include <sys/mman.h>
 #include <sys/stat.h>
+#include <sys/statvfs.h>
 #include <unistd.h>
 
 #include <cerrno>
+#include <chrono>
 #include <cstring>
 #include <filesystem>
 #include <iterator>
+#include <mutex>
 #include <stdexcept>
 #include <string>
 #include <system_error>
@@ -177,6 +180,42 @@ void RamArrowStore::Write(const PayloadID& id, const std::shared_ptr<arrow::Buff
   buffers_[Key(id)] = buf;
 }
 
+namespace {
+
+// Where glibc's shm_open places POSIX shared memory objects on Linux.
+constexpr const char* kShmDir = "/dev/shm";
+
+} // namespace
+
+/*static*/
+std::optional<uint64_t> RamArrowStore::ShmTotalBytes() {
+  struct statvfs st{};
+  if (statvfs(kShmDir, &st) != 0) {
+    return std::nullopt;
+  }
+  return static_cast<uint64_t>(st.f_blocks) * static_cast<uint64_t>(st.f_frsize);
+}
+
+std::optional<uint64_t> RamArrowStore::AvailableBytes() const {
+  const auto now = std::chrono::steady_clock::now();
+
+  std::lock_guard<std::mutex> lock(avail_guard_);
+  if (avail_checked_at_.time_since_epoch().count() != 0 && now - avail_checked_at_ < kCacheTtl) {
+    return avail_cached_;
+  }
+
+  struct statvfs st{};
+  if (statvfs(kShmDir, &st) != 0) {
+    avail_cached_ = std::nullopt;
+  } else {
+    // f_bavail, not f_bfree: the former excludes blocks reserved for root,
+    // which an unprivileged process cannot use anyway.
+    avail_cached_ = static_cast<uint64_t>(st.f_bavail) * static_cast<uint64_t>(st.f_frsize);
+  }
+  avail_checked_at_ = now;
+  return avail_cached_;
+}
+
 /*
   PurgeOrphans: reclaim segments left behind by a previous process.
 
@@ -185,8 +224,6 @@ void RamArrowStore::Write(const PayloadID& id, const std::shared_ptr<arrow::Buff
 */
 std::size_t RamArrowStore::PurgeOrphans(const std::unordered_set<std::string>& known_uuid_hex) {
   namespace fs = std::filesystem;
-
-  static constexpr const char* kShmDir = "/dev/shm";
 
   const std::string prefix = shm_prefix_ + "-";
 
