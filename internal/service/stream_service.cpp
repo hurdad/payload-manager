@@ -59,7 +59,15 @@ std::string SerializeTags(const google::protobuf::Map<std::string, std::string>&
   }
 
   std::string json;
-  google::protobuf::util::MessageToJsonString(as_struct, &json);
+  // Do not drop the status: the realistic trigger is non-UTF-8 bytes in
+  // operator-supplied tag keys or values, and returning a partial/empty blob
+  // silently corrupts the stored tags. Throwing matches the other
+  // MessageToJsonString call sites (disk_arrow_store, object_arrow_store,
+  // config_loader).
+  const auto status = google::protobuf::util::MessageToJsonString(as_struct, &json);
+  if (!status.ok()) {
+    throw std::runtime_error("failed to serialize stream tags to JSON: " + std::string(status.message()));
+  }
   return json;
 }
 

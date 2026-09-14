@@ -22,6 +22,19 @@ target_link_libraries(payload_manager_db
         payload_manager::proto
 )
 
+# Every TU here transitively includes the generated *.grpc.pb.h, via
+# internal/util/uuid.hpp -> api/payload/manager/v1.hpp. Linking the proto
+# target alone gives no build-order edge to the gRPC codegen step; today it
+# only works by way of payload_manager_proto's own dependency on
+# generate_protos. State the edge explicitly so a parallel clean build cannot
+# race ahead of the grpc headers.
+#
+# Rule: any target whose sources transitively include a *.grpc.pb.h needs this
+# dependency, not just a link to the proto target. Verify on a clean tree
+# (rm -rf build) — an incremental build has the headers on disk already and
+# will never reproduce the failure.
+add_dependencies(payload_manager_db payload_manager_grpc)
+
 # ============================================================
 # Core API + Models (always compiled)
 # ============================================================

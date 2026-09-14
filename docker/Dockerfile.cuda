@@ -30,7 +30,7 @@ RUN apt-get update \
         libgrpc++-dev \
         libgrpc-dev \
         libyaml-cpp-dev \
-        libpqxx-dev \
+        libpq-dev \
         libsqlite3-dev \
         libspdlog-dev \
         libcurl4-openssl-dev \
@@ -51,6 +51,26 @@ RUN apt-get update \
         libarrow-cuda-dev=${ARROW_VERSION}-1 \
         opentelemetry-cpp-dev \
     && rm -rf /var/lib/apt/lists/*
+
+# Ubuntu 26.04's libpqxx 7.10.0-2build1 double-frees in its library finalizer,
+# so ANY binary linking it aborts at exit — reproduced with a two-line program.
+# 24.04's 7.8 is clean, and so is the same upstream 7.10.0 built from source,
+# so this is Ubuntu's build, not upstream. Nothing fixed exists in
+# resolute-updates/-proposed/-security. Build it ourselves until one does.
+# Placed above the source COPY so it stays cached across code changes.
+ARG LIBPQXX_VERSION=7.10.0
+ENV PKG_CONFIG_PATH=/usr/local/lib/pkgconfig:/usr/local/lib/x86_64-linux-gnu/pkgconfig
+RUN git clone --depth 1 --branch ${LIBPQXX_VERSION} \
+        https://github.com/jtv/libpqxx.git /tmp/libpqxx \
+    && cmake -S /tmp/libpqxx -B /tmp/libpqxx-build -G Ninja \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DBUILD_SHARED_LIBS=ON \
+        -DSKIP_BUILD_TEST=ON \
+        -DCMAKE_INSTALL_PREFIX=/usr/local \
+    && cmake --build /tmp/libpqxx-build \
+    && cmake --install /tmp/libpqxx-build \
+    && ldconfig \
+    && rm -rf /tmp/libpqxx /tmp/libpqxx-build
 
 COPY . ./src
 
@@ -99,7 +119,7 @@ RUN apt-get update \
         libgrpc++1.51t64 \
         libgrpc29t64 \
         libyaml-cpp0.8 \
-        libpqxx-7.10 \
+        libpq5 \
         libsqlite3-0 \
         libspdlog1.15 \
         libcurl4t64 \
@@ -118,6 +138,13 @@ RUN apt-get update \
         opentelemetry-cpp \
     && rm -rf /var/lib/apt/lists/* \
     && useradd --system --no-create-home --shell /sbin/nologin payload
+
+# libpqxx is built from source in the builder (see the note there), so the
+# runtime takes it from there rather than from apt. Only the soname is
+# needed — the unversioned libpqxx.so is a dev symlink, and COPY would
+# dereference it into a second full copy of the library.
+COPY --from=builder /usr/local/lib/libpqxx-*.so /usr/local/lib/
+RUN ldconfig
 
 COPY --from=builder --chown=payload:payload /workspace/build/bin/payload-manager ./payload-manager
 

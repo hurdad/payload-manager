@@ -30,7 +30,7 @@ RUN apt-get update \
         libgrpc++-dev \
         libgrpc-dev \
         libyaml-cpp-dev \
-        libpqxx-dev \
+        libpq-dev \
         libsqlite3-dev \
         libspdlog-dev \
         libcurl4-openssl-dev \
@@ -52,6 +52,26 @@ RUN apt-get update \
         libgtest-dev \
         libarrow-dev=${ARROW_VERSION}-1 \
     && rm -rf /var/lib/apt/lists/*
+
+# Ubuntu 26.04's libpqxx 7.10.0-2build1 double-frees in its library finalizer,
+# so ANY binary linking it aborts at exit — reproduced with a two-line program.
+# 24.04's 7.8 is clean, and so is the same upstream 7.10.0 built from source,
+# so this is Ubuntu's build, not upstream. Nothing fixed exists in
+# resolute-updates/-proposed/-security. Build it ourselves until one does.
+# Placed above the source COPY so it stays cached across code changes.
+ARG LIBPQXX_VERSION=7.10.0
+ENV PKG_CONFIG_PATH=/usr/local/lib/pkgconfig:/usr/local/lib/x86_64-linux-gnu/pkgconfig
+RUN git clone --depth 1 --branch ${LIBPQXX_VERSION} \
+        https://github.com/jtv/libpqxx.git /tmp/libpqxx \
+    && cmake -S /tmp/libpqxx -B /tmp/libpqxx-build -G Ninja \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DBUILD_SHARED_LIBS=ON \
+        -DSKIP_BUILD_TEST=ON \
+        -DCMAKE_INSTALL_PREFIX=/usr/local \
+    && cmake --build /tmp/libpqxx-build \
+    && cmake --install /tmp/libpqxx-build \
+    && ldconfig \
+    && rm -rf /tmp/libpqxx /tmp/libpqxx-build
 
 COPY . ./src
 

@@ -10,6 +10,21 @@ option(PAYLOAD_MANAGER_CLIENT_ENABLE_OTEL
         "Enable W3C Trace Context propagation in the C++ client (requires OTel API headers)"
         OFF)
 
+# Built as part of the top-level project, Arrow and ArrowCUDA have already been
+# discovered by the root CMakeLists before this directory is added. Consumed
+# standalone via find_package(PayloadManagerClientCpp), nothing has found them —
+# and the target probe below would fail with a misleading "no Arrow CUDA target
+# was found". Find them here so the installed package works outside this repo.
+if(NOT TARGET Arrow::arrow_shared AND NOT TARGET Arrow::arrow_static)
+    find_package(Arrow REQUIRED)
+endif()
+
+if(PAYLOAD_MANAGER_CLIENT_ENABLE_CUDA
+        AND NOT TARGET ArrowCUDA::arrow_cuda_shared
+        AND NOT TARGET ArrowCUDA::arrow_cuda_static)
+    find_package(ArrowCUDA REQUIRED)
+endif()
+
 set(_payload_manager_client_arrow_cuda_targets)
 
 if(PAYLOAD_MANAGER_CLIENT_ENABLE_CUDA)
