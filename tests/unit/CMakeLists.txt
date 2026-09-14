@@ -57,6 +57,11 @@ payload_manager_add_unit_test(payload_manager_unit_void_tier void_tier_test.cpp 
 if(TARGET payload_manager::client)
   payload_manager_add_unit_test(payload_manager_unit_client_payload_manager_client client/payload_manager_client_test.cpp "client")
   target_link_libraries(payload_manager_unit_client_payload_manager_client PRIVATE payload_manager::client)
+
+  # Drives the client ring helpers against a real RingServer over an
+  # in-process channel, so it needs the server side as well.
+  payload_manager_add_unit_test(payload_manager_unit_client_ring client/ring_client_test.cpp "client;ring;shm")
+  target_link_libraries(payload_manager_unit_client_ring PRIVATE payload_manager::client)
 endif()
 
 if(PAYLOAD_MANAGER_ENABLE_OTEL)

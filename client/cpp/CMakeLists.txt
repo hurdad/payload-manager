@@ -1,4 +1,13 @@
 find_package(gRPC REQUIRED)
+# ring.cc logs through spdlog. Consumed standalone via
+# find_package(PayloadManagerClientCpp) nothing has found it yet, and the
+# in-tree build only linked by accident — payload_manager_internal drags
+# spdlog into the final executables, so the client archive's undefined
+# fmt symbols happened to resolve. An external consumer linking only
+# payload_manager::client got link errors.
+if(NOT TARGET spdlog::spdlog)
+    find_package(spdlog REQUIRED)
+endif()
 include(GNUInstallDirs)
 include(CMakePackageConfigHelpers)
 
@@ -92,6 +101,7 @@ target_link_libraries(payload_manager_client
         payload_manager::proto
         payload_manager::grpc
         gRPC::grpc++
+        spdlog::spdlog
         ${_arrow_link_target}
         ${_payload_manager_client_arrow_cuda_targets}
 )
@@ -111,8 +121,13 @@ install(TARGETS payload_manager_client
         INCLUDES DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
 )
 
-# Public header — installed as <payload-manager/cpp/client.h>
-install(FILES client.h
+# Public headers — installed as <payload-manager/cpp/{client,ring}.h>.
+# ring.h is part of the public surface: RingConsumer / RingProducerSlot
+# are the whole point of the extraction, and shipping the library without
+# the header that declares them makes the ring API unusable outside this
+# tree. ring.h includes "client.h" unqualified, so the two must stay in
+# the same directory.
+install(FILES client.h ring.h
         DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/payload-manager/cpp
 )
 

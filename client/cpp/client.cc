@@ -80,6 +80,15 @@ arrow::Status GrpcToArrow(const grpc::Status& status, std::string_view action) {
       return arrow::Status::NotImplemented(msg);
     case grpc::StatusCode::CANCELLED:
       return arrow::Status::Cancelled(msg);
+    // RESOURCE_EXHAUSTED and FAILED_PRECONDITION are load-bearing on the
+    // ring tier: "every slot is still leased" and "the producer already
+    // recycled this generation" are both expected, per-capture outcomes
+    // that callers must tell apart from a broken channel. Folding them
+    // into IOError like everything else would make that impossible.
+    case grpc::StatusCode::RESOURCE_EXHAUSTED:
+      return arrow::Status::CapacityError(msg);
+    case grpc::StatusCode::FAILED_PRECONDITION:
+      return arrow::Status::Invalid(msg);
     default:
       return arrow::Status::IOError(msg);
   }

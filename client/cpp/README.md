@@ -23,7 +23,7 @@ Optional flags:
 ```cpp
 #include <grpcpp/create_channel.h>
 #include <grpcpp/security/credentials.h>
-#include "client/cpp/payload_manager_client.h"
+#include "client/cpp/client.h"
 
 using payload::manager::client::PayloadClient;
 
@@ -69,6 +69,64 @@ set(PAYLOAD_MANAGER_CLIENT_ENABLE_CUDA ON CACHE BOOL "" FORCE)
 set(PAYLOAD_MANAGER_CLIENT_ENABLE_OTEL ON CACHE BOOL "" FORCE)
 add_subdirectory(third_party/payload-manager)
 ```
+
+## Ring tier (`ring.h`)
+
+`ring.h` adds the producer / consumer helpers for `TIER_RAM_RING`, layered on
+`PayloadClient`'s ring RPCs. Unlike the UUID-addressed tiers above, ring slots
+are pre-allocated by PM and addressed by position, so both sides work through
+handles that own a **server-side reservation**: PM has no reaper for an
+uncommitted slot or an unreleased lease, and leaking one retires that slot for
+the life of the PM process. Both handles are move-only and release on
+destruction — do not bypass them.
+
+Producer:
+
+```cpp
+#include "client/cpp/ring.h"
+
+using payload::manager::client::AcquireRingProducerSlot;
+using payload::manager::client::CommitRingProducerSlot;
+
+auto slot = AcquireRingProducerSlot(client, "radio_iq", "radio");
+if (!slot.valid()) return;              // ring full — apply your drop policy
+slot.Append(samples.data(), samples.size());
+CommitRingProducerSlot(client, slot, event.mutable_ring_slot());
+// Leaving the scope before the commit is safe: the slot is committed empty
+// so PM can recycle it.
+```
+
+A full ring (`RESOURCE_EXHAUSTED`) is the documented steady state under
+`RING_EXHAUSTION_POLICY_DROP_NEW`, not an error. It surfaces as
+`arrow::Status::CapacityError` on the raw `AcquireRingSlot` call, and as
+`!slot.valid()` through the helper — count it, don't log it per capture.
+
+Consumer:
+
+```cpp
+using payload::manager::client::RingConsumer;
+
+RingConsumer consumer(&client, {.register_for_gpu = false, .log_prefix = "spectral ring"});
+
+// Per capture, from the RingSlotRef carried on the upstream event:
+auto lease = consumer.LeaseAndOpen(ref.ring_id(), ref.slot_idx(),
+                                   ref.generation(), ref.size_bytes());
+if (!lease) return;                     // stale generation — skip this capture
+DoWork(lease->host_va, lease->size_bytes);
+// Releases at scope exit; lease->Release() releases early.
+```
+
+Rings are mapped lazily on first sight of a `ring_id` and cached for the
+consumer's lifetime, so the per-capture path is one `LeaseRingSlot` RPC and a
+pointer lookup. A refused lease means the producer already recycled the slot
+(`arrow::Status::Invalid`) — expected when the consumer falls behind, and again
+not an error. Every `Lease` must be destroyed before the `RingConsumer` that
+issued it.
+
+Setting `register_for_gpu` on a CUDA-enabled build (`-DPAYLOAD_MANAGER_CLIENT_ENABLE_CUDA=ON`)
+additionally `cudaHostRegister`s each slot once at map time and populates
+`lease->dev_va` for zero-copy device reads. On a non-CUDA build the option is
+inert and slots stay mapped read-only.
 
 ## More examples
 
