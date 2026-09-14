@@ -27,45 +27,84 @@ Modern pipelines often spend more time moving bytes through orchestration servic
 
 ## Architecture at a glance
 
-```text
-Browser / HTTP clients
-   |
-   v
-gRPC-Gateway  (REST → gRPC, embedded Svelte UI, OpenAPI docs)
-   |
-   v
-gRPC Servers (admin / catalog / data / ring / stream)
-   |
-   +---------------------------------+
-   |                                 |
-   v                                 v
-Service Layer                     Ring Service
-(lifecycle, placement,            (acquire / commit slots,
- leasing, metadata, streams)       lease / release for readers)
-   |                                 |
-   v                                 v
-Repository (internal/db)          Ring tier (TIER_RAM_RING)
-(transaction + persistence)       N pre-allocated /dev/shm slots
-   |                              per ring, recycled in place
-   +--> Memory                    |
-   +--> PostgreSQL                +--> addressed by position:
-   |                                   (ring_id, slot_idx, generation)
-   v                                   — no PayloadID, no catalog row
-Placement + Tiering + Spill
-   |
-   +--> GPU (CUDA IPC)
-   +--> RAM (shared memory)
-   +--> Disk
-   +--> Object storage
-   +--> Void (delete on eviction)
+The thing to notice first: **payload bytes never travel through the service.**
+Clients ask for a descriptor and a lease, then read or write the memory, file or
+object directly. Everything in the control plane below moves metadata only.
+
+```mermaid
+flowchart TB
+    subgraph clients["Clients"]
+        browser["Browser / HTTP client"]
+        native["Native client<br/>C++ / Python"]
+    end
+
+    subgraph control["Control plane — metadata only"]
+        gw["gRPC-Gateway<br/>REST to gRPC · Svelte UI · OpenAPI"]
+        servers["gRPC servers<br/>admin · catalog · data · ring · stream"]
+        svc["Service layer<br/>lifecycle · placement · leasing<br/>metadata · lineage · streams"]
+        ringsvc["Ring service<br/>acquire / commit slots<br/>lease / release for readers"]
+        repo["Repository — internal/db<br/>transactions"]
+        mem[("Memory catalog")]
+        pg[("PostgreSQL catalog")]
+        tiering["Placement · Tiering · Spill<br/>pressure-driven demotion"]
+    end
+
+    subgraph tiers["Storage tiers — a demotion chain"]
+        direction TB
+        gpu["GPU<br/>CUDA IPC handle"]
+        ram["RAM<br/>POSIX shm"]
+        disk["Disk<br/>file"]
+        obj["Object storage<br/>S3 / GCS / Azure"]
+        gone(["Void — deleted, not moved"])
+    end
+
+    subgraph ring["Ring tier — TIER_RAM_RING"]
+        slots["N pre-allocated /dev/shm slots per ring<br/>addressed by ring_id, slot_idx, generation<br/>no PayloadID · no catalog row · recycled in place"]
+    end
+
+    browser --> gw --> servers
+    native --> servers
+    servers --> svc
+    servers --> ringsvc
+    svc --> repo
+    repo --> mem
+    repo --> pg
+    svc --> tiering
+    ringsvc --> slots
+
+    tiering --> gpu
+    tiering --> ram
+    tiering --> disk
+    tiering --> obj
+
+    gpu -- spill --> ram
+    ram -- spill --> disk
+    disk -- spill --> obj
+    gpu -. "spill_target = TIER_VOID" .-> gone
+    ram -.-> gone
+    disk -.-> gone
+
+    native == "data plane — bytes, no service in the path" ==> ram
+    native ==> gpu
+    native ==> disk
+    native ==> slots
 ```
 
-The ring tier sits beside the catalog rather than under it. Every other tier
-holds UUID-addressed payloads that the repository tracks through allocate,
-commit, spill and delete. Ring slots are pre-allocated at startup from static
-config and rotate in place, so they carry no `PayloadID` and no database row —
-producers and consumers refer to them by position, and the generation counter is
-what tells a slow reader its slot was recycled underneath it.
+**The demotion chain.** Tiers are not a menu. A payload is placed once, and the
+tiering manager spills it downward as the tier holding it comes under pressure:
+GPU evictions go to RAM, RAM to disk, disk to object storage. The bytes move;
+the `PayloadID` does not. A payload can set `spill_target = TIER_VOID` on its
+eviction policy to be deleted instead of demoted, which is how something is
+marked ephemeral. See
+[Design Details](docs/DESIGN.md#4-placement-tiering-and-spill-behavior).
+
+**The ring tier is beside the catalog, not under it.** Every other tier holds
+UUID-addressed payloads the repository tracks through allocate, commit, spill
+and delete. Ring slots are pre-allocated at startup from static config and
+rotate in place, so they carry no `PayloadID` and no database row — producers
+and consumers refer to them by position, and the generation counter is what
+tells a slow reader its slot was recycled underneath it. It has no spill
+chain: a ring slot is overwritten, never demoted.
 
 For detailed documentation, see:
 
