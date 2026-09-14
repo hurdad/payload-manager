@@ -76,7 +76,7 @@ static LeaseID MakeLeaseID(const std::string& s) {
 
 static std::string ToUuidString(const std::string& bytes) {
   if (bytes.size() != 16) {
-    return "<invalid lease id>";
+    return "<invalid id>";
   }
 
   static constexpr char kHex[] = "0123456789abcdef";
@@ -154,6 +154,9 @@ int main(int argc, char** argv) {
       return 2;
     }
 
+    // Without the id this command's output is unusable: allocate is the only
+    // way to mint a payload, and every command after it takes the uuid.
+    std::cout << "id=" << ToUuidString(resp.payload_descriptor().payload_id().value()) << "\n";
     std::cout << "tier=" << resp.payload_descriptor().tier() << "\n";
     return 0;
   }
