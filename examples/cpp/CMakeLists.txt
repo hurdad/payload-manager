@@ -9,17 +9,9 @@ set(_otel_libs    "")
 if(PAYLOAD_MANAGER_ENABLE_OTEL)
   list(APPEND _otel_sources otel_tracer.cpp)
 
-  # OTel SDK include dirs applied ONLY to otel_tracer.cpp to avoid protobuf
-  # macro conflicts with the system headers pulled in by the client lib.
-  set(_otel_includes
-    ${CMAKE_SOURCE_DIR}/third_party/opentelemetry-cpp/api/include
-    ${CMAKE_SOURCE_DIR}/third_party/opentelemetry-cpp/sdk/include
-    ${CMAKE_SOURCE_DIR}/third_party/opentelemetry-cpp/exporters/otlp/include
-  )
-  set_source_files_properties(otel_tracer.cpp PROPERTIES
-    INCLUDE_DIRECTORIES "${_otel_includes}"
-  )
-
+  # opentelemetry-cpp now comes from the system package, so its headers are
+  # already on the default include path and no per-source include list is
+  # needed.  The linked targets below carry their own usage requirements.
   foreach(_t IN ITEMS
       opentelemetry_trace
       opentelemetry_resources

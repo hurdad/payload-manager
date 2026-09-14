@@ -70,17 +70,39 @@ Optional CMake flags:
 
 - `-DPAYLOAD_MANAGER_ENABLE_SQLITE=ON`
 - `-DPAYLOAD_MANAGER_ENABLE_POSTGRES=ON`
-- `-DPAYLOAD_MANAGER_ENABLE_OTEL=ON` (builds OpenTelemetry support from `third_party/opentelemetry-cpp`)
-- `-DPAYLOAD_MANAGER_ENABLE_ARROW_CUDA=ON` (enables GPU tier runtime support in the service via Arrow CUDA)
+- `-DPAYLOAD_MANAGER_ENABLE_OTEL=ON` (requires `opentelemetry-cpp-dev`)
+- `-DPAYLOAD_MANAGER_ENABLE_ARROW_CUDA=ON` (enables GPU tier runtime support in the service via Arrow CUDA; requires `libarrow-cuda-dev`)
 
 Client build switch:
 
 - C++ CUDA-capable client build: `-DPAYLOAD_MANAGER_CLIENT_ENABLE_CUDA=ON`
 
+### Dependencies
+
+Arrow and OpenTelemetry are taken from system packages; this repository has no
+git submodules. On Ubuntu 26.04:
+
+```bash
+sudo apt install libarrow-dev            # Arrow 23.0.1 from universe
+sudo apt install opentelemetry-cpp-dev   # only for -DPAYLOAD_MANAGER_ENABLE_OTEL=ON
+```
+
+Ubuntu universe carries no Arrow CUDA build, and releases before 26.04 carry no
+usable Arrow or OpenTelemetry at all. For those — and for `libarrow-cuda-dev` —
+use the [Apache Arrow apt repository](https://arrow.apache.org/install/), which
+is what the container images do (pinned to 25.0.1):
+
+```bash
+sudo apt install -y -V ca-certificates lsb-release wget
+wget https://apache.jfrog.io/artifactory/arrow/ubuntu/apache-arrow-apt-source-latest-$(lsb_release --codename --short).deb
+sudo apt install -y -V ./apache-arrow-apt-source-latest-$(lsb_release --codename --short).deb
+sudo apt update
+sudo apt install -y -V libarrow-dev libarrow-cuda-dev
+```
+
 To build with OpenTelemetry enabled:
 
 ```bash
-git submodule update --init --recursive
 cmake -S . -B build-otel -DPAYLOAD_MANAGER_ENABLE_OTEL=ON
 cmake --build build-otel
 ```

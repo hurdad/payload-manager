@@ -1,10 +1,24 @@
-FROM ubuntu:24.04 AS builder
+ARG ARROW_VERSION=25.0.1
+
+FROM ubuntu:26.04 AS builder
 
 ENV DEBIAN_FRONTEND=noninteractive
 WORKDIR /workspace
 
+# Apache Arrow apt repository — provides libarrow-dev / libarrow-cuda-dev at an
+# exact pinned version.  Ubuntu universe only carries Arrow 23.0.1 and has no
+# CUDA build, so the Apache repo is used for every image to keep one version.
+ARG ARROW_VERSION
 RUN sed -i 's/^Components: main$/Components: main universe/' /etc/apt/sources.list.d/ubuntu.sources \
     && apt-get update \
+    && apt-get install -y --no-install-recommends ca-certificates wget \
+    && wget -q -O /tmp/arrow-apt-source.deb \
+         https://apache.jfrog.io/artifactory/arrow/ubuntu/apache-arrow-apt-source-latest-resolute.deb \
+    && apt-get install -y -V /tmp/arrow-apt-source.deb \
+    && rm -f /tmp/arrow-apt-source.deb \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         build-essential \
         cmake \
@@ -32,6 +46,7 @@ RUN sed -i 's/^Components: main$/Components: main universe/' /etc/apt/sources.li
         libutf8proc-dev \
         libxml2-dev \
         libgtest-dev \
+        libarrow-dev=${ARROW_VERSION}-1 \
     && rm -rf /var/lib/apt/lists/*
 
 COPY . ./src
@@ -47,7 +62,7 @@ RUN cmake -S ./src -B /workspace/build -G Ninja -DCMAKE_BUILD_TYPE=Release \
     && ctest --test-dir /workspace/build --output-on-failure -E payload_manager_integration_api
 
 
-FROM ubuntu:24.04 AS runtime
+FROM ubuntu:26.04 AS runtime
 
 LABEL org.opencontainers.image.title="payload-manager" \
       org.opencontainers.image.description="Payload Manager gRPC service"
@@ -55,8 +70,20 @@ LABEL org.opencontainers.image.title="payload-manager" \
 ENV DEBIAN_FRONTEND=noninteractive
 WORKDIR /app
 
+# Apache Arrow apt repository — provides libarrow-dev / libarrow-cuda-dev at an
+# exact pinned version.  Ubuntu universe only carries Arrow 23.0.1 and has no
+# CUDA build, so the Apache repo is used for every image to keep one version.
+ARG ARROW_VERSION
 RUN sed -i 's/^Components: main$/Components: main universe/' /etc/apt/sources.list.d/ubuntu.sources \
     && apt-get update \
+    && apt-get install -y --no-install-recommends ca-certificates wget \
+    && wget -q -O /tmp/arrow-apt-source.deb \
+         https://apache.jfrog.io/artifactory/arrow/ubuntu/apache-arrow-apt-source-latest-resolute.deb \
+    && apt-get install -y -V /tmp/arrow-apt-source.deb \
+    && rm -f /tmp/arrow-apt-source.deb \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         ca-certificates \
         sqlite3 \
@@ -64,20 +91,21 @@ RUN sed -i 's/^Components: main$/Components: main universe/' /etc/apt/sources.li
         libgrpc++1.51t64 \
         libgrpc29t64 \
         libyaml-cpp0.8 \
-        libpqxx-7.8t64 \
+        libpqxx-7.10 \
         libsqlite3-0 \
-        libspdlog1.12 \
+        libspdlog1.15 \
         libcurl4t64 \
-        libssl3 \
+        libssl3t64 \
         zlib1g \
         liblz4-1 \
         libzstd1 \
         libsnappy1v5 \
         libbrotli1 \
         libbz2-1.0 \
-        libre2-10 \
+        libre2-11 \
         libutf8proc3 \
-        libxml2 \
+        libxml2-16 \
+        libarrow2500=${ARROW_VERSION}-1 \
     && rm -rf /var/lib/apt/lists/* \
     && useradd --system --no-create-home --shell /sbin/nologin payload
 

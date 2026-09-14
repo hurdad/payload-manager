@@ -4,6 +4,8 @@
 # with both CUDA and OpenTelemetry enabled.
 #
 # Uses pre-built base images from ghcr.io/hurdad/docker-jetpack6-{dev,runtime}
+# which already provide Arrow and OpenTelemetry as installed packages, which is
+# what the project now expects everywhere (no vendored submodules).
 # which provide Arrow 23.0.1 (CUDA+S3), gRPC v1.66.2, Protobuf v27.3,
 # OpenTelemetry v1.26.0, spdlog, jemalloc, Abseil, FlatBuffers, nats.c —
 # all pre-compiled for JetPack 6 / L4T R36 / CUDA 12.2 / aarch64.
@@ -49,9 +51,7 @@ RUN cmake -S ./src -B /workspace/build -G Ninja \
         -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
         -DCMAKE_BUILD_TYPE=Release \
         -DPAYLOAD_MANAGER_ENABLE_OTEL=ON \
-        -DPAYLOAD_MANAGER_OTEL_PREFER_SYSTEM=ON \
         -DPAYLOAD_MANAGER_ENABLE_ARROW_CUDA=ON \
-        -DPAYLOAD_MANAGER_ARROW_PREFER_SYSTEM=ON \
         -DBUILD_TESTING=ON \
         -DPAYLOAD_MANAGER_BUILD_SERVICE=ON \
         -DPAYLOAD_MANAGER_BUILD_CLIENT=OFF \

@@ -1,10 +1,8 @@
 .git
-.gitmodules
 .github
 
-# Jetson builds use pre-installed system packages from the base image;
-# non-Jetson builds compile Arrow/OTel from the vendored submodules.
-# Only exclude submodules for Jetson (it uses its own Dockerfile anyway).
+# Arrow and OpenTelemetry come from apt packages inside the images; there are
+# no vendored submodules in this repository.
 
 # Build directories and artifacts
 build/

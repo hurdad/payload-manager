@@ -59,12 +59,12 @@ set(PROTO_ROOT ${CMAKE_CURRENT_SOURCE_DIR})
 set(GENERATED_DIR ${CMAKE_CURRENT_BINARY_DIR}/generated)
 file(MAKE_DIRECTORY ${GENERATED_DIR})
 
-# googleapis submodule — provides google/api/annotations.proto etc.
-set(GOOGLEAPIS_PROTO_ROOT ${CMAKE_SOURCE_DIR}/third_party/googleapis)
+# Vendored googleapis protos — provides google/api/annotations.proto and the
+# google/api/http.proto it imports.  See api/third_party/README.md.
+set(GOOGLEAPIS_PROTO_ROOT ${CMAKE_CURRENT_SOURCE_DIR}/third_party)
 if(NOT EXISTS "${GOOGLEAPIS_PROTO_ROOT}/google/api/annotations.proto")
   message(FATAL_ERROR
-    "third_party/googleapis submodule is missing.\n"
-    "Run: git submodule update --init third_party/googleapis")
+    "Vendored googleapis protos are missing from ${GOOGLEAPIS_PROTO_ROOT}.")
 endif()
 
 # ------------------------------------------------------------------------------

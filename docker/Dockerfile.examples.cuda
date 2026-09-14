@@ -1,7 +1,22 @@
-FROM nvidia/cuda:12.6.3-devel-ubuntu24.04 AS builder
+ARG ARROW_VERSION=25.0.1
+
+FROM nvidia/cuda:13.3.1-devel-ubuntu26.04 AS builder
 
 ENV DEBIAN_FRONTEND=noninteractive
 WORKDIR /workspace
+
+# Apache Arrow apt repository — provides libarrow-dev / libarrow-cuda-dev at an
+# exact pinned version.  Ubuntu universe only carries Arrow 23.0.1 and has no
+# CUDA build, so the Apache repo is used for every image to keep one version.
+ARG ARROW_VERSION
+RUN sed -i 's/^Components: main$/Components: main universe/' /etc/apt/sources.list.d/ubuntu.sources \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends ca-certificates wget \
+    && wget -q -O /tmp/arrow-apt-source.deb \
+         https://apache.jfrog.io/artifactory/arrow/ubuntu/apache-arrow-apt-source-latest-resolute.deb \
+    && apt-get install -y -V /tmp/arrow-apt-source.deb \
+    && rm -f /tmp/arrow-apt-source.deb \
+    && rm -rf /var/lib/apt/lists/*
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
@@ -35,6 +50,8 @@ RUN apt-get update \
         libutf8proc-dev \
         libxml2-dev \
         libgtest-dev \
+        libarrow-dev=${ARROW_VERSION}-1 \
+        libarrow-cuda-dev=${ARROW_VERSION}-1 \
     && rm -rf /var/lib/apt/lists/*
 
 COPY . ./src
@@ -51,27 +68,42 @@ RUN cmake -S ./src -B /workspace/build -G Ninja -DCMAKE_BUILD_TYPE=Release \
     && cmake --build /workspace/build
 
 
-FROM nvidia/cuda:12.6.3-runtime-ubuntu24.04 AS runtime
+FROM nvidia/cuda:13.3.1-runtime-ubuntu26.04 AS runtime
 
 ENV DEBIAN_FRONTEND=noninteractive
 WORKDIR /app
+
+# Apache Arrow apt repository — provides libarrow-dev / libarrow-cuda-dev at an
+# exact pinned version.  Ubuntu universe only carries Arrow 23.0.1 and has no
+# CUDA build, so the Apache repo is used for every image to keep one version.
+ARG ARROW_VERSION
+RUN sed -i 's/^Components: main$/Components: main universe/' /etc/apt/sources.list.d/ubuntu.sources \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends ca-certificates wget \
+    && wget -q -O /tmp/arrow-apt-source.deb \
+         https://apache.jfrog.io/artifactory/arrow/ubuntu/apache-arrow-apt-source-latest-resolute.deb \
+    && apt-get install -y -V /tmp/arrow-apt-source.deb \
+    && rm -f /tmp/arrow-apt-source.deb \
+    && rm -rf /var/lib/apt/lists/*
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         libprotobuf32t64 \
         libgrpc++1.51t64 \
         libgrpc29t64 \
-        libspdlog1.12 \
-        libssl3 \
+        libspdlog1.15 \
+        libssl3t64 \
         zlib1g \
         liblz4-1 \
         libzstd1 \
         libsnappy1v5 \
         libbrotli1 \
         libbz2-1.0 \
-        libre2-10 \
+        libre2-11 \
         libutf8proc3 \
-        libxml2 \
+        libxml2-16 \
+        libarrow2500=${ARROW_VERSION}-1 \
+        libarrow-cuda2500=${ARROW_VERSION}-1 \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=builder /workspace/build/examples/cpp/payload_manager_example_* ./

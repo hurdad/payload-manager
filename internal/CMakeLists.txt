@@ -139,7 +139,7 @@ target_link_libraries(payload_manager_internal
         payload_manager::db
         yaml-cpp::yaml-cpp
         spdlog::spdlog
-        Arrow::arrow_static
+        ${PAYLOAD_MANAGER_ARROW_LINK_TARGET}
         rt
 )
 
@@ -280,8 +280,8 @@ target_compile_definitions(payload_manager_internal
 
 # Propagate Arrow optional filesystem feature flags as compile definitions so
 # that arrow_utils.cpp guards compile in only what was actually built.
-# Default is OFF for all three; the submodule path enables them via the
-# PAYLOAD_MANAGER_ARROW_GCS / _AZURE / _HDFS options in the root CMakeLists.
+# Default is OFF for all three; set the PAYLOAD_MANAGER_ARROW_GCS / _AZURE /
+# _HDFS options in the root CMakeLists to match the installed Arrow package.
 if(PAYLOAD_MANAGER_ARROW_GCS)
     target_compile_definitions(payload_manager_internal PRIVATE PAYLOAD_MANAGER_ARROW_GCS=1)
 endif()
