@@ -70,7 +70,10 @@ int main(int argc, char** argv) {
   {
     payload::manager::v1::DeleteStreamRequest pre_delete;
     *pre_delete.mutable_stream() = stream;
-    client.DeleteStream(pre_delete); // ignore error if stream doesn't exist
+    // Discarded deliberately: the stream usually does not exist yet, and a
+    // NOT_FOUND here is the expected case rather than a failure. arrow::Status
+    // is [[nodiscard]], so say so rather than letting the compiler warn.
+    (void)client.DeleteStream(pre_delete);
   }
 
   // Create an example stream with bounded retention for repeatable demos.

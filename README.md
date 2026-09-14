@@ -1,5 +1,8 @@
 # Payload Manager
 
+[![CI](https://github.com/hurdad/payload-manager/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/hurdad/payload-manager/actions/workflows/ci.yml)
+[![codecov](https://codecov.io/gh/hurdad/payload-manager/branch/main/graph/badge.svg)](https://codecov.io/gh/hurdad/payload-manager)
+
 Payload Manager is a high-performance control plane for managing opaque binary payloads across multiple storage tiers (GPU, RAM, disk, object storage, or void) without routing payload bytes through the service itself.
 
 The platform is designed around a strict control-plane/data-plane split:
