@@ -573,6 +573,68 @@ jobs:
             down -v --remove-orphans
 
 
+  # ---------------------------------------------------------------------------
+  # Browser end-to-end
+  #
+  # The only job that loads the UI. Nothing else does: the gateway image build
+  # compiles the Svelte app but never runs it, so a component that builds and
+  # then fails to mount reaches a published image as a blank page with every
+  # other job green. That is not hypothetical -- it is what the Svelte 4 to 5
+  # bump did, and this suite is also what caught stream append failing against
+  # Postgres, because Playwright screenshots the error the page rendered.
+  # ---------------------------------------------------------------------------
+
+  e2e:
+    name: End-to-end (Playwright)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      # Same false-green guard as the suites above, and it has already earned
+      # its place here: when the gateway image failed to build, compose still
+      # exited 0 with the e2e container never created.
+      - name: Run the Playwright suite
+        run: |
+          set -euo pipefail
+          COMPOSE=(docker compose -f docker/docker-compose.e2e.yml)
+
+          "${COMPOSE[@]}" up --build --abort-on-container-exit --exit-code-from e2e || true
+
+          cid=$("${COMPOSE[@]}" ps -a -q e2e)
+          if [ -z "$cid" ]; then
+            echo "::error::e2e container was never created — the stack failed to come up."
+            exit 1
+          fi
+          status=$(docker inspect -f '{{.State.Status}}:{{.State.ExitCode}}' "$cid")
+          echo "e2e => $status"
+          case "$status" in
+            exited:0) echo "e2e suite passed" ;;
+            *) echo "::error::e2e did not pass (state $status)"; exit 1 ;;
+          esac
+
+      # The report carries the screenshot, video and DOM snapshot for each
+      # failure, which is the whole reason a browser suite is worth running in
+      # CI rather than only locally.
+      - name: Upload the Playwright report
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: playwright-report
+          path: |
+            ui/playwright-report
+            ui/test-results
+          if-no-files-found: ignore
+          retention-days: 7
+
+      - name: Dump logs on failure
+        if: failure()
+        run: docker compose -f docker/docker-compose.e2e.yml logs --no-color
+
+      - name: Tear down
+        if: always()
+        run: docker compose -f docker/docker-compose.e2e.yml down -v --remove-orphans
+
+
   gpu:
     name: GPU tests
     # Self-hosted runner with an NVIDIA device. Needs Docker and the NVIDIA
@@ -691,7 +753,7 @@ jobs:
     # nothing to do with CUDA. The tradeoff is explicit — the -cuda image can
     # publish while the GPU suite is red, so check that job before trusting a
     # -cuda tag.
-    needs: [format, tidy, generated, build-test, python, integration-api, integration-api-tls, integration-object]
+    needs: [format, tidy, generated, build-test, python, integration-api, integration-api-tls, integration-object, e2e]
     runs-on: ${{ matrix.runner }}
     permissions:
       contents: read
