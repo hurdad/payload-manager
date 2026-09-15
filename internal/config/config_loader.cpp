@@ -15,6 +15,23 @@ static void YamlToProtoValue(const YAML::Node& node, google::protobuf::Value* va
 static void SetScalarValue(const YAML::Node& node, google::protobuf::Value* value) {
   std::string scalar_value = node.Scalar();
 
+  // A quoted scalar is a string, full stop — that is the whole reason YAML has
+  // quoting. yaml-cpp reports the non-specific tag "!" for single- and
+  // double-quoted scalars and "?" for plain ones, which is the only place that
+  // distinction survives into the parsed node.
+  //
+  // Without this check the inference below runs on quoted text too, and
+  // `ring_id: "42"` became a JSON number, which the proto's string field then
+  // rejected with `invalid value 42 for type TYPE_STRING`. An operator who did
+  // the one thing YAML offers to disambiguate got a type error for their
+  // trouble. Numbered rings and all-digit object-store credentials are the
+  // realistic cases; this also keeps "nan", "inf" and "0x10" — all of which
+  // strtod happily accepts — as the strings they were written as.
+  if (node.Tag() == "!") {
+    value->set_string_value(scalar_value);
+    return;
+  }
+
   // detect numeric / bool
   if (scalar_value == "true" || scalar_value == "false") {
     value->set_bool_value(scalar_value == "true");

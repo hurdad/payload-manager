@@ -92,3 +92,111 @@ leases:
   EXPECT_THROW((void)payload::config::ConfigLoader::LoadFromYaml(yaml_path.string()), std::runtime_error)
       << "ConfigLoader must reject unknown fields.";
 }
+
+// ---------------------------------------------------------------------------
+// Quoted scalars stay strings
+//
+// The loader infers a scalar's JSON type from its text, which is right for
+// plain YAML but wrong for quoted YAML: quoting is how the format says "this is
+// a string". Inferring anyway turned ring_id: "42" into a JSON number, and the
+// proto's string field then rejected the whole config with
+// `invalid value 42 for type TYPE_STRING` — so the operator who disambiguated
+// correctly was the one who got the error.
+// ---------------------------------------------------------------------------
+
+TEST(ConfigLoader, QuotedNumericStringStaysAString) {
+  const auto yaml_path = WriteYaml("quoted_numeric_ring_id",
+                                   R"(storage:
+  ring:
+    rings:
+      - ring_id: "42"
+        n_slots: 4
+        slot_size_bytes: 65536
+)");
+
+  const auto config = payload::config::ConfigLoader::LoadFromYaml(yaml_path.string());
+  ASSERT_EQ(config.storage().ring().rings_size(), 1);
+  EXPECT_EQ(config.storage().ring().rings(0).ring_id(), "42");
+  // The numeric fields alongside it must still parse as numbers.
+  EXPECT_EQ(config.storage().ring().rings(0).n_slots(), 4u);
+  EXPECT_EQ(config.storage().ring().rings(0).slot_size_bytes(), 65536u);
+}
+
+TEST(ConfigLoader, SingleQuotedNumericStringStaysAString) {
+  // yaml-cpp reports the same non-specific tag for both quote styles; pin it so
+  // a fix written against double quotes alone would fail here.
+  const auto yaml_path = WriteYaml("single_quoted_numeric_ring_id",
+                                   R"(storage:
+  ring:
+    rings:
+      - ring_id: '7'
+        n_slots: 2
+        slot_size_bytes: 1024
+)");
+
+  const auto config = payload::config::ConfigLoader::LoadFromYaml(yaml_path.string());
+  ASSERT_EQ(config.storage().ring().rings_size(), 1);
+  EXPECT_EQ(config.storage().ring().rings(0).ring_id(), "7");
+}
+
+TEST(ConfigLoader, QuotedFloatLikeAndSpecialValuesStayStrings) {
+  // strtod accepts all three of these. Only the quoting keeps them as text.
+  const auto yaml_path = WriteYaml("quoted_special_values",
+                                   R"(storage:
+  ring:
+    rings:
+      - ring_id: "1.5"
+        n_slots: 1
+        slot_size_bytes: 1
+      - ring_id: "nan"
+        n_slots: 1
+        slot_size_bytes: 1
+      - ring_id: "0x10"
+        n_slots: 1
+        slot_size_bytes: 1
+)");
+
+  const auto config = payload::config::ConfigLoader::LoadFromYaml(yaml_path.string());
+  ASSERT_EQ(config.storage().ring().rings_size(), 3);
+  EXPECT_EQ(config.storage().ring().rings(0).ring_id(), "1.5");
+  EXPECT_EQ(config.storage().ring().rings(1).ring_id(), "nan");
+  EXPECT_EQ(config.storage().ring().rings(2).ring_id(), "0x10");
+}
+
+TEST(ConfigLoader, UnquotedNumericScalarsStillParseAsNumbers) {
+  // The guard must not regress plain scalars: these carry yaml-cpp's "?" tag
+  // and still have to reach the numeric branch.
+  const auto yaml_path = WriteYaml("plain_numeric_scalars",
+                                   R"(storage:
+  ring:
+    rings:
+      - ring_id: radio
+        n_slots: 8
+        slot_size_bytes: 1048576
+        slot_write_timeout_ms: 30000
+)");
+
+  const auto config = payload::config::ConfigLoader::LoadFromYaml(yaml_path.string());
+  ASSERT_EQ(config.storage().ring().rings_size(), 1);
+  const auto& ring = config.storage().ring().rings(0);
+  EXPECT_EQ(ring.ring_id(), "radio");
+  EXPECT_EQ(ring.n_slots(), 8u);
+  EXPECT_EQ(ring.slot_size_bytes(), 1048576u);
+  EXPECT_EQ(ring.slot_write_timeout_ms(), 30000u);
+}
+
+TEST(ConfigLoader, QuotedBooleanTextStaysAString) {
+  // Same class of bug on the bool branch: "true" as a ring name is text.
+  const auto yaml_path = WriteYaml("quoted_boolean_text",
+                                   R"(storage:
+  ring:
+    rings:
+      - ring_id: "true"
+        n_slots: 1
+        slot_size_bytes: 1
+)");
+
+  const auto config = payload::config::ConfigLoader::LoadFromYaml(yaml_path.string());
+  ASSERT_EQ(config.storage().ring().rings_size(), 1);
+  EXPECT_EQ(config.storage().ring().rings(0).ring_id(), "true");
+}
