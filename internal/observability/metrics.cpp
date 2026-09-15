@@ -169,6 +169,7 @@ struct Metrics::Impl {
   opentelemetry::nostd::shared_ptr<metrics_api::ObservableInstrument>   tier_occupancy_gauge;
   opentelemetry::nostd::shared_ptr<metrics_api::ObservableInstrument>   tier_count_gauge;
   opentelemetry::nostd::shared_ptr<metrics_api::Counter<std::uint64_t>> allocation_failure_count;
+  opentelemetry::nostd::shared_ptr<metrics_api::Counter<std::uint64_t>> auth_rejections_total;
   opentelemetry::nostd::shared_ptr<metrics_api::ObservableInstrument>   spill_queue_depth_gauge;
   opentelemetry::nostd::shared_ptr<metrics_api::ObservableInstrument>   shm_bytes_total_gauge;
   opentelemetry::nostd::shared_ptr<metrics_api::ObservableInstrument>   shm_bytes_free_gauge;
@@ -326,6 +327,8 @@ Metrics::Metrics() : impl_(std::make_unique<Impl>()) {
   impl_->spill_bytes_total = impl_->meter->CreateUInt64Counter("payload.spill.bytes_total", "Total bytes moved by spill operations", "By");
   impl_->allocation_failure_count =
       impl_->meter->CreateUInt64Counter("payload.allocation.failure_count", "Total number of allocation failures due to tier capacity", "1");
+  impl_->auth_rejections_total =
+      impl_->meter->CreateUInt64Counter("payload.auth.rejections_total", "Total number of RPCs rejected for an invalid or absent token", "1");
   impl_->tier_occupancy_gauge    = impl_->meter->CreateInt64ObservableGauge("payload.tier.occupancy_bytes", "Current tier occupancy in bytes", "By");
   impl_->tier_count_gauge        = impl_->meter->CreateInt64ObservableGauge("payload.tier.payload_count", "Number of payloads per tier", "1");
   impl_->spill_queue_depth_gauge = impl_->meter->CreateInt64ObservableGauge("payload.spill.queue_depth", "Number of payloads queued for spill", "1");
@@ -507,6 +510,20 @@ void Metrics::RecordAllocationFailure(std::string_view tier) {
   const opentelemetry::nostd::string_view    tier_sv(tier.data(), tier.size());
   const std::initializer_list<AttributePair> attributes = {{"tier", tier_sv}};
   AddWithAttributes(impl_->allocation_failure_count, static_cast<std::uint64_t>(1), attributes);
+}
+
+void Metrics::RecordAuthRejection(std::string_view reason) {
+  // Deliberately not gated on request_metrics_enabled. Every other counter here
+  // describes work the service did; this one describes work it refused, and a
+  // deployment that turned request metrics off to reduce cardinality still
+  // needs to see a spike in rejected calls.
+  if (!impl_ || !impl_->auth_rejections_total) {
+    return;
+  }
+
+  const opentelemetry::nostd::string_view    reason_sv(reason.data(), reason.size());
+  const std::initializer_list<AttributePair> attributes = {{"reason", reason_sv}};
+  AddWithAttributes(impl_->auth_rejections_total, static_cast<std::uint64_t>(1), attributes);
 }
 
 void Metrics::SetSpillQueueDepth(std::size_t depth) {

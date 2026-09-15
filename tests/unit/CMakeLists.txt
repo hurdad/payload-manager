@@ -18,6 +18,7 @@ payload_manager_add_unit_test(payload_manager_unit_placement_engine placement_en
 payload_manager_add_unit_test(payload_manager_unit_lease_table lease_table_test.cpp "lease")
 payload_manager_add_unit_test(payload_manager_unit_config_loader config_loader_test.cpp "config")
 payload_manager_add_unit_test(payload_manager_unit_server_credentials server_credentials_test.cpp "config;server;tls")
+payload_manager_add_unit_test(payload_manager_unit_jwt_verifier jwt_verifier_test.cpp "auth;tls")
 payload_manager_add_unit_test(payload_manager_unit_metrics_options metrics_options_test.cpp "config;metrics")
 payload_manager_add_unit_test(payload_manager_unit_logging logging_test.cpp "observability;logging")
 payload_manager_add_unit_test(payload_manager_unit_grpc_status grpc_status_test.cpp "grpc")

@@ -11,6 +11,7 @@
 #include <sstream>
 #include <stdexcept>
 
+#include "internal/auth/auth_processor.hpp"
 #include "internal/observability/logging.hpp"
 
 namespace payload::runtime {
@@ -125,6 +126,17 @@ std::shared_ptr<grpc::ServerCredentials> BuildServerCredentials(const cfg::Serve
   if (!creds) {
     throw std::runtime_error("server.tls: gRPC rejected the certificate and key");
   }
+
+  if (AuthEnabled(config)) {
+    // Installed on the credentials, not as an interceptor: gRPC runs a
+    // processor before dispatch, so a rejected call never reaches a service and
+    // none of the 31 RPC methods needs to know authentication exists.
+    creds->SetAuthMetadataProcessor(std::make_shared<payload::auth::AuthProcessor>(payload::auth::MakeJwtVerifier(config.auth())));
+    PAYLOAD_LOG_INFO("bearer token authentication enabled",
+                     {payload::observability::StringField("issuer", config.auth().issuer().empty() ? "(any)" : config.auth().issuer()),
+                      payload::observability::StringField("audience", config.auth().audience().empty() ? "(any)" : config.auth().audience())});
+  }
+
   return creds;
 }
 

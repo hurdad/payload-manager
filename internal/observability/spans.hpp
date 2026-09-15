@@ -83,6 +83,16 @@ class Metrics {
   // while anything else on the same tmpfs consumes it invisibly.
   void SetShmBytes(std::uint64_t total, std::uint64_t free_bytes);
   void RecordAllocationFailure(std::string_view tier);
+  // Rejected RPCs, by a bounded reason label:
+  //   missing | malformed_header | malformed | too_large | wrong_algorithm |
+  //   bad_signature | missing_exp | expired | not_yet_valid | wrong_issuer |
+  //   wrong_audience
+  //
+  // Needed because an authentication failure is invisible to every other
+  // metric here: ObserveRpc counts only calls that reach a handler, and a
+  // rejected one never does. Without this a service refusing every request
+  // and one serving none look identical from the outside.
+  void RecordAuthRejection(std::string_view reason);
   void SetSpillQueueDepth(std::size_t depth);
   // Latest slot accounting for one ring, labelled by ring_id. Pushed on a
   // timer rather than on state change: ring state moves at capture rate
@@ -178,6 +188,9 @@ inline void Metrics::RecordSpillFailure(std::string_view) {
 }
 
 inline void Metrics::RecordAllocationFailure(std::string_view) {
+}
+
+inline void Metrics::RecordAuthRejection(std::string_view) {
 }
 
 inline void Metrics::SetSpillQueueDepth(std::size_t) {

@@ -8,6 +8,8 @@ cmake_minimum_required(VERSION 3.20)
 set(INTERNAL_SRC
 
         # runtime
+        auth/auth_processor.cpp
+        auth/jwt_verifier.cpp
         runtime/credentials.cpp
         runtime/server.cpp
 
