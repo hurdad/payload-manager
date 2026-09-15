@@ -4,6 +4,37 @@ export function toURLSafe(id) {
   return id.replace(/\+/g, '-').replace(/\//g, '_');
 }
 
+/** Base64-encode a string as UTF-8.
+ *
+ *  btoa() alone is wrong for anything outside ASCII, and wrong in two different
+ *  ways. For U+0080-U+00FF it succeeds and encodes the Latin-1 byte: "café"
+ *  became `Y2Fm6Q==` (63 61 66 e9) where UTF-8 is `Y2Fmw6k=` (63 61 66 c3 a9),
+ *  so the catalog silently stored bytes that are not valid UTF-8. Above U+00FF
+ *  it throws InvalidCharacterError, which surfaced as a bare
+ *  "Error: Invalid character" in the metadata editor — the case you hit by
+ *  pasting text containing an em-dash or a curly quote, never mind CJK.
+ *
+ *  TextEncoder always produces UTF-8. The chunking is because
+ *  String.fromCharCode(...bytes) spreads one argument per byte, which blows the
+ *  argument limit on metadata of any real size. */
+export function base64FromUtf8(text) {
+  const bytes = new TextEncoder().encode(text);
+  const CHUNK = 0x8000;
+  let binary = '';
+  for (let i = 0; i < bytes.length; i += CHUNK) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + CHUNK));
+  }
+  return btoa(binary);
+}
+
+/** Inverse of base64FromUtf8, for metadata read back off the wire. */
+export function utf8FromBase64(b64) {
+  const binary = atob(b64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);
+  return new TextDecoder().decode(bytes);
+}
+
 async function apiFetch(path, options = {}) {
   const res = await fetch(path, {
     headers: { 'Content-Type': 'application/json', ...options.headers },
@@ -84,7 +115,7 @@ export const api = {
       method: 'PUT',
       body: JSON.stringify({
         mode: 'METADATA_UPDATE_MODE_REPLACE',
-        metadata: { data: btoa(raw), schema },
+        metadata: { data: base64FromUtf8(raw), schema },
       }),
     }),
 
@@ -92,7 +123,7 @@ export const api = {
     apiFetch(`/v1/payloads/${toURLSafe(id)}/metadata/events`, {
       method: 'POST',
       body: JSON.stringify({
-        metadata: { data: btoa(raw), schema: '' },
+        metadata: { data: base64FromUtf8(raw), schema: '' },
         source,
         version,
       }),
