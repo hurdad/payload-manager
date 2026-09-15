@@ -12,13 +12,13 @@
     "test:e2e:ui": "playwright test --ui"
   },
   "dependencies": {
-    "svelte": "^4.2.19"
+    "svelte": "^5.57.0"
   },
   "devDependencies": {
-    "@playwright/test": "^1.58.2",
-    "@sveltejs/vite-plugin-svelte": "^3.1.2",
-    "orval": "^7.11.2",
-    "typescript": "^5.9.2",
-    "vite": "^5.4.11"
+    "@playwright/test": "^1.63.0",
+    "@sveltejs/vite-plugin-svelte": "^7.3.0",
+    "orval": "^8.32.0",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.0"
   }
 }
