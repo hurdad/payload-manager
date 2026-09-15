@@ -67,6 +67,7 @@ For detailed documentation, see:
 - [Design Details](docs/DESIGN.md)
 - [Testing Strategy](docs/TESTING_STRATEGY.md)
 - [Metrics Reference](docs/METRICS.md)
+- [Dependency Reference](docs/DEPENDENCIES.md)
 
 ## Build
 
