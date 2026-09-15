@@ -92,7 +92,7 @@ struct BenchFixture {
 
   explicit BenchFixture() {
     payload::storage::StorageFactory::TierMap storage;
-    storage[payload::manager::v1::TIER_RAM]  = std::make_shared<payload::storage::RamArrowStore>();
+    storage[payload::manager::v1::TIER_RAM]      = std::make_shared<payload::storage::RamArrowStore>();
     storage[payload::manager::v1::TIER_DISK_HOT] = std::make_shared<CopyingMemoryBackend>(payload::manager::v1::TIER_DISK_HOT);
 
     auto repo  = std::make_shared<payload::db::memory::MemoryRepository>();

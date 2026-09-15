@@ -71,7 +71,7 @@ class TrackingStorageBackend final : public StorageBackend {
 
 PayloadManager MakeManager(const std::shared_ptr<LeaseManager>& lease_mgr) {
   payload::storage::StorageFactory::TierMap storage;
-  storage[TIER_RAM]  = std::make_shared<TrackingStorageBackend>(TIER_RAM);
+  storage[TIER_RAM]      = std::make_shared<TrackingStorageBackend>(TIER_RAM);
   storage[TIER_DISK_HOT] = std::make_shared<TrackingStorageBackend>(TIER_DISK_HOT);
 
   return PayloadManager(std::move(storage), lease_mgr, std::make_shared<payload::db::memory::MemoryRepository>());
@@ -151,7 +151,7 @@ TEST(PayloadManagerDelete, DeleteRemovesStoragePayload) {
   auto ram_backend = std::make_shared<TrackingStorageBackend>(TIER_RAM);
 
   payload::storage::StorageFactory::TierMap storage;
-  storage[TIER_RAM]  = ram_backend;
+  storage[TIER_RAM]      = ram_backend;
   storage[TIER_DISK_HOT] = std::make_shared<TrackingStorageBackend>(TIER_DISK_HOT);
 
   PayloadManager manager(std::move(storage), lease_mgr, std::make_shared<payload::db::memory::MemoryRepository>());

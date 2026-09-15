@@ -32,8 +32,8 @@ using payload::lease::LeaseManager;
 using payload::manager::core::v1::EvictionPolicy;
 using payload::manager::v1::PayloadID;
 using payload::manager::v1::PayloadMetadata;
-using payload::manager::v1::TIER_DISK_HOT;
 using payload::manager::v1::TIER_DISK_COLD;
+using payload::manager::v1::TIER_DISK_HOT;
 using payload::manager::v1::TIER_OBJECT;
 using payload::manager::v1::TIER_RAM;
 using payload::manager::v1::TIER_VOID;
@@ -89,7 +89,7 @@ struct ColdFixture {
   std::shared_ptr<PayloadManager>                        manager{[&] {
     payload::storage::StorageFactory::TierMap s;
     s[TIER_RAM]       = ram;
-    s[TIER_DISK_HOT]      = disk;
+    s[TIER_DISK_HOT]  = disk;
     s[TIER_DISK_COLD] = cold;
     return std::make_shared<PayloadManager>(s, lease_mgr, repo);
   }()};
@@ -110,7 +110,7 @@ struct NoColdFixture {
   std::shared_ptr<SimpleBackend>                         disk      = std::make_shared<SimpleBackend>(TIER_DISK_HOT);
   std::shared_ptr<PayloadManager>                        manager{[&] {
     payload::storage::StorageFactory::TierMap s;
-    s[TIER_RAM]  = ram;
+    s[TIER_RAM]      = ram;
     s[TIER_DISK_HOT] = disk;
     return std::make_shared<PayloadManager>(s, lease_mgr, repo);
   }()};
@@ -129,8 +129,7 @@ struct NoColdFixture {
 TEST(DiskColdTier, WithoutColdBackendDiskStillSpillsToObject) {
   NoColdFixture f;
   auto          id = f.AllocateAndCommit(TIER_DISK_HOT);
-  EXPECT_EQ(f.manager->GetDiskHotSpillTarget(id), TIER_OBJECT)
-      << "an unconfigured cold tier must leave the chain at DISK -> OBJECT";
+  EXPECT_EQ(f.manager->GetDiskHotSpillTarget(id), TIER_OBJECT) << "an unconfigured cold tier must leave the chain at DISK -> OBJECT";
 }
 
 TEST(DiskColdTier, WithoutColdBackendVoidOverrideStillHonored) {
@@ -163,8 +162,7 @@ TEST(DiskColdTier, VoidOverrideBeatsTheConfiguredColdTier) {
   EvictionPolicy policy;
   policy.set_spill_target(TIER_VOID);
   auto id = f.AllocateAndCommit(TIER_DISK_HOT, 64, policy);
-  EXPECT_EQ(f.manager->GetDiskHotSpillTarget(id), TIER_VOID)
-      << "an explicit discard request outranks the configured chain";
+  EXPECT_EQ(f.manager->GetDiskHotSpillTarget(id), TIER_VOID) << "an explicit discard request outranks the configured chain";
 }
 
 TEST(DiskColdTier, ColdSpillsToObject) {
@@ -210,9 +208,9 @@ TEST(DiskColdTier, ColdTierBytesAreAccountedSeparatelyFromDisk) {
 
   f.manager->ExecuteSpill(id, TIER_DISK_COLD, /*fsync=*/false);
 
-  const auto bytes      = f.manager->GetTierBytes();
+  const auto bytes          = f.manager->GetTierBytes();
   uint64_t   disk_hot_bytes = bytes.count(static_cast<int>(TIER_DISK_HOT)) ? bytes.at(static_cast<int>(TIER_DISK_HOT)) : 0;
-  uint64_t   cold_bytes = bytes.count(static_cast<int>(TIER_DISK_COLD)) ? bytes.at(static_cast<int>(TIER_DISK_COLD)) : 0;
+  uint64_t   cold_bytes     = bytes.count(static_cast<int>(TIER_DISK_COLD)) ? bytes.at(static_cast<int>(TIER_DISK_COLD)) : 0;
   EXPECT_EQ(disk_hot_bytes, 0u);
   EXPECT_EQ(cold_bytes, 64u);
 }
@@ -269,7 +267,7 @@ TEST(DiskColdTier, ColdPayloadIsDescribedAsDiskEvenWithoutAColdBackend) {
   {
     payload::storage::StorageFactory::TierMap with_cold;
     with_cold[TIER_RAM]       = std::make_shared<SimpleBackend>(TIER_RAM);
-    with_cold[TIER_DISK_HOT]      = std::make_shared<SimpleBackend>(TIER_DISK_HOT);
+    with_cold[TIER_DISK_HOT]  = std::make_shared<SimpleBackend>(TIER_DISK_HOT);
     with_cold[TIER_DISK_COLD] = std::make_shared<SimpleBackend>(TIER_DISK_COLD);
     auto manager              = std::make_shared<PayloadManager>(with_cold, lease_mgr, repo);
 
@@ -280,9 +278,9 @@ TEST(DiskColdTier, ColdPayloadIsDescribedAsDiskEvenWithoutAColdBackend) {
 
   // Same catalog, cold tier no longer configured.
   payload::storage::StorageFactory::TierMap without_cold;
-  without_cold[TIER_RAM]  = std::make_shared<SimpleBackend>(TIER_RAM);
+  without_cold[TIER_RAM]      = std::make_shared<SimpleBackend>(TIER_RAM);
   without_cold[TIER_DISK_HOT] = std::make_shared<SimpleBackend>(TIER_DISK_HOT);
-  auto manager            = std::make_shared<PayloadManager>(without_cold, lease_mgr, repo);
+  auto manager                = std::make_shared<PayloadManager>(without_cold, lease_mgr, repo);
 
   const auto desc = manager->ResolveSnapshot(id);
   EXPECT_EQ(desc.tier(), TIER_DISK_COLD);
@@ -316,7 +314,7 @@ TEST(DiskColdTier, ColdPressureRespectsHighWaterMark) {
 
 TEST(DiskColdTier, ColdPressureIsIndependentOfDiskPressure) {
   PressureState state;
-  state.disk_hot_limit      = 1000;
+  state.disk_hot_limit  = 1000;
   state.disk_cold_limit = 1000;
   state.disk_hot_bytes.store(1500);
   EXPECT_TRUE(state.DiskHotPressure());

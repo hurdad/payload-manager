@@ -84,7 +84,7 @@ struct Fixture {
   std::shared_ptr<SimpleBackend>                         disk = std::make_shared<SimpleBackend>(TIER_DISK_HOT);
   std::shared_ptr<payload::core::PayloadManager>         manager{[&] {
     payload::storage::StorageFactory::TierMap s;
-    s[TIER_RAM]  = ram;
+    s[TIER_RAM]      = ram;
     s[TIER_DISK_HOT] = disk;
     return std::make_shared<payload::core::PayloadManager>(s, lease_mgr, repo);
   }()};
@@ -176,9 +176,9 @@ TEST(SpillWaitTimeout, WaitTrueSucceedsAfterLeaseExpires) {
   auto disk      = std::make_shared<SimpleBackend>(TIER_DISK_HOT);
 
   payload::storage::StorageFactory::TierMap s;
-  s[TIER_RAM]  = ram;
+  s[TIER_RAM]      = ram;
   s[TIER_DISK_HOT] = disk;
-  auto manager = std::make_shared<payload::core::PayloadManager>(s, lease_mgr, repo);
+  auto manager     = std::make_shared<payload::core::PayloadManager>(s, lease_mgr, repo);
 
   payload::service::ServiceContext ctx;
   ctx.manager               = manager;

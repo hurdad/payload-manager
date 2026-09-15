@@ -65,7 +65,7 @@ struct Fixture {
   std::shared_ptr<payload::db::memory::MemoryRepository> repo      = std::make_shared<payload::db::memory::MemoryRepository>();
   PayloadManager                                         manager{[&] {
                            payload::storage::StorageFactory::TierMap storage;
-                           storage[TIER_RAM]  = ram;
+                           storage[TIER_RAM]      = ram;
                            storage[TIER_DISK_HOT] = disk;
                            return storage;
                          }(),

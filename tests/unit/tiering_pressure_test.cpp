@@ -79,7 +79,7 @@ struct Fixture {
   std::shared_ptr<SimpleBackend>                         disk      = std::make_shared<SimpleBackend>(TIER_DISK_HOT);
   std::shared_ptr<PayloadManager>                        manager{[&] {
     payload::storage::StorageFactory::TierMap s;
-    s[TIER_RAM]  = ram;
+    s[TIER_RAM]      = ram;
     s[TIER_DISK_HOT] = disk;
     return std::make_shared<PayloadManager>(s, lease_mgr, repo);
   }()};
@@ -235,11 +235,11 @@ TEST(TieringPressure, HighWaterTriggersEvictionBeforeHardCap) {
 
 TEST(TieringPressure, HighWaterAppliesToEveryTier) {
   payload::tiering::PressureState state;
-  state.ram_limit      = 1000;
-  state.gpu_limit      = 2000;
+  state.ram_limit          = 1000;
+  state.gpu_limit          = 2000;
   state.disk_hot_limit     = 4000;
-  state.ram_evict_pct  = 50;
-  state.gpu_evict_pct  = 25;
+  state.ram_evict_pct      = 50;
+  state.gpu_evict_pct      = 25;
   state.disk_hot_evict_pct = 90;
 
   EXPECT_EQ(state.RamEvictThreshold(), 500u);
@@ -351,8 +351,8 @@ TEST(TieringCapacity, UnsetPressureStateAppliesNoAdmissionControl) {
 
 TEST(TieringCapacity, EachTierIsCappedIndependently) {
   Fixture f;
-  auto    state     = std::make_shared<payload::tiering::PressureState>();
-  state->ram_limit  = 512;
+  auto    state         = std::make_shared<payload::tiering::PressureState>();
+  state->ram_limit      = 512;
   state->disk_hot_limit = 4096;
   f.manager->SetPressureState(state);
 

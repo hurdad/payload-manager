@@ -265,7 +265,7 @@ TEST(PayloadManagerCriticalFixes, PromoteCommitsDbBeforeSourceRemoval) {
   auto lease_mgr    = std::make_shared<LeaseManager>();
 
   payload::storage::StorageFactory::TierMap storage;
-  storage[TIER_RAM]  = ram_backend;
+  storage[TIER_RAM]      = ram_backend;
   storage[TIER_DISK_HOT] = disk_backend;
 
   PayloadManager manager(std::move(storage), lease_mgr, repo);
@@ -305,7 +305,7 @@ TEST(PayloadManagerCriticalFixes, SpillCommitsDbBeforeSourceRemoval) {
   auto lease_mgr    = std::make_shared<LeaseManager>();
 
   payload::storage::StorageFactory::TierMap storage;
-  storage[TIER_RAM]  = ram_backend;
+  storage[TIER_RAM]      = ram_backend;
   storage[TIER_DISK_HOT] = disk_backend;
 
   PayloadManager manager(std::move(storage), lease_mgr, repo);
@@ -346,7 +346,7 @@ TEST(PayloadManagerCriticalFixes, PromoteSameTierIsNoop) {
   auto lease_mgr    = std::make_shared<LeaseManager>();
 
   payload::storage::StorageFactory::TierMap storage;
-  storage[TIER_RAM]  = ram_backend;
+  storage[TIER_RAM]      = ram_backend;
   storage[TIER_DISK_HOT] = disk_backend;
 
   PayloadManager manager(std::move(storage), lease_mgr, repo);
@@ -371,7 +371,7 @@ TEST(PayloadManagerCriticalFixes, DeletePrunesPayloadMutex) {
 
   auto                                      ram_backend = std::make_shared<OrderTrackingBackend>(TIER_RAM, log);
   payload::storage::StorageFactory::TierMap storage;
-  storage[TIER_RAM]  = ram_backend;
+  storage[TIER_RAM]      = ram_backend;
   storage[TIER_DISK_HOT] = std::make_shared<OrderTrackingBackend>(TIER_DISK_HOT, log);
 
   PayloadManager manager(std::move(storage), lease_mgr, std::make_shared<payload::db::memory::MemoryRepository>());
@@ -416,7 +416,7 @@ TEST(PayloadManagerCriticalFixes, SpillDataAvailableInDestAfterComplete) {
   auto lease_mgr    = std::make_shared<LeaseManager>();
 
   payload::storage::StorageFactory::TierMap storage;
-  storage[TIER_RAM]  = ram_backend;
+  storage[TIER_RAM]      = ram_backend;
   storage[TIER_DISK_HOT] = disk_backend;
 
   PayloadManager manager(std::move(storage), lease_mgr, repo);
@@ -458,7 +458,7 @@ TEST(PayloadManagerCriticalFixes, DeleteSucceedsWhenStorageRemoveThrows) {
   auto backend   = std::make_shared<ThrowingRemoveBackend>(TIER_RAM);
 
   payload::storage::StorageFactory::TierMap storage;
-  storage[TIER_RAM]  = backend;
+  storage[TIER_RAM]      = backend;
   storage[TIER_DISK_HOT] = std::make_shared<ThrowingRemoveBackend>(TIER_DISK_HOT);
 
   PayloadManager manager(std::move(storage), lease_mgr, std::make_shared<payload::db::memory::MemoryRepository>());

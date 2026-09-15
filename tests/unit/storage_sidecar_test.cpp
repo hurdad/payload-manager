@@ -124,7 +124,7 @@ struct DiskFixture {
   std::shared_ptr<payload::db::memory::MemoryRepository> repo = std::make_shared<payload::db::memory::MemoryRepository>();
   std::shared_ptr<PayloadManager>                        manager{[&] {
     payload::storage::StorageFactory::TierMap storage;
-    storage[TIER_RAM]  = ram_store;
+    storage[TIER_RAM]      = ram_store;
     storage[TIER_DISK_HOT] = disk_store;
     return std::make_shared<PayloadManager>(std::move(storage), lease_mgr, repo);
   }()};

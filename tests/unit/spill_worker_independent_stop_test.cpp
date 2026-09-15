@@ -68,7 +68,7 @@ struct Env {
   std::shared_ptr<payload::db::memory::MemoryRepository> repo      = std::make_shared<payload::db::memory::MemoryRepository>();
   std::shared_ptr<payload::core::PayloadManager>         manager{[&] {
     payload::storage::StorageFactory::TierMap s;
-    s[TIER_RAM]  = ram;
+    s[TIER_RAM]      = ram;
     s[TIER_DISK_HOT] = disk;
     return std::make_shared<payload::core::PayloadManager>(s, lease_mgr, repo);
   }()};

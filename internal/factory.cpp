@@ -260,8 +260,8 @@ Application Build(const payload::runtime::config::RuntimeConfig& config) {
   constexpr uint32_t kDefaultEvictionHighWaterPct = 80;
   const auto         resolve_pct                  = [](uint32_t configured) { return configured == 0 ? kDefaultEvictionHighWaterPct : configured; };
 
-  pressure_state->ram_evict_pct  = resolve_pct(config.storage().ram().eviction_high_water_pct());
-  pressure_state->disk_hot_evict_pct      = resolve_pct(config.storage().disk_hot().eviction_high_water_pct());
+  pressure_state->ram_evict_pct       = resolve_pct(config.storage().ram().eviction_high_water_pct());
+  pressure_state->disk_hot_evict_pct  = resolve_pct(config.storage().disk_hot().eviction_high_water_pct());
   pressure_state->disk_cold_evict_pct = resolve_pct(config.storage().disk_cold().eviction_high_water_pct());
 
   uint32_t gpu_pct = 0;

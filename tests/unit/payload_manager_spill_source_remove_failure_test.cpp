@@ -110,7 +110,7 @@ TEST(SpillSourceRemoveFailure, SpillDoesNotPropagateRemoveException) {
   auto disk_backend = std::make_shared<SimpleBackend>(TIER_DISK_HOT);
 
   payload::storage::StorageFactory::TierMap storage;
-  storage[TIER_RAM]  = ram_backend;
+  storage[TIER_RAM]      = ram_backend;
   storage[TIER_DISK_HOT] = disk_backend;
 
   payload::core::PayloadManager manager(std::move(storage), lease_mgr, std::make_shared<payload::db::memory::MemoryRepository>());
@@ -162,7 +162,7 @@ TEST(SpillSourceRemoveFailure, PromoteDoesNotPropagateRemoveException) {
   }
 
   payload::storage::StorageFactory::TierMap storage3;
-  storage3[TIER_RAM]  = ram2;
+  storage3[TIER_RAM]      = ram2;
   storage3[TIER_DISK_HOT] = disk2;
   payload::core::PayloadManager manager3(std::move(storage3), lease_mgr, repo2);
   manager3.HydrateCaches();

@@ -85,7 +85,7 @@ struct Fixture {
   std::shared_ptr<SimpleBackend>                         disk      = std::make_shared<SimpleBackend>(TIER_DISK_HOT);
   std::shared_ptr<PayloadManager>                        manager{[&] {
     payload::storage::StorageFactory::TierMap s;
-    s[TIER_RAM]  = ram;
+    s[TIER_RAM]      = ram;
     s[TIER_DISK_HOT] = disk;
     return std::make_shared<PayloadManager>(s, lease_mgr, repo);
   }()};
@@ -227,7 +227,7 @@ TEST(VoidTier, SpillToVoidDeletesDiskPayload) {
   f.manager->ExecuteSpill(id, TIER_VOID, /*fsync=*/false);
 
   EXPECT_FALSE(f.disk->Has(id));
-  auto     bytes      = f.manager->GetTierBytes();
+  auto     bytes          = f.manager->GetTierBytes();
   uint64_t disk_hot_bytes = bytes.count(static_cast<int>(TIER_DISK_HOT)) ? bytes.at(static_cast<int>(TIER_DISK_HOT)) : 0;
   EXPECT_EQ(disk_hot_bytes, 0u);
   EXPECT_THROW(f.manager->ResolveSnapshot(id), std::exception);
