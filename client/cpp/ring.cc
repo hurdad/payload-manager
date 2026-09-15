@@ -543,11 +543,15 @@ RingProducer::Slot& RingProducer::Slot::operator=(Slot&& other) noexcept {
 }
 
 std::size_t RingProducer::Slot::Append(const void* src, std::size_t src_bytes) {
-  if (!valid() || src == nullptr || src_bytes == 0) return 0;
+  // Checked before valid(): Commit() nulls host_va_ so that a late raw write
+  // faults, which also makes valid() false. Testing valid() first therefore
+  // swallowed this case and returned a bare 0, and the caller learned nothing
+  // about why its bytes went nowhere.
   if (committed_) {
     spdlog::warn("{}: Append after commit on ring '{}' slot {} — ignored", owner_ ? owner_->opts_.log_prefix : "ring", ring_id_, slot_idx_);
     return 0;
   }
+  if (!valid() || src == nullptr || src_bytes == 0) return 0;
   const std::size_t room = static_cast<std::size_t>(capacity_ - offset_);
   const std::size_t n    = src_bytes > room ? room : src_bytes;
   if (n < src_bytes) {

@@ -409,14 +409,22 @@ std::vector<model::StreamEntryRecord> PgRepository::ReadStreamEntries(Transactio
     sql += " AND append_time>=to_timestamp($3 / 1000.0)";
   }
   sql += " ORDER BY \"offset\" ASC";
+  // Bound as a parameter like every other value in this file. The old form
+  // interpolated std::to_string(*max_entries) into the text, which was safe
+  // only because the type happens to be uint64_t — one signature change away
+  // from being the single injectable statement in the repository.
   if (max_entries.has_value()) {
-    sql += " LIMIT " + std::to_string(*max_entries);
+    sql += min_append_time_ms.has_value() ? " LIMIT $4" : " LIMIT $3";
   }
   sql += ";";
 
   pqxx::result res;
-  if (min_append_time_ms.has_value()) {
+  if (min_append_time_ms.has_value() && max_entries.has_value()) {
+    res = TX(t).Work().exec(sql, pqxx::params{stream_id, start_offset, *min_append_time_ms, *max_entries});
+  } else if (min_append_time_ms.has_value()) {
     res = TX(t).Work().exec(sql, pqxx::params{stream_id, start_offset, *min_append_time_ms});
+  } else if (max_entries.has_value()) {
+    res = TX(t).Work().exec(sql, pqxx::params{stream_id, start_offset, *max_entries});
   } else {
     res = TX(t).Work().exec(sql, pqxx::params{stream_id, start_offset});
   }

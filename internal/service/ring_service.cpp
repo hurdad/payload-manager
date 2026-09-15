@@ -88,7 +88,16 @@ runtimev1::LeaseRingSlotResponse RingService::LeaseRingSlot(const runtimev1::Lea
                                       std::to_string(req.generation()) + " (generation mismatch or invalid slot)");
   }
 
-  const auto lease_id = lease_table_->Insert(req.ring_id(), grant->slot_idx, grant->generation);
+  // Ring::Lease has already taken the refcount. If recording the lease throws,
+  // nothing will ever release it and the slot stays pinned until the TTL sweep,
+  // so hand the refcount back before letting the exception out.
+  payload::ring::LeaseId lease_id{};
+  try {
+    lease_id = lease_table_->Insert(req.ring_id(), grant->slot_idx, grant->generation);
+  } catch (...) {
+    ring->Release(grant->slot_idx, grant->generation);
+    throw;
+  }
 
   runtimev1::LeaseRingSlotResponse resp;
   resp.set_lease_id(payload::ring::RingLeaseTable::ToBytes(lease_id));

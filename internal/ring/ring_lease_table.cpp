@@ -1,7 +1,9 @@
 #include "internal/ring/ring_lease_table.hpp"
 
+#include <sys/random.h>
+
+#include <cerrno>
 #include <cstring>
-#include <random>
 #include <stdexcept>
 
 namespace payload::ring {
@@ -19,15 +21,28 @@ size_t LeaseIdHash::operator()(const LeaseId& id) const noexcept {
 RingLeaseTable::RingLeaseTable() = default;
 
 LeaseId RingLeaseTable::NewLeaseId_() {
-  // Per-call thread_local PRNG: avoids contending on a global RNG
-  // mutex without paying re-seeding cost on every call. Seeded
-  // once per thread from random_device.
-  thread_local std::mt19937_64 rng{std::random_device{}()};
-  LeaseId                      id{};
-  uint64_t                     a = rng();
-  uint64_t                     b = rng();
-  std::memcpy(id.data(), &a, sizeof(a));
-  std::memcpy(id.data() + 8, &b, sizeof(b));
+  // A lease_id is a capability: possession of the 16 bytes is the whole
+  // authorization for ReleaseRingSlot, and releasing someone else's lease lets
+  // the producer recycle a slot that consumer is still reading. mt19937_64 was
+  // the wrong generator for that — its full internal state is recoverable from
+  // 312 consecutive outputs, so a client that collects ~156 of its own lease
+  // ids can predict every id the process hands out afterwards.
+  //
+  // getrandom(2) draws from the kernel CSPRNG. It is a syscall rather than a
+  // userspace step, but leases are granted once per consumer per capture, not
+  // per byte, and correctness here is worth more than the nanoseconds.
+  // std::random_device is deliberately not used instead: the standard permits
+  // a deterministic implementation, and it gives no way to detect one.
+  LeaseId id{};
+  size_t  filled = 0;
+  while (filled < id.size()) {
+    const ssize_t n = ::getrandom(id.data() + filled, id.size() - filled, 0);
+    if (n < 0) {
+      if (errno == EINTR) continue; // interrupted before any bytes were drawn
+      throw std::runtime_error(std::string("RingLeaseTable: getrandom failed: ") + std::strerror(errno));
+    }
+    filled += static_cast<size_t>(n);
+  }
   return id;
 }
 
