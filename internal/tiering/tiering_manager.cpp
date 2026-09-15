@@ -48,10 +48,12 @@ void TieringManager::Loop() {
       const auto tier_bytes = manager_->GetTierBytes();
       auto       it_ram     = tier_bytes.find(static_cast<int>(payload::manager::v1::TIER_RAM));
       auto       it_gpu     = tier_bytes.find(static_cast<int>(payload::manager::v1::TIER_GPU));
-      auto       it_disk    = tier_bytes.find(static_cast<int>(payload::manager::v1::TIER_DISK));
+      auto       it_disk    = tier_bytes.find(static_cast<int>(payload::manager::v1::TIER_DISK_HOT));
+      auto       it_cold    = tier_bytes.find(static_cast<int>(payload::manager::v1::TIER_DISK_COLD));
       state_->ram_bytes.store(it_ram != tier_bytes.end() ? it_ram->second : 0);
       state_->gpu_bytes.store(it_gpu != tier_bytes.end() ? it_gpu->second : 0);
-      state_->disk_bytes.store(it_disk != tier_bytes.end() ? it_disk->second : 0);
+      state_->disk_hot_bytes.store(it_disk != tier_bytes.end() ? it_disk->second : 0);
+      state_->disk_cold_bytes.store(it_cold != tier_bytes.end() ? it_cold->second : 0);
     }
 
     // Sample the tmpfs itself on the same cadence. Tier occupancy only covers
@@ -82,10 +84,22 @@ void TieringManager::Loop() {
       payload::observability::Metrics::Instance().SetSpillQueueDepth(scheduler_->QueueDepth());
     }
 
-    if (auto victim = policy_->ChooseDiskEviction(*state_)) {
+    if (auto victim = policy_->ChooseDiskHotEviction(*state_)) {
       spill::SpillTask task;
       task.id          = *victim;
-      task.target_tier = manager_->GetDiskSpillTarget(*victim);
+      task.target_tier = manager_->GetDiskHotSpillTarget(*victim);
+      scheduler_->Enqueue(task);
+      payload::observability::Metrics::Instance().SetSpillQueueDepth(scheduler_->QueueDepth());
+    }
+
+    // The cold level is the last local stop, so its only demotion target is
+    // TIER_OBJECT (or TIER_VOID when the payload asked to be discarded). When
+    // no cold tier is configured DiskColdPressure() is false against a zero
+    // limit and this never fires.
+    if (auto victim = policy_->ChooseDiskColdEviction(*state_)) {
+      spill::SpillTask task;
+      task.id          = *victim;
+      task.target_tier = manager_->GetDiskColdSpillTarget(*victim);
       scheduler_->Enqueue(task);
       payload::observability::Metrics::Instance().SetSpillQueueDepth(scheduler_->QueueDepth());
     }

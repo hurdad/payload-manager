@@ -88,7 +88,7 @@ void PrintStats(payload::manager::client::PayloadClient& client, const Limits& l
 
   const uint64_t gpu_used  = s.bytes_gpu();
   const uint64_t ram_used  = s.bytes_ram();
-  const uint64_t disk_used = s.bytes_disk();
+  const uint64_t disk_used = s.bytes_disk_hot();
 
   std::cout << "  " << label << "\n";
   std::cout << "    GPU  " << Bar(gpu_used, limits.gpu_bytes) << "  " << HumanBytes(gpu_used) << " / " << HumanBytes(limits.gpu_bytes) << "  ("
@@ -96,7 +96,7 @@ void PrintStats(payload::manager::client::PayloadClient& client, const Limits& l
   std::cout << "    RAM  " << Bar(ram_used, limits.ram_bytes) << "  " << HumanBytes(ram_used) << " / " << HumanBytes(limits.ram_bytes) << "  ("
             << s.payloads_ram() << " payloads)\n";
   std::cout << "    Disk " << Bar(disk_used, limits.disk_bytes) << "  " << HumanBytes(disk_used) << " / " << HumanBytes(limits.disk_bytes) << "  ("
-            << s.payloads_disk() << " payloads)\n";
+            << s.payloads_disk_hot() << " payloads)\n";
   std::cout << std::flush;
 }
 

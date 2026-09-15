@@ -77,7 +77,7 @@ def _make_disk_descriptor(
     length_bytes: int = 64,
     offset_bytes: int = 0,
 ) -> placement_pb2.PayloadDescriptor:
-    desc = placement_pb2.PayloadDescriptor(tier=types_pb2.TIER_DISK)
+    desc = placement_pb2.PayloadDescriptor(tier=types_pb2.TIER_DISK_HOT)
     desc.disk.path = path
     desc.disk.length_bytes = length_bytes
     desc.disk.offset_bytes = offset_bytes
@@ -207,7 +207,7 @@ class TestValidateHasLocation(unittest.TestCase):
         PayloadClient._ValidateHasLocation(desc)
 
     def test_passes_for_disk(self):
-        desc = placement_pb2.PayloadDescriptor(tier=types_pb2.TIER_DISK)
+        desc = placement_pb2.PayloadDescriptor(tier=types_pb2.TIER_DISK_HOT)
         desc.disk.path = "/tmp/x"
         desc.disk.length_bytes = 8
         PayloadClient._ValidateHasLocation(desc)

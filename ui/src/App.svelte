@@ -230,7 +230,8 @@
   }
   :global(.badge-gpu)    { background: color-mix(in srgb, #a855f7 20%, transparent); color: #c084fc; border: 1px solid #a855f720; }
   :global(.badge-ram)    { background: color-mix(in srgb, #3b82f6 20%, transparent); color: #60a5fa; border: 1px solid #3b82f620; }
-  :global(.badge-disk)   { background: color-mix(in srgb, #22c55e 20%, transparent); color: #4ade80; border: 1px solid #22c55e20; }
+  :global(.badge-disk-hot)   { background: color-mix(in srgb, #22c55e 20%, transparent); color: #4ade80; border: 1px solid #22c55e20; }
+  :global(.badge-disk-cold) { background: color-mix(in srgb, #0ea5e9 20%, transparent); color: #38bdf8; border: 1px solid #0ea5e920; }
   :global(.badge-object) { background: color-mix(in srgb, #f59e0b 20%, transparent); color: #fbbf24; border: 1px solid #f59e0b20; }
   :global(.badge-active)    { background: color-mix(in srgb, #22c55e 20%, transparent); color: #4ade80; border: 1px solid #22c55e20; }
   :global(.badge-allocated) { background: color-mix(in srgb, #f59e0b 20%, transparent); color: #fbbf24; border: 1px solid #f59e0b20; }

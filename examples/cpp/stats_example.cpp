@@ -28,8 +28,8 @@ int main(int argc, char** argv) {
 
   const auto& stats = result.ValueOrDie();
   std::cout << "Payload Manager stats for " << target << '\n';
-  std::cout << "payload counts: gpu=" << stats.payloads_gpu() << ", ram=" << stats.payloads_ram() << ", disk=" << stats.payloads_disk() << '\n';
-  std::cout << "bytes: gpu=" << stats.bytes_gpu() << ", ram=" << stats.bytes_ram() << ", disk=" << stats.bytes_disk() << '\n';
+  std::cout << "payload counts: gpu=" << stats.payloads_gpu() << ", ram=" << stats.payloads_ram() << ", disk_hot=" << stats.payloads_disk_hot() << '\n';
+  std::cout << "bytes: gpu=" << stats.bytes_gpu() << ", ram=" << stats.bytes_ram() << ", disk_hot=" << stats.bytes_disk_hot() << '\n';
 
   OtelEndSpan();
   OtelShutdown();

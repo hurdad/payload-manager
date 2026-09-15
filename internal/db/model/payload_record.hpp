@@ -41,7 +41,7 @@ struct PayloadRecord {
   // Advisory eviction priority (EvictionPriority enum; 0 = UNSPECIFIED = NORMAL).
   int eviction_priority = 0;
 
-  // Preferred tier to spill into when evicted (Tier enum; 0 = UNSPECIFIED → TIER_DISK).
+  // Preferred tier to spill into when evicted (Tier enum; 0 = UNSPECIFIED → TIER_DISK_HOT).
   int spill_target = 0;
 
   // Minimum tier below which this payload must not be spilled (Tier enum; 0 = no constraint).

@@ -27,7 +27,7 @@ Optional flags:
 
 using payload::manager::client::PayloadClient;
 
-auto channel = grpc::CreateChannel("localhost:50051", grpc::InsecureChannelCredentials());
+auto channel = payload::client::MakeChannel("localhost:50051");
 PayloadClient client(channel);
 
 // 1) Allocate writable memory
@@ -140,3 +140,24 @@ See complete end-to-end examples in `examples/cpp/`:
 - `catalog_admin_example.cpp`
 - `stats_example.cpp`
 - `stream_example.cpp`
+
+## Connecting to a TLS or authenticated deployment
+
+`payload::client::MakeChannel` (`client/cpp/channel.h`) reads its settings from
+the environment, so the same code connects to a plaintext or a secured
+deployment without changing:
+
+| Variable | Meaning |
+| --- | --- |
+| `PAYLOAD_MANAGER_TLS_CA` | PEM CA bundle. Its presence is what enables TLS. |
+| `PAYLOAD_MANAGER_TOKEN` | Bearer token, sent on every RPC. |
+| `PAYLOAD_MANAGER_TOKEN_FILE` | A file holding the token, instead of the above. Preferred: a token in an environment variable is visible in `/proc` and in `docker inspect`. |
+| `PAYLOAD_MANAGER_TLS_CERT` / `_KEY` | Client certificate, for a server configured with `client_ca_file`. |
+| `PAYLOAD_MANAGER_TLS_SERVER_NAME` | Name to verify against, when the address dialled is not one the certificate carries — a pod IP, or a Unix socket, which has no hostname at all. |
+
+Pass a `ChannelOptions` explicitly to override any of them. Two combinations
+are refused rather than connected: a token without TLS, and a client
+certificate without a CA.
+
+`PayloadClient`, `RingProducer` and `RingConsumer` take a channel and are
+credential-agnostic, so none of this changes how they are constructed.

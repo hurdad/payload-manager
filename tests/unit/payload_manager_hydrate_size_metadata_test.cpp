@@ -19,7 +19,7 @@ using payload::db::memory::MemoryRepository;
 using payload::db::model::PayloadRecord;
 using payload::manager::v1::PAYLOAD_STATE_ACTIVE;
 using payload::manager::v1::PayloadID;
-using payload::manager::v1::TIER_DISK;
+using payload::manager::v1::TIER_DISK_HOT;
 using payload::storage::StorageBackend;
 
 class SizeOnlyStorageBackend final : public StorageBackend {
@@ -44,7 +44,7 @@ class SizeOnlyStorageBackend final : public StorageBackend {
   }
 
   payload::manager::v1::Tier TierType() const override {
-    return TIER_DISK;
+    return TIER_DISK_HOT;
   }
 
   void SetSize(const std::string& id, uint64_t size) {
@@ -65,7 +65,7 @@ TEST(PayloadManagerHydrate, HydrateCachesUsesSizeMetadataWithoutRead) {
 
   PayloadRecord seed;
   seed.id         = seed_uuid;
-  seed.tier       = TIER_DISK;
+  seed.tier       = TIER_DISK_HOT;
   seed.state      = PAYLOAD_STATE_ACTIVE;
   seed.size_bytes = 0;
   seed.version    = 1;
@@ -80,7 +80,7 @@ TEST(PayloadManagerHydrate, HydrateCachesUsesSizeMetadataWithoutRead) {
   backend->SetSize(payload::util::ToString(seed_uuid), 4096);
 
   payload::storage::StorageFactory::TierMap storage;
-  storage[TIER_DISK] = backend;
+  storage[TIER_DISK_HOT] = backend;
 
   PayloadManager manager(std::move(storage), std::make_shared<payload::lease::LeaseManager>(), repository);
 

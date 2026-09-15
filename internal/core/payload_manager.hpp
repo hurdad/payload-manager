@@ -52,9 +52,15 @@ class PayloadManager {
 
   bool                       IsEvictionExempt(const payload::manager::v1::PayloadID& id) const;
   payload::manager::v1::Tier GetSpillTarget(const payload::manager::v1::PayloadID& id) const;
-  // Returns the terminal tier for a disk-resident payload under eviction pressure.
-  // Respects per-payload TIER_VOID overrides; defaults to TIER_OBJECT.
-  payload::manager::v1::Tier GetDiskSpillTarget(const payload::manager::v1::PayloadID& id) const;
+  // Returns the demotion target for a payload on the hot local level. Respects
+  // per-payload TIER_VOID overrides; otherwise TIER_DISK_COLD when a cold tier
+  // is configured, and TIER_OBJECT when it is not.
+  payload::manager::v1::Tier GetDiskHotSpillTarget(const payload::manager::v1::PayloadID& id) const;
+
+  // Demotion target for a payload on the cold local level. TIER_DISK_COLD is
+  // the last local stop, so this is TIER_OBJECT unless the payload explicitly
+  // asked to be discarded.
+  payload::manager::v1::Tier GetDiskColdSpillTarget(const payload::manager::v1::PayloadID& id) const;
 
   // Returns a snapshot of per-tier byte totals (keyed by Tier enum int value).
   std::unordered_map<int, uint64_t> GetTierBytes() const;
@@ -126,7 +132,7 @@ class PayloadManager {
   mutable std::mutex                      no_evict_guard_;
   std::unordered_set<payload::util::UUID> no_evict_ids_;
 
-  // Preferred spill tier per payload (default TIER_DISK when absent).
+  // Preferred spill tier per payload (default TIER_DISK_HOT when absent).
   mutable std::mutex                                                  spill_targets_guard_;
   std::unordered_map<payload::util::UUID, payload::manager::v1::Tier> spill_targets_;
 

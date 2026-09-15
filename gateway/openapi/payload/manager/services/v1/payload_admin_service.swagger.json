@@ -120,7 +120,7 @@
           "type": "string",
           "format": "uint64"
         },
-        "payloadsDisk": {
+        "payloadsDiskHot": {
           "type": "string",
           "format": "uint64"
         },
@@ -136,7 +136,7 @@
           "type": "string",
           "format": "uint64"
         },
-        "bytesDisk": {
+        "bytesDiskHot": {
           "type": "string",
           "format": "uint64"
         },
@@ -151,6 +151,15 @@
             "$ref": "#/definitions/v1RingStats"
           },
           "description": "One entry per configured ring; empty when no ring tier is configured."
+        },
+        "payloadsDiskCold": {
+          "type": "string",
+          "format": "uint64",
+          "description": "The optional cold local level (TIER_DISK_COLD). Both stay zero when no\ncold tier is configured."
+        },
+        "bytesDiskCold": {
+          "type": "string",
+          "format": "uint64"
         }
       }
     }

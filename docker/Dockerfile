@@ -118,7 +118,12 @@ RUN apt-get update \
         libxml2-16 \
         libarrow2500=${ARROW_VERSION}-1 \
     && rm -rf /var/lib/apt/lists/* \
-    && useradd --system --no-create-home --shell /sbin/nologin payload
+    # Fixed 999:999 rather than whatever useradd --system picks next. The id is
+    # part of the deployment contract: the Helm chart sets runAsUser/fsGroup to
+    # it, and the hostPath socket's ownership depends on it. Letting it drift
+    # with the package set would silently break both.
+    && groupadd --system --gid 999 payload \
+    && useradd --system --no-create-home --shell /sbin/nologin --uid 999 --gid 999 payload
 
 COPY --from=builder --chown=payload:payload /workspace/build/bin/payload-manager ./payload-manager
 

@@ -18,8 +18,16 @@ const char* TierName(payload::manager::v1::Tier t) {
       return "gpu";
     case payload::manager::v1::TIER_RAM:
       return "ram";
-    case payload::manager::v1::TIER_DISK:
-      return "disk";
+    case payload::manager::v1::TIER_DISK_HOT:
+      return "disk_hot";
+    case payload::manager::v1::TIER_DISK_COLD:
+      return "disk_cold";
+    case payload::manager::v1::TIER_OBJECT:
+      return "object";
+    case payload::manager::v1::TIER_VOID:
+      return "void";
+    case payload::manager::v1::TIER_RAM_RING:
+      return "ram_ring";
     default:
       return "?";
   }
@@ -62,7 +70,7 @@ int main(int argc, char** argv) {
   if (tier_arg == "ram")
     req.set_tier_filter(payload::manager::v1::TIER_RAM);
   else if (tier_arg == "disk")
-    req.set_tier_filter(payload::manager::v1::TIER_DISK);
+    req.set_tier_filter(payload::manager::v1::TIER_DISK_HOT);
   else if (tier_arg == "gpu")
     req.set_tier_filter(payload::manager::v1::TIER_GPU);
 

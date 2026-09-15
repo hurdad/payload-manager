@@ -52,11 +52,11 @@
     ? [...payloads].sort((a, b) => parseInt(a.createdAtMs || '0') - parseInt(b.createdAtMs || '0'))
     : [...payloads].sort((a, b) => parseInt(b.createdAtMs || '0') - parseInt(a.createdAtMs || '0'));
 
-  const TIERS = ['', 'TIER_GPU', 'TIER_RAM', 'TIER_DISK', 'TIER_OBJECT'];
-  const TIER_LABELS = { '': 'All', TIER_GPU: 'GPU', TIER_RAM: 'RAM', TIER_DISK: 'Disk', TIER_OBJECT: 'Object' };
-  const TIER_CLS   = { TIER_GPU: 'badge-gpu', TIER_RAM: 'badge-ram', TIER_DISK: 'badge-disk', TIER_OBJECT: 'badge-object' };
+  const TIERS = ['', 'TIER_GPU', 'TIER_RAM', 'TIER_DISK_HOT', 'TIER_DISK_COLD', 'TIER_OBJECT'];
+  const TIER_LABELS = { '': 'All', TIER_GPU: 'GPU', TIER_RAM: 'RAM', TIER_DISK_HOT: 'Hot', TIER_DISK_COLD: 'Cold', TIER_OBJECT: 'Object' };
+  const TIER_CLS   = { TIER_GPU: 'badge-gpu', TIER_RAM: 'badge-ram', TIER_DISK_HOT: 'badge-disk-hot', TIER_DISK_COLD: 'badge-disk-cold', TIER_OBJECT: 'badge-object' };
   // Ordered from fastest to slowest; used to derive spill/promote targets
-  const TIER_ORDER = ['TIER_GPU', 'TIER_RAM', 'TIER_DISK', 'TIER_OBJECT'];
+  const TIER_ORDER = ['TIER_GPU', 'TIER_RAM', 'TIER_DISK_HOT', 'TIER_DISK_COLD', 'TIER_OBJECT'];
 
   function tierLabel(t) { return TIER_LABELS[t] ?? t?.replace('TIER_','') ?? '—'; }
   function tierClass(t) { return TIER_CLS[t] ?? 'badge-other'; }
@@ -110,6 +110,15 @@
     pageHistory = pageHistory.slice(0, -1);
     refresh();
   }
+
+  // The catalog's page_token is a row offset as a decimal string
+  // (internal/service/catalog_service.cpp decodes it with stoi and emits
+  // offset + page_size), and pageToken always holds the token of the page
+  // currently on screen. Use it directly rather than inferring the offset from
+  // pageHistory.length * 50: that assumed every prior page was exactly full
+  // and duplicated the page size, so it drifted from the server's own count
+  // the moment a page was short.
+  $: pageOffset = Number(pageToken) || 0;
 
   function resetPagination() {
     pageToken = '';
@@ -295,7 +304,7 @@
               <td class="actions-cell" on:click|stopPropagation>
                 <!-- Download -->
                 <a class="action-btn" href={downloadUrl(p.id?.value)} target="_blank"
-                   title={p.tier !== 'TIER_DISK' && p.tier !== 'TIER_OBJECT' ? 'Download (will spill to disk)' : 'Download'}>
+                   title={p.tier !== 'TIER_DISK_HOT' && p.tier !== 'TIER_DISK_COLD' && p.tier !== 'TIER_OBJECT' ? 'Download (will spill to disk)' : 'Download'}>
                   ↓
                 </a>
                 <!-- Spill to any tier below -->
@@ -425,7 +434,7 @@
     <div class="pagination-bar">
       <p class="muted count-line">
         {#if totalCount > 0}
-          {pageHistory.length * 50 + 1}–{pageHistory.length * 50 + payloads.length} of {totalCount} payload{totalCount === 1 ? '' : 's'}
+          {pageOffset + 1}–{pageOffset + payloads.length} of {totalCount} payload{totalCount === 1 ? '' : 's'}
         {:else}
           0 payloads
         {/if}

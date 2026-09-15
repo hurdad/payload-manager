@@ -33,7 +33,7 @@ using payload::manager::v1::CommitPayloadRequest;
 using payload::manager::v1::LEASE_MODE_READ;
 using payload::manager::v1::ReleaseLeaseRequest;
 using payload::manager::v1::SpillRequest;
-using payload::manager::v1::TIER_DISK;
+using payload::manager::v1::TIER_DISK_HOT;
 using payload::manager::v1::TIER_RAM;
 
 class SimpleBackend final : public payload::storage::StorageBackend {
@@ -78,12 +78,12 @@ struct Fixture {
       /*max_lease_ms=*/100);
   std::shared_ptr<payload::db::memory::MemoryRepository> repo      = std::make_shared<payload::db::memory::MemoryRepository>();
   std::shared_ptr<SimpleBackend>                         ram       = std::make_shared<SimpleBackend>(TIER_RAM);
-  std::shared_ptr<SimpleBackend>                         disk      = std::make_shared<SimpleBackend>(TIER_DISK);
+  std::shared_ptr<SimpleBackend>                         disk      = std::make_shared<SimpleBackend>(TIER_DISK_HOT);
   std::shared_ptr<payload::spill::SpillScheduler>        scheduler = std::make_shared<payload::spill::SpillScheduler>();
   std::shared_ptr<PayloadManager>                        manager{[&] {
     payload::storage::StorageFactory::TierMap s;
     s[TIER_RAM]  = ram;
-    s[TIER_DISK] = disk;
+    s[TIER_DISK_HOT] = disk;
     return std::make_shared<PayloadManager>(s, lease_mgr, repo);
   }()};
   payload::service::ServiceContext                       ctx{[&] {
@@ -155,7 +155,7 @@ TEST(CatalogServiceSpillPolicy, BlockingSpillMovesDataInline) {
 
   // Response must include the post-spill descriptor.
   EXPECT_TRUE(resp.results(0).has_payload_descriptor()) << "blocking result must include descriptor";
-  EXPECT_EQ(resp.results(0).payload_descriptor().tier(), TIER_DISK);
+  EXPECT_EQ(resp.results(0).payload_descriptor().tier(), TIER_DISK_HOT);
 }
 
 // ---------------------------------------------------------------------------

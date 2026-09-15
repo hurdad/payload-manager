@@ -1,0 +1,67 @@
+# Two local durable levels: NVMe for warm payloads, HDD for cold bulk.
+#
+# The demotion chain here is RAM -> DISK (nvme) -> DISK_COLD (hdd) -> OBJECT.
+# The cold level is opt-in: delete the `disk_cold` block and the chain reverts
+# to RAM -> DISK -> OBJECT, which is what every config without it does.
+#
+# Sizing note: `disk` is the tier that absorbs RAM eviction, so it wants the
+# fast device and a high-water low enough that spills have somewhere to go.
+# `disk_cold` is the overflow, so it is sized for capacity and evicts late.
+
+server:
+  bind_address: "0.0.0.0:50051"
+
+database:
+  postgres:
+    connection_uri: "postgresql://payload:payload@localhost:5432/payload_manager"
+    max_connections: 32
+
+storage:
+  ram:
+    capacity_bytes: 8589934592  # 8 GiB
+    use_hugepages: false
+
+  # Hot local level: NVMe.
+  disk_hot:
+    root_path: "/mnt/nvme/payload-manager/payloads"
+    capacity_bytes: 536870912000  # 500 GiB
+    fsync: true
+    eviction_high_water_pct: 80
+
+  # Cold local level: HDD. Evicts late because the whole point is to hold bulk;
+  # fsync is off because HDD fsync latency is an order of magnitude worse than
+  # NVMe and the payloads reaching this level are already durable copies.
+  disk_cold:
+    root_path: "/mnt/hdd/payload-manager/payloads"
+    capacity_bytes: 8796093022208  # 8 TiB
+    fsync: false
+    eviction_high_water_pct: 90
+
+  object:
+    root_path: "s3://payload-manager-prod"
+    filesystem: FILE_SYSTEM_S3
+    compression: COMPRESSION_UNCOMPRESSED
+    filesystem_options:
+      s3:
+        endpoint_override: "s3.us-east-1.amazonaws.com"
+        scheme: "https"
+        credentials_kind: S3_CREDENTIALS_KIND_DEFAULT
+        tls_verify_certificates: true
+
+spill_workers:
+  threads: 4
+  retry_backoff: "1s"
+
+leases:
+  default_lease: "20s"
+  max_lease: "120s"
+
+logging:
+  level: "warn"
+  pattern: "%+"
+  include_trace_context: false
+
+observability:
+  metrics:
+    tier_occupancy_metrics_enabled: true
+    tier_labels_enabled: true

@@ -200,3 +200,42 @@ TEST(ConfigLoader, QuotedBooleanTextStaysAString) {
   ASSERT_EQ(config.storage().ring().rings_size(), 1);
   EXPECT_EQ(config.storage().ring().rings(0).ring_id(), "true");
 }
+
+TEST(ConfigLoader, DiskColdTierParses) {
+  const auto yaml_path = WriteYaml("disk_cold_tier",
+                                   R"(storage:
+  disk_hot:
+    root_path: "/mnt/nvme/payloads"
+    capacity_bytes: 536870912000
+    fsync: true
+    eviction_high_water_pct: 80
+  disk_cold:
+    root_path: "/mnt/hdd/payloads"
+    capacity_bytes: 8796093022208
+    fsync: false
+    eviction_high_water_pct: 90
+)");
+
+  const auto config = payload::config::ConfigLoader::LoadFromYaml(yaml_path.string());
+  EXPECT_EQ(config.storage().disk_hot().root_path(), "/mnt/nvme/payloads");
+  EXPECT_EQ(config.storage().disk_cold().root_path(), "/mnt/hdd/payloads");
+  EXPECT_EQ(config.storage().disk_cold().capacity_bytes(), 8796093022208ull);
+  EXPECT_FALSE(config.storage().disk_cold().fsync());
+  EXPECT_EQ(config.storage().disk_cold().eviction_high_water_pct(), 90u);
+}
+
+TEST(ConfigLoader, OmittedDiskColdLeavesTheTierUnconfigured) {
+  // The empty root_path is what StorageFactory keys off to decide whether the
+  // cold tier exists at all, so a config without the block must leave it empty
+  // rather than defaulting to a path.
+  const auto yaml_path = WriteYaml("no_disk_cold",
+                                   R"(storage:
+  disk_hot:
+    root_path: "/var/lib/payload-manager/payloads"
+    capacity_bytes: 107374182400
+)");
+
+  const auto config = payload::config::ConfigLoader::LoadFromYaml(yaml_path.string());
+  EXPECT_TRUE(config.storage().disk_cold().root_path().empty());
+  EXPECT_EQ(config.storage().disk_cold().capacity_bytes(), 0u);
+}

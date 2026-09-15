@@ -27,7 +27,7 @@ from payload.manager.runtime.v1 import lifecycle_pb2
 _TIER_NAMES = {
     types_pb2.TIER_GPU: "gpu",
     types_pb2.TIER_RAM: "ram",
-    types_pb2.TIER_DISK: "disk",
+    types_pb2.TIER_DISK_HOT: "disk_hot",
 }
 
 _STATE_NAMES = {
@@ -61,12 +61,14 @@ def main() -> int:
     tier_filter = 0  # TIER_UNSPECIFIED → return all tiers
     if tier_arg == "ram":
         tier_filter = types_pb2.TIER_RAM
-    elif tier_arg == "disk":
-        tier_filter = types_pb2.TIER_DISK
+    elif tier_arg == "disk-hot":
+        tier_filter = types_pb2.TIER_DISK_HOT
+    elif tier_arg == "disk-cold":
+        tier_filter = types_pb2.TIER_DISK_COLD
     elif tier_arg == "gpu":
         tier_filter = types_pb2.TIER_GPU
     elif tier_arg not in ("all", ""):
-        print(f"Unknown tier filter '{tier_arg}'; expected ram, disk, gpu, or all", file=sys.stderr)
+        print(f"Unknown tier filter '{tier_arg}'; expected ram, disk-hot, disk-cold, gpu, or all", file=sys.stderr)
         return 1
 
     client = PayloadClient(make_channel(target))

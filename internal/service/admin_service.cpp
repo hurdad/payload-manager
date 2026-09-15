@@ -28,13 +28,16 @@ StatsResponse AdminService::Stats(const StatsRequest&) {
 
     uint64_t ram_count    = 0;
     uint64_t disk_count   = 0;
+    uint64_t cold_count   = 0;
     uint64_t gpu_count    = 0;
     uint64_t object_count = 0;
     for (const auto& record : records) {
       if (record.tier == TIER_RAM) {
         ++ram_count;
-      } else if (record.tier == TIER_DISK) {
+      } else if (record.tier == TIER_DISK_HOT) {
         ++disk_count;
+      } else if (record.tier == TIER_DISK_COLD) {
+        ++cold_count;
       } else if (record.tier == TIER_GPU) {
         ++gpu_count;
       } else if (record.tier == TIER_OBJECT) {
@@ -43,9 +46,10 @@ StatsResponse AdminService::Stats(const StatsRequest&) {
     }
 
     resp.set_payloads_ram(ram_count);
-    resp.set_payloads_disk(disk_count);
+    resp.set_payloads_disk_hot(disk_count);
     resp.set_payloads_gpu(gpu_count);
     resp.set_payloads_object(object_count);
+    resp.set_payloads_disk_cold(cold_count);
 
     const auto tier_bytes = ctx_.manager->GetTierBytes();
     auto       get_bytes  = [&](Tier t) -> uint64_t {
@@ -53,9 +57,10 @@ StatsResponse AdminService::Stats(const StatsRequest&) {
       return it != tier_bytes.end() ? it->second : 0;
     };
     resp.set_bytes_ram(get_bytes(TIER_RAM));
-    resp.set_bytes_disk(get_bytes(TIER_DISK));
+    resp.set_bytes_disk_hot(get_bytes(TIER_DISK_HOT));
     resp.set_bytes_gpu(get_bytes(TIER_GPU));
     resp.set_bytes_object(get_bytes(TIER_OBJECT));
+    resp.set_bytes_disk_cold(get_bytes(TIER_DISK_COLD));
 
     // Ring slots are pre-allocated and recycled in place, so they appear in
     // none of the payload counts or tier bytes above. Report them

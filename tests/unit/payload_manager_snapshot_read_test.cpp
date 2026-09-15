@@ -14,7 +14,7 @@ using payload::core::PayloadManager;
 using payload::db::memory::MemoryRepository;
 using payload::db::model::PayloadRecord;
 using payload::manager::v1::PAYLOAD_STATE_ACTIVE;
-using payload::manager::v1::TIER_DISK;
+using payload::manager::v1::TIER_DISK_HOT;
 using payload::manager::v1::TIER_RAM;
 
 } // namespace
@@ -51,7 +51,7 @@ TEST(PayloadManagerSnapshotRead, ResolveSnapshotUsesCachedDescriptorUntilRefresh
     auto tx      = repository->Begin();
     auto current = repository->GetPayload(*tx, seed_uuid);
     ASSERT_TRUE(current.has_value());
-    current->tier      = TIER_DISK;
+    current->tier      = TIER_DISK_HOT;
     current->version   = 2;
     auto update_result = repository->UpdatePayload(*tx, *current);
     ASSERT_TRUE(update_result);
@@ -65,6 +65,6 @@ TEST(PayloadManagerSnapshotRead, ResolveSnapshotUsesCachedDescriptorUntilRefresh
   manager.HydrateCaches();
 
   const auto refreshed = manager.ResolveSnapshot(id);
-  EXPECT_EQ(refreshed.tier(), TIER_DISK);
+  EXPECT_EQ(refreshed.tier(), TIER_DISK_HOT);
   EXPECT_GT(refreshed.version(), 1) << "HydrateCaches must serve a fresher version than the stale cached one";
 }

@@ -125,7 +125,7 @@ struct DiskFixture {
   std::shared_ptr<PayloadManager>                        manager{[&] {
     payload::storage::StorageFactory::TierMap storage;
     storage[TIER_RAM]  = ram_store;
-    storage[TIER_DISK] = disk_store;
+    storage[TIER_DISK_HOT] = disk_store;
     return std::make_shared<PayloadManager>(std::move(storage), lease_mgr, repo);
   }()};
   payload::service::ServiceContext                       ctx{[&] {
@@ -265,11 +265,11 @@ TEST(StorageSidecar, CommitDiskWritesSidecar) {
 
   AllocatePayloadRequest alloc_req;
   alloc_req.set_size_bytes(64);
-  alloc_req.set_preferred_tier(TIER_DISK);
+  alloc_req.set_preferred_tier(TIER_DISK_HOT);
   const auto alloc_resp = f.catalog.Allocate(alloc_req);
   const auto desc       = alloc_resp.payload_descriptor();
 
-  EXPECT_EQ(desc.tier(), TIER_DISK) << "must be allocated on disk";
+  EXPECT_EQ(desc.tier(), TIER_DISK_HOT) << "must be allocated on disk";
   EXPECT_FALSE(std::filesystem::exists(f.SidecarPath(desc))) << "sidecar must not exist before commit";
 
   CommitPayloadRequest commit_req;
@@ -283,7 +283,7 @@ TEST(StorageSidecar, CommitDiskWritesSidecar) {
   EXPECT_FALSE(meta.uuid().value().empty()) << "uuid must be populated";
   EXPECT_TRUE(meta.has_archived_at()) << "archived_at must be set";
   EXPECT_TRUE(meta.has_payload_descriptor()) << "payload_descriptor must be set";
-  EXPECT_EQ(meta.payload_descriptor().tier(), TIER_DISK) << "descriptor tier must be TIER_DISK";
+  EXPECT_EQ(meta.payload_descriptor().tier(), TIER_DISK_HOT) << "descriptor tier must be TIER_DISK_HOT";
 }
 
 TEST(StorageSidecar, SpillRamToDiskWritesSidecar) {
@@ -315,7 +315,7 @@ TEST(StorageSidecar, SpillRamToDiskWritesSidecar) {
   auto meta = ParseSidecar(f.SidecarPath(desc));
   EXPECT_EQ(meta.metadata_version(), 1);
   EXPECT_TRUE(meta.has_archived_at());
-  EXPECT_EQ(meta.payload_descriptor().tier(), TIER_DISK) << "descriptor in sidecar must show disk tier";
+  EXPECT_EQ(meta.payload_descriptor().tier(), TIER_DISK_HOT) << "descriptor in sidecar must show disk tier";
 }
 
 TEST(StorageSidecar, SidecarContainsLineage) {
@@ -332,7 +332,7 @@ TEST(StorageSidecar, SidecarContainsLineage) {
 
   AllocatePayloadRequest child_req;
   child_req.set_size_bytes(32);
-  child_req.set_preferred_tier(TIER_DISK);
+  child_req.set_preferred_tier(TIER_DISK_HOT);
   const auto child_desc = f.catalog.Allocate(child_req).payload_descriptor();
 
   // Add lineage edge before committing the child.

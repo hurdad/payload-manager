@@ -34,7 +34,7 @@ namespace {
 
 using payload::core::PayloadManager;
 using payload::lease::LeaseManager;
-using payload::manager::v1::TIER_DISK;
+using payload::manager::v1::TIER_DISK_HOT;
 using payload::manager::v1::TIER_RAM;
 
 class SimpleBackend final : public payload::storage::StorageBackend {
@@ -83,11 +83,11 @@ struct Env {
   std::shared_ptr<payload::lease::LeaseManager>          lease_mgr = std::make_shared<LeaseManager>();
   std::shared_ptr<payload::db::memory::MemoryRepository> repo      = std::make_shared<payload::db::memory::MemoryRepository>();
   std::shared_ptr<SimpleBackend>                         ram       = std::make_shared<SimpleBackend>(TIER_RAM);
-  std::shared_ptr<SimpleBackend>                         disk      = std::make_shared<SimpleBackend>(TIER_DISK);
+  std::shared_ptr<SimpleBackend>                         disk      = std::make_shared<SimpleBackend>(TIER_DISK_HOT);
   std::shared_ptr<PayloadManager>                        manager{[&] {
     payload::storage::StorageFactory::TierMap s;
     s[TIER_RAM]  = ram;
-    s[TIER_DISK] = disk;
+    s[TIER_DISK_HOT] = disk;
     return std::make_shared<PayloadManager>(s, lease_mgr, repo);
   }()};
 };
@@ -116,7 +116,7 @@ TEST(PayloadManagerConcurrency, IndependentLifecyclesDoNotRace) {
       try {
         auto desc = env.manager->Commit(env.manager->Allocate(64, TIER_RAM).payload_id());
         (void)env.manager->ResolveSnapshot(desc.payload_id());
-        env.manager->ExecuteSpill(desc.payload_id(), TIER_DISK, false);
+        env.manager->ExecuteSpill(desc.payload_id(), TIER_DISK_HOT, false);
         env.manager->Delete(desc.payload_id(), true);
       } catch (const payload::util::NotFound&) {
         // Payload deleted by a racing thread before our operation — acceptable.

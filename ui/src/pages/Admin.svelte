@@ -22,7 +22,10 @@
   const tiers = [
     { key: 'gpu',    label: 'GPU',    cls: 'badge-gpu',    icon: '◈' },
     { key: 'ram',    label: 'RAM',    cls: 'badge-ram',    icon: '▦' },
-    { key: 'disk',   label: 'Disk',   cls: 'badge-disk',   icon: '⬡' },
+    { key: 'diskHot', label: 'Hot',  cls: 'badge-disk-hot', icon: '⬡' },
+    // Reads stats.payloadsDiskCold / stats.bytesDiskCold; both are 0 when no
+    // cold tier is configured, so the row simply shows empty.
+    { key: 'diskCold', label: 'Cold', cls: 'badge-disk-cold', icon: '⬢' },
     { key: 'object', label: 'Object', cls: 'badge-object', icon: '☁' },
   ];
 

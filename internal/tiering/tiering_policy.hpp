@@ -25,17 +25,20 @@ class TieringPolicy {
   TieringPolicy(std::shared_ptr<payload::metadata::MetadataCache>           cache,
                 std::function<bool(const payload::manager::v1::PayloadID&)> is_ram_evictable  = {},
                 std::function<bool(const payload::manager::v1::PayloadID&)> is_gpu_evictable  = {},
-                std::function<bool(const payload::manager::v1::PayloadID&)> is_disk_evictable = {});
+                std::function<bool(const payload::manager::v1::PayloadID&)> is_disk_hot_evictable = {},
+                std::function<bool(const payload::manager::v1::PayloadID&)> is_disk_cold_evictable = {});
 
   std::optional<payload::manager::v1::PayloadID> ChooseRamEviction(const PressureState& state);
   std::optional<payload::manager::v1::PayloadID> ChooseGpuEviction(const PressureState& state);
-  std::optional<payload::manager::v1::PayloadID> ChooseDiskEviction(const PressureState& state);
+  std::optional<payload::manager::v1::PayloadID> ChooseDiskHotEviction(const PressureState& state);
+  std::optional<payload::manager::v1::PayloadID> ChooseDiskColdEviction(const PressureState& state);
 
  private:
   std::shared_ptr<payload::metadata::MetadataCache>           cache_;
   std::function<bool(const payload::manager::v1::PayloadID&)> is_ram_evictable_;
   std::function<bool(const payload::manager::v1::PayloadID&)> is_gpu_evictable_;
-  std::function<bool(const payload::manager::v1::PayloadID&)> is_disk_evictable_;
+  std::function<bool(const payload::manager::v1::PayloadID&)> is_disk_hot_evictable_;
+  std::function<bool(const payload::manager::v1::PayloadID&)> is_disk_cold_evictable_;
 };
 
 } // namespace payload::tiering

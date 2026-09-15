@@ -1,8 +1,10 @@
+
 #include <grpcpp/grpcpp.h>
 
 #include <chrono>
 #include <cstdlib>
 #include <iomanip>
+#include <iterator>
 #include <iostream>
 #include <memory>
 #include <optional>
@@ -18,19 +20,19 @@ using namespace payload::manager::v1;
 
 static void Usage() {
   std::cout << "Usage:\n"
-            << "  payloadctl <addr> allocate <size_bytes> [tier=ram|disk|gpu]\n"
+            << "  payloadctl <addr> allocate <size_bytes> [tier=ram|disk-hot|disk-cold|gpu]\n"
             << "  payloadctl <addr> commit <uuid>\n"
             << "  payloadctl <addr> resolve <uuid>\n"
             << "  payloadctl <addr> lease <uuid>\n"
             << "  payloadctl <addr> release <lease_id>\n"
             << "  payloadctl <addr> delete <uuid>\n"
-            << "  payloadctl <addr> promote <uuid> <tier=ram|disk|gpu|object>\n"
+            << "  payloadctl <addr> promote <uuid> <tier=ram|disk-hot|disk-cold|gpu|object>\n"
             << "  payloadctl <addr> spill <uuid>\n"
-            << "  payloadctl <addr> prefetch <uuid> <tier=ram|disk|gpu|object>\n"
+            << "  payloadctl <addr> prefetch <uuid> <tier=ram|disk-hot|disk-cold|gpu|object>\n"
             << "  payloadctl <addr> pin <uuid> [duration_ms]\n"
             << "  payloadctl <addr> unpin <uuid>\n"
             << "  payloadctl <addr> stats\n"
-            << "  payloadctl <addr> list [tier=ram|disk|gpu|object]\n"
+            << "  payloadctl <addr> list [tier=ram|disk-hot|disk-cold|gpu|object]\n"
             << "\n"
             << "<addr> is a gRPC target:\n"
             << "  host:port                              TCP\n"
@@ -107,8 +109,11 @@ static std::optional<Tier> ParseTier(const std::string& value) {
   if (value == "ram") {
     return TIER_RAM;
   }
-  if (value == "disk") {
-    return TIER_DISK;
+  if (value == "disk-hot") {
+    return TIER_DISK_HOT;
+  }
+  if (value == "disk-cold") {
+    return TIER_DISK_COLD;
   }
   if (value == "gpu") {
     return TIER_GPU;
@@ -426,7 +431,7 @@ int main(int argc, char** argv) {
     }
 
     std::cout << "ram=" << resp.payloads_ram() << "\n";
-    std::cout << "disk=" << resp.payloads_disk() << "\n";
+    std::cout << "disk_hot=" << resp.payloads_disk_hot() << "\n";
     std::cout << "gpu=" << resp.payloads_gpu() << "\n";
     std::cout << "object=" << resp.payloads_object() << "\n";
     return 0;
@@ -454,24 +459,31 @@ int main(int argc, char** argv) {
       return 2;
     }
 
-    std::cout << std::left << std::setw(38) << "UUID" << std::setw(6) << "TIER" << std::setw(12) << "STATE" << std::setw(14) << "SIZE"
+    std::cout << std::left << std::setw(38) << "UUID" << std::setw(11) << "TIER" << std::setw(12) << "STATE" << std::setw(14) << "SIZE"
               << std::setw(10) << "AGE(s)" << std::setw(8) << "LEASES" << "\n";
 
     const uint64_t now_ms =
         static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count());
 
-    static const char* kTierName[]  = {"?", "gpu", "ram", "disk", "obj"};
+    // Indexed by Tier enum value, so every slot up to the highest value must be
+    // filled — including TIER_VOID (5) and TIER_RAM_RING (6), which printed as
+    // "?" before TIER_DISK_COLD (7) forced this array to grow.
+    //
+    // These are the same spellings ParseTier accepts, so a tier read out of a
+    // list can be pasted straight back into a `list tier=` or `promote` call.
+    // "obj" was not one of them.
+    static const char* kTierName[]  = {"?", "gpu", "ram", "disk-hot", "object", "void", "ring", "disk-cold"};
     static const char* kStateName[] = {"?", "allocated", "active", "spilling", "durable", "evicting", "deleting", "expired", "deleted"};
 
     for (const auto& p : resp.payloads()) {
       const std::string uuid = ToUuidString(p.id().value());
 
-      int tier_idx  = (p.tier() >= 0 && p.tier() < 5) ? p.tier() : 0;
+      int tier_idx  = (p.tier() >= 0 && p.tier() < static_cast<int>(std::size(kTierName))) ? p.tier() : 0;
       int state_idx = (p.state() >= 0 && p.state() < 9) ? p.state() : 0;
 
       const std::string age = p.created_at_ms() > 0 ? std::to_string((now_ms - p.created_at_ms()) / 1000) : "?";
 
-      std::cout << std::left << std::setw(38) << uuid << std::setw(6) << kTierName[tier_idx] << std::setw(12) << kStateName[state_idx]
+      std::cout << std::left << std::setw(38) << uuid << std::setw(11) << kTierName[tier_idx] << std::setw(12) << kStateName[state_idx]
                 << std::setw(14) << p.size_bytes() << std::setw(10) << age << std::setw(8) << p.active_leases() << "\n";
     }
 

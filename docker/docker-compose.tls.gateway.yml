@@ -1,0 +1,14 @@
+# Client half of the TLS overlay for the gateway: dial payload-manager over
+# TLS, and serve HTTPS to the browser.
+#
+# The gateway attaches no token of its own — it forwards the caller's. A
+# browser therefore still needs one, which the UI takes in its token field.
+
+services:
+  payload-gateway:
+    volumes:
+      - ../certs:/certs:ro
+    environment:
+      GRPC_CA: /certs/ca.pem
+      TLS_CERT: /certs/server.pem
+      TLS_KEY: /certs/server-key.pem

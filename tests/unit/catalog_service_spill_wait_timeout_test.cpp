@@ -39,7 +39,7 @@ using payload::manager::v1::AcquireReadLeaseRequest;
 using payload::manager::v1::LEASE_MODE_READ;
 using payload::manager::v1::ReleaseLeaseRequest;
 using payload::manager::v1::SpillRequest;
-using payload::manager::v1::TIER_DISK;
+using payload::manager::v1::TIER_DISK_HOT;
 using payload::manager::v1::TIER_RAM;
 
 class SimpleBackend final : public payload::storage::StorageBackend {
@@ -81,11 +81,11 @@ struct Fixture {
       /*default_ms=*/200, /*max_ms=*/500); // short lease for fast tests
   std::shared_ptr<payload::db::memory::MemoryRepository> repo = std::make_shared<payload::db::memory::MemoryRepository>();
   std::shared_ptr<SimpleBackend>                         ram  = std::make_shared<SimpleBackend>(TIER_RAM);
-  std::shared_ptr<SimpleBackend>                         disk = std::make_shared<SimpleBackend>(TIER_DISK);
+  std::shared_ptr<SimpleBackend>                         disk = std::make_shared<SimpleBackend>(TIER_DISK_HOT);
   std::shared_ptr<payload::core::PayloadManager>         manager{[&] {
     payload::storage::StorageFactory::TierMap s;
     s[TIER_RAM]  = ram;
-    s[TIER_DISK] = disk;
+    s[TIER_DISK_HOT] = disk;
     return std::make_shared<payload::core::PayloadManager>(s, lease_mgr, repo);
   }()};
   payload::service::ServiceContext                       ctx{[&] {
@@ -173,11 +173,11 @@ TEST(SpillWaitTimeout, WaitTrueSucceedsAfterLeaseExpires) {
   auto lease_mgr = std::make_shared<payload::lease::LeaseManager>(/*default_ms=*/50, /*max_ms=*/100);
   auto repo      = std::make_shared<payload::db::memory::MemoryRepository>();
   auto ram       = std::make_shared<SimpleBackend>(TIER_RAM);
-  auto disk      = std::make_shared<SimpleBackend>(TIER_DISK);
+  auto disk      = std::make_shared<SimpleBackend>(TIER_DISK_HOT);
 
   payload::storage::StorageFactory::TierMap s;
   s[TIER_RAM]  = ram;
-  s[TIER_DISK] = disk;
+  s[TIER_DISK_HOT] = disk;
   auto manager = std::make_shared<payload::core::PayloadManager>(s, lease_mgr, repo);
 
   payload::service::ServiceContext ctx;

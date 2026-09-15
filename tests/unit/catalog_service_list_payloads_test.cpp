@@ -27,7 +27,7 @@ namespace {
 
 using payload::manager::v1::ListPayloadsRequest;
 using payload::manager::v1::PAYLOAD_STATE_ACTIVE;
-using payload::manager::v1::TIER_DISK;
+using payload::manager::v1::TIER_DISK_HOT;
 using payload::manager::v1::TIER_RAM;
 using payload::manager::v1::TIER_UNSPECIFIED;
 
@@ -188,7 +188,7 @@ TEST(ListPayloads, TotalCountConsistentAcrossPages) {
 TEST(ListPayloads, TierFilterAppliedBeforePagination) {
   auto ctx = MakeCtx();
   InsertPayloads(ctx, 6, TIER_RAM);
-  InsertPayloads(ctx, 4, TIER_DISK);
+  InsertPayloads(ctx, 4, TIER_DISK_HOT);
 
   payload::service::CatalogService svc(ctx);
 
@@ -196,7 +196,7 @@ TEST(ListPayloads, TierFilterAppliedBeforePagination) {
   EXPECT_EQ(ram_resp.total_count(), 6);
   EXPECT_EQ(ram_resp.payloads_size(), 6);
 
-  const auto disk_resp = svc.ListPayloads(MakeReq(50, "", TIER_DISK));
+  const auto disk_resp = svc.ListPayloads(MakeReq(50, "", TIER_DISK_HOT));
   EXPECT_EQ(disk_resp.total_count(), 4);
   EXPECT_EQ(disk_resp.payloads_size(), 4);
 
@@ -207,7 +207,7 @@ TEST(ListPayloads, TierFilterAppliedBeforePagination) {
 TEST(ListPayloads, TierFilterPaginationNextToken) {
   auto ctx = MakeCtx();
   InsertPayloads(ctx, 5, TIER_RAM);
-  InsertPayloads(ctx, 5, TIER_DISK);
+  InsertPayloads(ctx, 5, TIER_DISK_HOT);
 
   payload::service::CatalogService svc(ctx);
 

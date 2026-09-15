@@ -19,8 +19,18 @@ StorageFactory::TierMap StorageFactory::Build(const payload::runtime::config::St
   stores.emplace(payload::manager::v1::TIER_RAM, std::make_shared<RamArrowStore>(shm_prefix));
 
   std::filesystem::path disk_root =
-      cfg.disk().root_path().empty() ? std::filesystem::path{"/tmp/payload-manager"} : std::filesystem::path{cfg.disk().root_path()};
-  stores.emplace(payload::manager::v1::TIER_DISK, std::make_shared<DiskArrowStore>(std::move(disk_root)));
+      cfg.disk_hot().root_path().empty() ? std::filesystem::path{"/tmp/payload-manager"} : std::filesystem::path{cfg.disk_hot().root_path()};
+  stores.emplace(payload::manager::v1::TIER_DISK_HOT, std::make_shared<DiskArrowStore>(std::move(disk_root), payload::manager::v1::TIER_DISK_HOT));
+
+  // The cold level is opt-in. An empty root_path means no TIER_DISK_COLD entry
+  // in the map at all, which is what keeps the demotion chain at DISK → OBJECT
+  // for every config written before this tier existed. Unlike the hot level
+  // there is no default path: a cold tier that silently landed in /tmp would be
+  // worse than no cold tier.
+  if (!cfg.disk_cold().root_path().empty()) {
+    stores.emplace(payload::manager::v1::TIER_DISK_COLD,
+                   std::make_shared<DiskArrowStore>(std::filesystem::path{cfg.disk_cold().root_path()}, payload::manager::v1::TIER_DISK_COLD));
+  }
 
   if (!cfg.object().root_path().empty()) {
     const bool is_s3 = cfg.object().filesystem() == pb::arrow::storage::FILE_SYSTEM_S3 || cfg.object().filesystem_options().has_s3();

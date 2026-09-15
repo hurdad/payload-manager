@@ -1,0 +1,74 @@
+server:
+  bind_address: "0.0.0.0:50051"
+
+  # TLS and bearer-token authentication, both switched on.
+  #
+  # The material under /app/certs is mounted by docker-compose.tls.yml from the
+  # repository's certs/ directory, which scripts/gen-dev-certs.sh writes. Those
+  # are development credentials — the CA key sits unencrypted beside the
+  # certificate it signed — so this config is for the TLS integration stack and
+  # for trying the feature locally, never for a deployment.
+  #
+  # Both blocks carry an explicit `enabled` even though their presence alone
+  # would switch them on, because this file exists to be copied and edited: a
+  # reader turning one off should change a value rather than work out which
+  # lines to delete.
+  tls:
+    enabled: true
+    cert_file: "/app/certs/server.pem"
+    key_file: "/app/certs/server-key.pem"
+
+  auth:
+    enabled: true
+    jwt_hs256_key_file: "/app/certs/jwt-hs256.key"
+    issuer: "payload-manager-dev"
+    audience: "payload-manager"
+
+database:
+  postgres:
+    connection_uri: "postgresql://payload:payload@postgres:5432/payload_manager"
+    max_connections: 32
+
+storage:
+  # A small ring so the ring tier is exercised by the examples stacks rather
+  # than only described. Rings are static — created at startup from this list,
+  # never over the API — so a consumer's MapRing only sees what is declared
+  # here. 4 x 64 KiB is negligible against the RAM tier budget below, which is
+  # reduced by whatever rings reserve.
+  ring:
+    rings:
+      - ring_id: "example"
+        n_slots: 4
+        slot_size_bytes: 65536
+
+  ram:
+    capacity_bytes: 8589934592  # 8 GiB
+    use_hugepages: false
+    shm_prefix: "pm"  # POSIX shm segments named /pm-<uuid>
+  disk_hot:
+    root_path: "/var/lib/payload-manager/payloads"
+    capacity_bytes: 107374182400  # 100 GiB
+    fsync: true
+
+spill_workers:
+  threads: 4
+  retry_backoff: "1s"
+
+leases:
+  default_lease: "20s"
+  max_lease: "120s"
+
+logging:
+  # info rather than the warn the other docker configs use, so the startup line
+  # naming the security posture ("tls=true auth=true") is actually emitted. The
+  # TLS integration job greps for it: a client that cannot reach the server
+  # fails loudly, but a stack that quietly came up plaintext would pass, since
+  # a client with no CA configured connects to it happily.
+  level: "info"
+  pattern: "%+"
+  include_trace_context: false
+
+observability:
+  metrics_enabled: false
+  tracing_enabled: false
+  logs_enabled: false

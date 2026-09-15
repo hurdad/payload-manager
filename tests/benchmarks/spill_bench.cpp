@@ -23,7 +23,7 @@
 #include "payload/manager/v1.hpp"
 
 using namespace payload::bench;
-using payload::manager::v1::TIER_DISK;
+using payload::manager::v1::TIER_DISK_HOT;
 using payload::manager::v1::TIER_RAM;
 
 // ---------------------------------------------------------------------------
@@ -45,7 +45,7 @@ static void BenchSpillPipeline(size_t payload_bytes, bool fsync) {
   int  idx    = 0;
   auto result = TimedRun(
       std::string("ExecuteSpill (pipeline) fsync=") + (fsync ? "y" : "n"), payload_bytes, iterations,
-      [&] { fix.manager->ExecuteSpill(ids[idx++], TIER_DISK, fsync); }, warmup);
+      [&] { fix.manager->ExecuteSpill(ids[idx++], TIER_DISK_HOT, fsync); }, warmup);
 
   PrintResult(result);
 }
@@ -126,7 +126,7 @@ static void BenchPromotePipeline(size_t payload_bytes) {
   ids.reserve(total);
   for (int i = 0; i < total; ++i) {
     auto id = fix.MakeRamPayload(payload_bytes).payload_id();
-    fix.manager->ExecuteSpill(id, TIER_DISK, false);
+    fix.manager->ExecuteSpill(id, TIER_DISK_HOT, false);
     ids.push_back(id);
   }
 

@@ -30,7 +30,7 @@ using payload::manager::core::v1::EVICTION_PRIORITY_UNSPECIFIED;
 using payload::manager::core::v1::EvictionPolicy;
 using payload::manager::v1::PayloadID;
 using payload::manager::v1::PayloadMetadata;
-using payload::manager::v1::TIER_DISK;
+using payload::manager::v1::TIER_DISK_HOT;
 using payload::manager::v1::TIER_OBJECT;
 using payload::manager::v1::TIER_RAM;
 using payload::metadata::MetadataCache;
@@ -87,12 +87,12 @@ class SimpleStorageBackend final : public payload::storage::StorageBackend {
 struct Fixture {
   std::shared_ptr<LeaseManager>                          lease_mgr = std::make_shared<LeaseManager>();
   std::shared_ptr<SimpleStorageBackend>                  ram       = std::make_shared<SimpleStorageBackend>(TIER_RAM);
-  std::shared_ptr<SimpleStorageBackend>                  disk      = std::make_shared<SimpleStorageBackend>(TIER_DISK);
+  std::shared_ptr<SimpleStorageBackend>                  disk      = std::make_shared<SimpleStorageBackend>(TIER_DISK_HOT);
   std::shared_ptr<payload::db::memory::MemoryRepository> repo      = std::make_shared<payload::db::memory::MemoryRepository>();
   PayloadManager                                         manager{[&] {
                            payload::storage::StorageFactory::TierMap storage;
                            storage[TIER_RAM]  = ram;
-                           storage[TIER_DISK] = disk;
+                           storage[TIER_DISK_HOT] = disk;
                            return storage;
                          }(),
                          lease_mgr, repo};
@@ -189,12 +189,12 @@ TEST(PayloadManagerEvictionPolicy, SpillTargetIsRespected) {
   EXPECT_EQ(f.manager.GetSpillTarget(desc.payload_id()), TIER_OBJECT);
 }
 
-// Default spill target (no policy set) falls back to TIER_DISK.
+// Default spill target (no policy set) falls back to TIER_DISK_HOT.
 TEST(PayloadManagerEvictionPolicy, DefaultSpillTargetIsDisk) {
   Fixture f;
 
   const auto desc = f.manager.Allocate(64, TIER_RAM);
-  EXPECT_EQ(f.manager.GetSpillTarget(desc.payload_id()), TIER_DISK);
+  EXPECT_EQ(f.manager.GetSpillTarget(desc.payload_id()), TIER_DISK_HOT);
 }
 
 // Deleting a no_evict payload clears its eviction-exempt status.

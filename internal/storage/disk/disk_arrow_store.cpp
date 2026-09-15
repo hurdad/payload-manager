@@ -36,7 +36,7 @@ std::string Key(const PayloadID& id) {
 
 } // namespace
 
-DiskArrowStore::DiskArrowStore(std::filesystem::path root) : root_(std::move(root)) {
+DiskArrowStore::DiskArrowStore(std::filesystem::path root, Tier tier) : root_(std::move(root)), tier_(tier) {
   std::filesystem::create_directories(root_);
 }
 

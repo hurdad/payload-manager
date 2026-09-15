@@ -9,7 +9,9 @@ enum Tier {
   TIER_UNSPECIFIED = 0; // Not set; treated as an error in most contexts.
   TIER_GPU = 1;         // GPU device memory (fastest, smallest, most volatile).
   TIER_RAM = 2;         // Host DRAM / shared-memory segment.
-  TIER_DISK = 3;        // Local NVMe/SSD/HDD (durable, larger, slower than RAM).
+  TIER_DISK_HOT = 3;    // Primary local durable level (NVMe/SSD; durable, larger,
+                        // slower than RAM). See TIER_DISK_COLD for the optional
+                        // slower second local level.
   TIER_OBJECT = 4;      // Remote object storage (S3/GCS/Azure; durable, largest).
   TIER_VOID = 5;        // Discard on eviction: payload is deleted rather than moved.
   TIER_RAM_RING = 6;    // Pre-allocated /dev/shm ring of N fixed slots, rotated across
@@ -17,6 +19,15 @@ enum Tier {
                         // map the ring once at startup (no per-capture mmap or
                         // cudaHostRegister) and lease the indicated slot per cycle.
                         // See payload/manager/services/v1/payload_ring_service.proto.
+  TIER_DISK_COLD = 7;   // Second local durable level on slower media (HDD or a
+                        // cheap network mount), sitting between TIER_DISK_HOT and
+                        // TIER_OBJECT in the demotion chain. Optional: unset
+                        // storage.disk_cold means TIER_DISK_HOT demotes
+                        // straight to TIER_OBJECT as before.
+                        //
+                        // Speed order is NOT the enum order — values can only
+                        // be appended. See PlacementEngine::TierRank, which is
+                        // the authority on tier ranking.
 }
 
 /*

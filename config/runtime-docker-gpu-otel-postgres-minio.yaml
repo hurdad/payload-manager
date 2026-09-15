@@ -11,7 +11,7 @@ storage:
     capacity_bytes: 8589934592  # 8 GiB
     use_hugepages: false
     shm_prefix: "pm"
-  disk:
+  disk_hot:
     root_path: "/var/lib/payload-manager/payloads"
     capacity_bytes: 107374182400  # 100 GiB
     fsync: true

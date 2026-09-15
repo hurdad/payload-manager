@@ -1,5 +1,5 @@
 /*
-  Unit tests for TIER_VOID: disk pressure eviction, GetDiskSpillTarget, and the
+  Unit tests for TIER_VOID: disk pressure eviction, GetDiskHotSpillTarget, and the
   ExecuteSpill void path that deletes payloads instead of moving them.
 */
 
@@ -28,7 +28,7 @@ using payload::manager::core::v1::EvictionPolicy;
 using payload::manager::v1::PAYLOAD_STATE_DELETED;
 using payload::manager::v1::PayloadID;
 using payload::manager::v1::PayloadMetadata;
-using payload::manager::v1::TIER_DISK;
+using payload::manager::v1::TIER_DISK_HOT;
 using payload::manager::v1::TIER_OBJECT;
 using payload::manager::v1::TIER_RAM;
 using payload::manager::v1::TIER_VOID;
@@ -82,11 +82,11 @@ struct Fixture {
   std::shared_ptr<LeaseManager>                          lease_mgr = std::make_shared<LeaseManager>();
   std::shared_ptr<payload::db::memory::MemoryRepository> repo      = std::make_shared<payload::db::memory::MemoryRepository>();
   std::shared_ptr<SimpleBackend>                         ram       = std::make_shared<SimpleBackend>(TIER_RAM);
-  std::shared_ptr<SimpleBackend>                         disk      = std::make_shared<SimpleBackend>(TIER_DISK);
+  std::shared_ptr<SimpleBackend>                         disk      = std::make_shared<SimpleBackend>(TIER_DISK_HOT);
   std::shared_ptr<PayloadManager>                        manager{[&] {
     payload::storage::StorageFactory::TierMap s;
     s[TIER_RAM]  = ram;
-    s[TIER_DISK] = disk;
+    s[TIER_DISK_HOT] = disk;
     return std::make_shared<PayloadManager>(s, lease_mgr, repo);
   }()};
 
@@ -99,27 +99,27 @@ struct Fixture {
 };
 
 // ---------------------------------------------------------------------------
-// PressureState::DiskPressure
+// PressureState::DiskHotPressure
 // ---------------------------------------------------------------------------
 
 TEST(VoidTier, DiskPressureFiresWhenBytesExceedLimit) {
   PressureState state;
-  state.disk_limit = 1024;
-  state.disk_bytes.store(512);
-  EXPECT_FALSE(state.DiskPressure());
-  state.disk_bytes.store(1025);
-  EXPECT_TRUE(state.DiskPressure());
+  state.disk_hot_limit = 1024;
+  state.disk_hot_bytes.store(512);
+  EXPECT_FALSE(state.DiskHotPressure());
+  state.disk_hot_bytes.store(1025);
+  EXPECT_TRUE(state.DiskHotPressure());
 }
 
 TEST(VoidTier, DiskPressureNotFiredAtExactLimit) {
   PressureState state;
-  state.disk_limit = 100;
-  state.disk_bytes.store(100);
-  EXPECT_FALSE(state.DiskPressure());
+  state.disk_hot_limit = 100;
+  state.disk_hot_bytes.store(100);
+  EXPECT_FALSE(state.DiskHotPressure());
 }
 
 // ---------------------------------------------------------------------------
-// TieringPolicy::ChooseDiskEviction
+// TieringPolicy::ChooseDiskHotEviction
 // ---------------------------------------------------------------------------
 
 TEST(VoidTier, ChooseDiskEvictionNoPressureReturnsNull) {
@@ -131,9 +131,9 @@ TEST(VoidTier, ChooseDiskEvictionNoPressureReturnsNull) {
   auto policy = TieringPolicy(cache, {}, {}, [](const PayloadID&) { return true; });
 
   PressureState state;
-  state.disk_limit = 1000;
-  state.disk_bytes.store(500);
-  EXPECT_FALSE(policy.ChooseDiskEviction(state).has_value());
+  state.disk_hot_limit = 1000;
+  state.disk_hot_bytes.store(500);
+  EXPECT_FALSE(policy.ChooseDiskHotEviction(state).has_value());
 }
 
 TEST(VoidTier, ChooseDiskEvictionUnderPressureReturnsVictim) {
@@ -145,9 +145,9 @@ TEST(VoidTier, ChooseDiskEvictionUnderPressureReturnsVictim) {
   auto policy = TieringPolicy(cache, {}, {}, [](const PayloadID& id) { return id.value() == "disk-payload"; });
 
   PressureState state;
-  state.disk_limit = 0;
-  state.disk_bytes.store(1);
-  const auto victim = policy.ChooseDiskEviction(state);
+  state.disk_hot_limit = 0;
+  state.disk_hot_bytes.store(1);
+  const auto victim = policy.ChooseDiskHotEviction(state);
   ASSERT_TRUE(victim.has_value());
   EXPECT_EQ(victim->value(), "disk-payload");
 }
@@ -161,38 +161,38 @@ TEST(VoidTier, ChooseDiskEvictionPredicateRejectsAllYieldsNull) {
   auto policy = TieringPolicy(cache, {}, {}, [](const PayloadID&) { return false; });
 
   PressureState state;
-  state.disk_limit = 0;
-  state.disk_bytes.store(1);
-  EXPECT_FALSE(policy.ChooseDiskEviction(state).has_value());
+  state.disk_hot_limit = 0;
+  state.disk_hot_bytes.store(1);
+  EXPECT_FALSE(policy.ChooseDiskHotEviction(state).has_value());
 }
 
 // ---------------------------------------------------------------------------
-// GetDiskSpillTarget
+// GetDiskHotSpillTarget
 // ---------------------------------------------------------------------------
 
 TEST(VoidTier, GetDiskSpillTargetDefaultsToObject) {
   Fixture f;
-  auto    id = f.AllocateAndCommit(TIER_DISK);
+  auto    id = f.AllocateAndCommit(TIER_DISK_HOT);
   // No explicit spill_target set → should default to TIER_OBJECT.
-  EXPECT_EQ(f.manager->GetDiskSpillTarget(id), TIER_OBJECT);
+  EXPECT_EQ(f.manager->GetDiskHotSpillTarget(id), TIER_OBJECT);
 }
 
 TEST(VoidTier, GetDiskSpillTargetHonorsVoidOverride) {
   Fixture        f;
   EvictionPolicy policy;
   policy.set_spill_target(TIER_VOID);
-  auto id = f.AllocateAndCommit(TIER_DISK, 64, policy);
-  EXPECT_EQ(f.manager->GetDiskSpillTarget(id), TIER_VOID);
+  auto id = f.AllocateAndCommit(TIER_DISK_HOT, 64, policy);
+  EXPECT_EQ(f.manager->GetDiskHotSpillTarget(id), TIER_VOID);
 }
 
 TEST(VoidTier, GetDiskSpillTargetNonVoidSpillTargetFallsBackToObject) {
   Fixture f;
-  // spill_target=TIER_DISK means "stay on disk" for RAM eviction, but for disk
-  // eviction we fall back to TIER_OBJECT since TIER_DISK is not a terminal tier.
+  // spill_target=TIER_DISK_HOT means "stay on disk" for RAM eviction, but for disk
+  // eviction we fall back to TIER_OBJECT since TIER_DISK_HOT is not a terminal tier.
   EvictionPolicy policy;
-  policy.set_spill_target(TIER_DISK);
-  auto id = f.AllocateAndCommit(TIER_DISK, 64, policy);
-  EXPECT_EQ(f.manager->GetDiskSpillTarget(id), TIER_OBJECT);
+  policy.set_spill_target(TIER_DISK_HOT);
+  auto id = f.AllocateAndCommit(TIER_DISK_HOT, 64, policy);
+  EXPECT_EQ(f.manager->GetDiskHotSpillTarget(id), TIER_OBJECT);
 }
 
 // ---------------------------------------------------------------------------
@@ -221,15 +221,15 @@ TEST(VoidTier, SpillToVoidDeletesRamPayload) {
 TEST(VoidTier, SpillToVoidDeletesDiskPayload) {
   Fixture f;
   auto    id = f.AllocateAndCommit(TIER_RAM);
-  f.manager->ExecuteSpill(id, TIER_DISK, /*fsync=*/false);
+  f.manager->ExecuteSpill(id, TIER_DISK_HOT, /*fsync=*/false);
   ASSERT_TRUE(f.disk->Has(id));
 
   f.manager->ExecuteSpill(id, TIER_VOID, /*fsync=*/false);
 
   EXPECT_FALSE(f.disk->Has(id));
   auto     bytes      = f.manager->GetTierBytes();
-  uint64_t disk_bytes = bytes.count(static_cast<int>(TIER_DISK)) ? bytes.at(static_cast<int>(TIER_DISK)) : 0;
-  EXPECT_EQ(disk_bytes, 0u);
+  uint64_t disk_hot_bytes = bytes.count(static_cast<int>(TIER_DISK_HOT)) ? bytes.at(static_cast<int>(TIER_DISK_HOT)) : 0;
+  EXPECT_EQ(disk_hot_bytes, 0u);
   EXPECT_THROW(f.manager->ResolveSnapshot(id), std::exception);
 }
 
@@ -280,7 +280,7 @@ TEST(VoidTier, TierBytesCleanAfterVoidThenReallocate) {
 // payload_mutexes_. Delete always did; the TIER_VOID spill path did not, and
 // because nothing observes that map the only symptom was memory growth over
 // days. TIER_VOID is reached automatically from background eviction
-// (TieringManager consults GetDiskSpillTarget), so on a VOID-terminated tier
+// (TieringManager consults GetDiskHotSpillTarget), so on a VOID-terminated tier
 // the leak accrued once per evicted payload for the life of the process.
 // ---------------------------------------------------------------------------
 

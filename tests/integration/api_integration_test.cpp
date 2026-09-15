@@ -178,18 +178,18 @@ void TestDiskRoundTrip(const PayloadClient& client, const std::string& tp) {
   constexpr uint64_t kSize = 256;
   constexpr uint8_t  kFill = 0xCD;
 
-  auto wr = client.AllocateWritableBuffer(kSize, TIER_DISK);
+  auto wr = client.AllocateWritableBuffer(kSize, TIER_DISK_HOT);
   ASSERT_OK(wr.status());
   auto wp = wr.ValueOrDie();
   ASSERT_TRUE(wp.buffer != nullptr);
   ASSERT_EQ(static_cast<uint64_t>(wp.buffer->size()), kSize);
   ASSERT_TRUE(wp.descriptor.has_disk());
-  ASSERT_EQ(wp.descriptor.tier(), TIER_DISK);
+  ASSERT_EQ(wp.descriptor.tier(), TIER_DISK_HOT);
   std::memset(wp.buffer->mutable_data(), kFill, static_cast<size_t>(kSize));
 
   ASSERT_OK(client.CommitPayload(wp.descriptor.payload_id()));
 
-  auto rd = client.AcquireReadableBuffer(wp.descriptor.payload_id(), TIER_DISK);
+  auto rd = client.AcquireReadableBuffer(wp.descriptor.payload_id(), TIER_DISK_HOT);
   ASSERT_OK(rd.status());
   auto rp = rd.ValueOrDie();
   ASSERT_EQ(static_cast<uint64_t>(rp.buffer->size()), kSize);

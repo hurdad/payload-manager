@@ -19,7 +19,7 @@ namespace {
 using payload::core::PayloadManager;
 using payload::lease::LeaseManager;
 using payload::manager::v1::PAYLOAD_STATE_ACTIVE;
-using payload::manager::v1::TIER_DISK;
+using payload::manager::v1::TIER_DISK_HOT;
 using payload::manager::v1::TIER_RAM;
 using payload::storage::StorageBackend;
 
@@ -72,7 +72,7 @@ class TrackingStorageBackend final : public StorageBackend {
 PayloadManager MakeManager(const std::shared_ptr<LeaseManager>& lease_mgr) {
   payload::storage::StorageFactory::TierMap storage;
   storage[TIER_RAM]  = std::make_shared<TrackingStorageBackend>(TIER_RAM);
-  storage[TIER_DISK] = std::make_shared<TrackingStorageBackend>(TIER_DISK);
+  storage[TIER_DISK_HOT] = std::make_shared<TrackingStorageBackend>(TIER_DISK_HOT);
 
   return PayloadManager(std::move(storage), lease_mgr, std::make_shared<payload::db::memory::MemoryRepository>());
 }
@@ -117,7 +117,7 @@ TEST(PayloadManagerDelete, PromoteRejectsWhenLeaseIsActive) {
   auto       lease      = manager.AcquireReadLease(descriptor.payload_id(), TIER_RAM, 60'000);
   EXPECT_FALSE(lease.lease_id().value().empty());
 
-  EXPECT_THROW((void)manager.Promote(descriptor.payload_id(), TIER_DISK), std::runtime_error);
+  EXPECT_THROW((void)manager.Promote(descriptor.payload_id(), TIER_DISK_HOT), std::runtime_error);
   EXPECT_EQ(manager.ResolveSnapshot(descriptor.payload_id()).tier(), TIER_RAM);
 }
 
@@ -134,11 +134,11 @@ TEST(PayloadManagerDelete, CacheCoherenceAcrossCommitPromoteAndDelete) {
   EXPECT_EQ(committed_snapshot.state(), PAYLOAD_STATE_ACTIVE);
   EXPECT_EQ(committed_snapshot.version(), 2);
 
-  const auto promoted = manager.Promote(allocated.payload_id(), TIER_DISK);
-  EXPECT_EQ(promoted.tier(), TIER_DISK);
+  const auto promoted = manager.Promote(allocated.payload_id(), TIER_DISK_HOT);
+  EXPECT_EQ(promoted.tier(), TIER_DISK_HOT);
 
   const auto promoted_snapshot = manager.ResolveSnapshot(allocated.payload_id());
-  EXPECT_EQ(promoted_snapshot.tier(), TIER_DISK);
+  EXPECT_EQ(promoted_snapshot.tier(), TIER_DISK_HOT);
   EXPECT_EQ(promoted_snapshot.version(), promoted.version());
 
   manager.Delete(allocated.payload_id(), /*force=*/true);
@@ -152,7 +152,7 @@ TEST(PayloadManagerDelete, DeleteRemovesStoragePayload) {
 
   payload::storage::StorageFactory::TierMap storage;
   storage[TIER_RAM]  = ram_backend;
-  storage[TIER_DISK] = std::make_shared<TrackingStorageBackend>(TIER_DISK);
+  storage[TIER_DISK_HOT] = std::make_shared<TrackingStorageBackend>(TIER_DISK_HOT);
 
   PayloadManager manager(std::move(storage), lease_mgr, std::make_shared<payload::db::memory::MemoryRepository>());
 
@@ -167,10 +167,10 @@ TEST(PayloadManagerDelete, PrefetchPromotesToRequestedTier) {
   auto manager   = MakeManager(lease_mgr);
 
   const auto descriptor = manager.Commit(manager.Allocate(128, TIER_RAM).payload_id());
-  manager.Prefetch(descriptor.payload_id(), TIER_DISK);
+  manager.Prefetch(descriptor.payload_id(), TIER_DISK_HOT);
 
   const auto snapshot = manager.ResolveSnapshot(descriptor.payload_id());
-  EXPECT_EQ(snapshot.tier(), TIER_DISK);
+  EXPECT_EQ(snapshot.tier(), TIER_DISK_HOT);
 }
 
 TEST(PayloadManagerDelete, PinnedPayloadBlocksSpillUntilUnpinned) {
@@ -180,12 +180,12 @@ TEST(PayloadManagerDelete, PinnedPayloadBlocksSpillUntilUnpinned) {
   const auto descriptor = manager.Commit(manager.Allocate(128, TIER_RAM).payload_id());
   manager.Pin(descriptor.payload_id(), /*duration_ms=*/0);
 
-  EXPECT_THROW(manager.ExecuteSpill(descriptor.payload_id(), TIER_DISK, /*fsync=*/false), std::runtime_error);
+  EXPECT_THROW(manager.ExecuteSpill(descriptor.payload_id(), TIER_DISK_HOT, /*fsync=*/false), std::runtime_error);
   EXPECT_EQ(manager.ResolveSnapshot(descriptor.payload_id()).tier(), TIER_RAM);
 
   manager.Unpin(descriptor.payload_id());
-  manager.ExecuteSpill(descriptor.payload_id(), TIER_DISK, /*fsync=*/false);
-  EXPECT_EQ(manager.ResolveSnapshot(descriptor.payload_id()).tier(), TIER_DISK);
+  manager.ExecuteSpill(descriptor.payload_id(), TIER_DISK_HOT, /*fsync=*/false);
+  EXPECT_EQ(manager.ResolveSnapshot(descriptor.payload_id()).tier(), TIER_DISK_HOT);
 }
 
 TEST(PayloadManagerDelete, DeleteClearsPinState) {
@@ -214,7 +214,7 @@ TEST(PayloadManagerDelete, TimedPinExpiresAndAllowsSpill) {
   manager.Pin(descriptor.payload_id(), /*duration_ms=*/30);
 
   // While the pin is active the spill must be rejected.
-  EXPECT_THROW(manager.ExecuteSpill(descriptor.payload_id(), TIER_DISK, /*fsync=*/false), std::runtime_error)
+  EXPECT_THROW(manager.ExecuteSpill(descriptor.payload_id(), TIER_DISK_HOT, /*fsync=*/false), std::runtime_error)
       << "spill must be blocked while pin is active";
   EXPECT_EQ(manager.ResolveSnapshot(descriptor.payload_id()).tier(), TIER_RAM);
 
@@ -222,6 +222,6 @@ TEST(PayloadManagerDelete, TimedPinExpiresAndAllowsSpill) {
   std::this_thread::sleep_for(std::chrono::milliseconds(60));
 
   // After expiry the spill must succeed without any manual Unpin.
-  EXPECT_NO_THROW(manager.ExecuteSpill(descriptor.payload_id(), TIER_DISK, /*fsync=*/false)) << "spill must succeed after timed pin has expired";
-  EXPECT_EQ(manager.ResolveSnapshot(descriptor.payload_id()).tier(), TIER_DISK);
+  EXPECT_NO_THROW(manager.ExecuteSpill(descriptor.payload_id(), TIER_DISK_HOT, /*fsync=*/false)) << "spill must succeed after timed pin has expired";
+  EXPECT_EQ(manager.ResolveSnapshot(descriptor.payload_id()).tier(), TIER_DISK_HOT);
 }

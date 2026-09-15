@@ -29,10 +29,17 @@ const (
 	Tier_TIER_UNSPECIFIED Tier = 0 // Not set; treated as an error in most contexts.
 	Tier_TIER_GPU         Tier = 1 // GPU device memory (fastest, smallest, most volatile).
 	Tier_TIER_RAM         Tier = 2 // Host DRAM / shared-memory segment.
-	Tier_TIER_DISK        Tier = 3 // Local NVMe/SSD/HDD (durable, larger, slower than RAM).
-	Tier_TIER_OBJECT      Tier = 4 // Remote object storage (S3/GCS/Azure; durable, largest).
-	Tier_TIER_VOID        Tier = 5 // Discard on eviction: payload is deleted rather than moved.
-	Tier_TIER_RAM_RING    Tier = 6 // Pre-allocated /dev/shm ring of N fixed slots, rotated across
+	Tier_TIER_DISK_HOT    Tier = 3 // Primary local durable level (NVMe/SSD; durable, larger,
+	// slower than RAM). See TIER_DISK_COLD for the optional
+	// slower second local level.
+	Tier_TIER_OBJECT   Tier = 4 // Remote object storage (S3/GCS/Azure; durable, largest).
+	Tier_TIER_VOID     Tier = 5 // Discard on eviction: payload is deleted rather than moved.
+	Tier_TIER_RAM_RING Tier = 6 // Pre-allocated /dev/shm ring of N fixed slots, rotated across
+	// captures. Producers acquire a slot, write, commit; consumers
+	// map the ring once at startup (no per-capture mmap or
+	// cudaHostRegister) and lease the indicated slot per cycle.
+	// See payload/manager/services/v1/payload_ring_service.proto.
+	Tier_TIER_DISK_COLD Tier = 7 // Second local durable level on slower media (HDD or a
 )
 
 // Enum value maps for Tier.
@@ -41,19 +48,21 @@ var (
 		0: "TIER_UNSPECIFIED",
 		1: "TIER_GPU",
 		2: "TIER_RAM",
-		3: "TIER_DISK",
+		3: "TIER_DISK_HOT",
 		4: "TIER_OBJECT",
 		5: "TIER_VOID",
 		6: "TIER_RAM_RING",
+		7: "TIER_DISK_COLD",
 	}
 	Tier_value = map[string]int32{
 		"TIER_UNSPECIFIED": 0,
 		"TIER_GPU":         1,
 		"TIER_RAM":         2,
-		"TIER_DISK":        3,
+		"TIER_DISK_HOT":    3,
 		"TIER_OBJECT":      4,
 		"TIER_VOID":        5,
 		"TIER_RAM_RING":    6,
+		"TIER_DISK_COLD":   7,
 	}
 )
 
@@ -212,15 +221,16 @@ var File_payload_manager_core_v1_types_proto protoreflect.FileDescriptor
 
 const file_payload_manager_core_v1_types_proto_rawDesc = "" +
 	"\n" +
-	"#payload/manager/core/v1/types.proto\x12\x17payload.manager.core.v1*z\n" +
+	"#payload/manager/core/v1/types.proto\x12\x17payload.manager.core.v1*\x92\x01\n" +
 	"\x04Tier\x12\x14\n" +
 	"\x10TIER_UNSPECIFIED\x10\x00\x12\f\n" +
 	"\bTIER_GPU\x10\x01\x12\f\n" +
-	"\bTIER_RAM\x10\x02\x12\r\n" +
-	"\tTIER_DISK\x10\x03\x12\x0f\n" +
+	"\bTIER_RAM\x10\x02\x12\x11\n" +
+	"\rTIER_DISK_HOT\x10\x03\x12\x0f\n" +
 	"\vTIER_OBJECT\x10\x04\x12\r\n" +
 	"\tTIER_VOID\x10\x05\x12\x11\n" +
-	"\rTIER_RAM_RING\x10\x06*\x89\x02\n" +
+	"\rTIER_RAM_RING\x10\x06\x12\x12\n" +
+	"\x0eTIER_DISK_COLD\x10\a*\x89\x02\n" +
 	"\fPayloadState\x12\x1d\n" +
 	"\x19PAYLOAD_STATE_UNSPECIFIED\x10\x00\x12\x1b\n" +
 	"\x17PAYLOAD_STATE_ALLOCATED\x10\x01\x12\x18\n" +

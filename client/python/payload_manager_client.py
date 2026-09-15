@@ -293,7 +293,7 @@ class PayloadClient:
     ) -> lifecycle_pb2.ListPayloadsResponse:
         """Return all payloads, optionally filtered by tier.
 
-        Pass a ``types_pb2.Tier`` value (e.g. ``TIER_RAM``, ``TIER_DISK``,
+        Pass a ``types_pb2.Tier`` value (e.g. ``TIER_RAM``, ``TIER_DISK_HOT``,
         ``TIER_GPU``) to restrict the result to a single tier.  The default
         value of ``0`` (``TIER_UNSPECIFIED``) returns every payload regardless
         of tier, matching the C++ ``ListPayloads`` convenience semantics.

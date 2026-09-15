@@ -33,8 +33,10 @@ std::string_view TierName(Tier tier) {
   switch (tier) {
     case TIER_RAM:
       return "ram";
-    case TIER_DISK:
-      return "disk";
+    case TIER_DISK_HOT:
+      return "disk_hot";
+    case TIER_DISK_COLD:
+      return "disk_cold";
     case TIER_GPU:
       return "gpu";
     case TIER_OBJECT:
@@ -57,8 +59,10 @@ uint64_t PayloadManager::TierLimit(Tier tier) const {
       return pressure_state_->ram_limit;
     case TIER_GPU:
       return pressure_state_->gpu_limit;
-    case TIER_DISK:
-      return pressure_state_->disk_limit;
+    case TIER_DISK_HOT:
+      return pressure_state_->disk_hot_limit;
+    case TIER_DISK_COLD:
+      return pressure_state_->disk_cold_limit;
     default:
       // TIER_OBJECT is remote and TIER_VOID discards, so neither is capped here.
       return std::numeric_limits<uint64_t>::max();
@@ -147,7 +151,7 @@ void PayloadManager::UpdateTierCount(Tier tier, int64_t delta) {
 namespace {
 
 bool IsDurableTier(Tier tier) {
-  return tier == TIER_DISK || tier == TIER_OBJECT;
+  return tier == TIER_DISK_HOT || tier == TIER_DISK_COLD || tier == TIER_OBJECT;
   // TIER_VOID is explicitly not durable: payloads are deleted on eviction.
 }
 
@@ -215,8 +219,13 @@ PayloadDescriptor ToPayloadDescriptor(const db::model::PayloadRecord& record, co
         *descriptor.mutable_gpu() = gpu;
         break;
       }
-      case TIER_DISK:
+      case TIER_DISK_HOT:
+      case TIER_DISK_COLD:
       case TIER_OBJECT: {
+        // All three are path-addressed and share DiskLocation; the descriptor's
+        // tier field is what distinguishes them. Omitting TIER_DISK_COLD here
+        // would drop it into the RAM default below and describe a cold payload
+        // as shm-resident.
         DiskLocation disk;
         disk.set_path(payload::util::ToString(record.id) + ".bin");
         disk.set_offset_bytes(0);
@@ -343,7 +352,10 @@ void PayloadManager::PopulateLocation(PayloadDescriptor* descriptor) {
       *descriptor->mutable_ram() = ram;
       return;
     }
-    case TIER_DISK: {
+    case TIER_DISK_HOT:
+    case TIER_DISK_COLD: {
+      // Both local levels are the same on-disk format; the descriptor's tier
+      // field is what tells the client which root the path belongs to.
       const auto   size = backend->Size(id);
       DiskLocation disk;
       disk.set_length_bytes(size);
@@ -354,7 +366,7 @@ void PayloadManager::PopulateLocation(PayloadDescriptor* descriptor) {
     }
     case TIER_OBJECT: {
       // Object storage is exposed via DiskLocation (path-based); the descriptor's
-      // tier field distinguishes TIER_OBJECT from TIER_DISK at the client side.
+      // tier field distinguishes TIER_OBJECT from TIER_DISK_HOT at the client side.
       const auto   size = backend->Size(id);
       DiskLocation disk;
       disk.set_length_bytes(size);
@@ -439,7 +451,8 @@ PayloadDescriptor PayloadManager::Allocate(uint64_t size_bytes, Tier preferred, 
         gpu->set_length_bytes(size_bytes);
         break;
       }
-      case TIER_DISK: {
+      case TIER_DISK_HOT:
+      case TIER_DISK_COLD: {
         auto* disk = desc.mutable_disk();
         disk->set_path(payload::util::ToString(Key(desc.payload_id())) + ".bin");
         disk->set_offset_bytes(0);
@@ -473,8 +486,8 @@ PayloadDescriptor PayloadManager::Allocate(uint64_t size_bytes, Tier preferred, 
   record.min_residency_tier = static_cast<int>(eviction_policy.min_residency_tier());
   record.require_durable    = eviction_policy.require_durable();
 
-  // Determine spill target: use policy hint if set, otherwise fall back to TIER_DISK.
-  const Tier spill_tier = (eviction_policy.spill_target() != TIER_UNSPECIFIED) ? eviction_policy.spill_target() : TIER_DISK;
+  // Determine spill target: use policy hint if set, otherwise fall back to TIER_DISK_HOT.
+  const Tier spill_tier = (eviction_policy.spill_target() != TIER_UNSPECIFIED) ? eviction_policy.spill_target() : TIER_DISK_HOT;
   record.spill_target   = static_cast<int>(spill_tier);
 
   // no_evict overrides TTL: a no_evict payload never auto-expires.
@@ -948,7 +961,7 @@ void PayloadManager::HydrateCaches() {
       new_no_evict.insert(record.id);
     }
 
-    new_spill_targets[record.id] = (record.spill_target != 0) ? static_cast<Tier>(record.spill_target) : TIER_DISK;
+    new_spill_targets[record.id] = (record.spill_target != 0) ? static_cast<Tier>(record.spill_target) : TIER_DISK_HOT;
   }
 
   // Bump the persisted version for every non-terminal payload so that any
@@ -1125,7 +1138,7 @@ void PayloadManager::ExecuteSpill(const PayloadID& id, Tier target, bool fsync) 
       // The payload is gone, exactly as after Delete, so its per-payload mutex
       // has to go too. Without this the map grows by one entry per voided
       // payload for the life of the process, and TIER_VOID is reached from the
-      // background eviction path (TieringManager::GetDiskSpillTarget), so on a
+      // background eviction path (TieringManager::GetDiskHotSpillTarget), so on a
       // VOID-terminated tier that is every evicted payload, forever.
       //
       // Unlock first: erasing the map entry drops the last reference the map
@@ -1251,17 +1264,36 @@ bool PayloadManager::IsEvictionExempt(const PayloadID& id) const {
 Tier PayloadManager::GetSpillTarget(const PayloadID& id) const {
   std::lock_guard<std::mutex> lock(spill_targets_guard_);
   const auto                  it = spill_targets_.find(Key(id));
-  return (it != spill_targets_.end()) ? it->second : TIER_DISK;
+  return (it != spill_targets_.end()) ? it->second : TIER_DISK_HOT;
 }
 
-Tier PayloadManager::GetDiskSpillTarget(const PayloadID& id) const {
+Tier PayloadManager::GetDiskHotSpillTarget(const PayloadID& id) const {
+  {
+    std::lock_guard<std::mutex> lock(spill_targets_guard_);
+    const auto                  it = spill_targets_.find(Key(id));
+    // Honor explicit TIER_VOID overrides: the payload asked to be discarded
+    // rather than demoted, and that outranks the configured chain.
+    if (it != spill_targets_.end() && it->second == TIER_VOID) {
+      return TIER_VOID;
+    }
+  }
+  // Otherwise take the next step down the chain that actually exists. The cold
+  // level is opt-in, so when it is not configured this stays TIER_OBJECT — the
+  // behaviour every config predating TIER_DISK_COLD relies on.
+  if (storage_.count(TIER_DISK_COLD) > 0) {
+    return TIER_DISK_COLD;
+  }
+  return TIER_OBJECT;
+}
+
+Tier PayloadManager::GetDiskColdSpillTarget(const PayloadID& id) const {
   std::lock_guard<std::mutex> lock(spill_targets_guard_);
   const auto                  it = spill_targets_.find(Key(id));
-  // Honor explicit TIER_VOID overrides; all other cases fall through to TIER_OBJECT
-  // since TIER_OBJECT is the only tier below TIER_DISK in the chain.
   if (it != spill_targets_.end() && it->second == TIER_VOID) {
     return TIER_VOID;
   }
+  // TIER_DISK_COLD is the last local level, so object storage is the only
+  // remaining step down.
   return TIER_OBJECT;
 }
 

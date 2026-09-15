@@ -17,11 +17,15 @@ This directory contains all Docker build and Docker Compose assets for Payload M
   | `HTTP_ADDR` | `-http-addr` | `:8080` | HTTP listen address |
   | `DISK_ROOT_PATH` | `-disk-root` | `/var/lib/payload-manager/payloads` | Shared disk-tier root, for `GET /v1/payloads/{id}/download` |
   | `CORS_ORIGINS` | `-cors-origins` | *(empty — CORS off)* | Comma-separated origins allowed to make cross-origin requests |
+  | `GRPC_CA` | `-grpc-ca` | *(empty — plaintext)* | PEM CA bundle for the payload-manager connection |
+  | `GRPC_SERVER_NAME` | `-grpc-server-name` | *(from the dial target)* | Name to verify against payload-manager's certificate |
+  | `TLS_CERT` / `TLS_KEY` | `-tls-cert` / `-tls-key` | *(empty — plain HTTP)* | Certificate and key to serve HTTPS with |
 
   Leave `CORS_ORIGINS` unset unless something genuinely needs it. The embedded UI
   is served from the gateway itself and `npm run dev` proxies `/v1` through vite,
   so both supported ways of running the UI are same-origin. The service behind
-  the gateway has no authentication, so enabling CORS — `*` especially — lets any
+  a deployment without `server.auth` has no caller identity at all, so enabling
+  CORS — `*` especially — lets any
   page in an operator's browser reach every payload-manager that browser can
   route to. See `SECURITY.md`.
 - `Dockerfile.test` — integration test image (`payload_manager_integration_api`), used by Compose overlays.
@@ -157,6 +161,37 @@ fine on the L4T kernel — packages every dependency at the same version the x86
 images already pin, `libarrow-dev` 25.0.1, `libpqxx-dev` 7.10.0 and
 `opentelemetry-cpp-dev` 1.23.0 included. The Jetson now gets the same image as
 everything else.
+
+## TLS and authentication
+
+Off by default. `docker-compose.tls.yml` swaps the service onto a config with
+`server.tls` and `server.auth` enabled and mounts the development credentials;
+each client needs its companion overlay, because compose requires every service
+in a merged project to have an image or build context — naming a client the
+chosen stack does not include fails the whole project.
+
+| Overlay | Switches over |
+| --- | --- |
+| `docker-compose.tls.yml` | `payload-manager` (always needed) |
+| `docker-compose.tls.test.yml` | `integration-test` |
+| `docker-compose.tls.minio.yml` | `object-spill-test` |
+| `docker-compose.tls.examples.yml` | `cpp-examples` |
+| `docker-compose.tls.examples.python.yml` | `python-examples` |
+| `docker-compose.tls.gateway.yml` | `payload-gateway` (also serves HTTPS) |
+
+```bash
+scripts/gen-dev-certs.sh       # credentials are gitignored, not in any image
+
+docker compose -f docker/docker-compose.postgres.yml \
+               -f docker/docker-compose.tls.yml \
+               -f docker/docker-compose.test.yml \
+               -f docker/docker-compose.tls.test.yml \
+               up --build --exit-code-from integration-test
+```
+
+The base stacks' healthchecks are untouched: `bash -c '</dev/tcp/localhost/50051'`
+is a connect-only probe and succeeds against a TLS listener because it never
+sends a byte.
 
 ## Compose files
 

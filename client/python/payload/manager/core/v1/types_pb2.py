@@ -24,17 +24,17 @@ _sym_db = _symbol_database.Default()
 
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n#payload/manager/core/v1/types.proto\x12\x17payload.manager.core.v1*z\n\x04Tier\x12\x14\n\x10TIER_UNSPECIFIED\x10\x00\x12\x0c\n\x08TIER_GPU\x10\x01\x12\x0c\n\x08TIER_RAM\x10\x02\x12\r\n\tTIER_DISK\x10\x03\x12\x0f\n\x0bTIER_OBJECT\x10\x04\x12\r\n\tTIER_VOID\x10\x05\x12\x11\n\rTIER_RAM_RING\x10\x06*\x89\x02\n\x0cPayloadState\x12\x1d\n\x19PAYLOAD_STATE_UNSPECIFIED\x10\x00\x12\x1b\n\x17PAYLOAD_STATE_ALLOCATED\x10\x01\x12\x18\n\x14PAYLOAD_STATE_ACTIVE\x10\x02\x12\x1a\n\x16PAYLOAD_STATE_SPILLING\x10\x03\x12\x19\n\x15PAYLOAD_STATE_DURABLE\x10\x04\x12\x1a\n\x16PAYLOAD_STATE_EVICTING\x10\x05\x12\x1a\n\x16PAYLOAD_STATE_DELETING\x10\x06\x12\x19\n\x15PAYLOAD_STATE_EXPIRED\x10\x07\x12\x19\n\x15PAYLOAD_STATE_DELETED\x10\x08*\xa7\x01\n\x10\x45victionPriority\x12!\n\x1d\x45VICTION_PRIORITY_UNSPECIFIED\x10\x00\x12\x19\n\x15\x45VICTION_PRIORITY_LOW\x10\x01\x12\x1c\n\x18\x45VICTION_PRIORITY_NORMAL\x10\x02\x12\x1a\n\x16\x45VICTION_PRIORITY_HIGH\x10\x03\x12\x1b\n\x17\x45VICTION_PRIORITY_NEVER\x10\x04\x62\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n#payload/manager/core/v1/types.proto\x12\x17payload.manager.core.v1*\x92\x01\n\x04Tier\x12\x14\n\x10TIER_UNSPECIFIED\x10\x00\x12\x0c\n\x08TIER_GPU\x10\x01\x12\x0c\n\x08TIER_RAM\x10\x02\x12\x11\n\rTIER_DISK_HOT\x10\x03\x12\x0f\n\x0bTIER_OBJECT\x10\x04\x12\r\n\tTIER_VOID\x10\x05\x12\x11\n\rTIER_RAM_RING\x10\x06\x12\x12\n\x0eTIER_DISK_COLD\x10\x07*\x89\x02\n\x0cPayloadState\x12\x1d\n\x19PAYLOAD_STATE_UNSPECIFIED\x10\x00\x12\x1b\n\x17PAYLOAD_STATE_ALLOCATED\x10\x01\x12\x18\n\x14PAYLOAD_STATE_ACTIVE\x10\x02\x12\x1a\n\x16PAYLOAD_STATE_SPILLING\x10\x03\x12\x19\n\x15PAYLOAD_STATE_DURABLE\x10\x04\x12\x1a\n\x16PAYLOAD_STATE_EVICTING\x10\x05\x12\x1a\n\x16PAYLOAD_STATE_DELETING\x10\x06\x12\x19\n\x15PAYLOAD_STATE_EXPIRED\x10\x07\x12\x19\n\x15PAYLOAD_STATE_DELETED\x10\x08*\xa7\x01\n\x10\x45victionPriority\x12!\n\x1d\x45VICTION_PRIORITY_UNSPECIFIED\x10\x00\x12\x19\n\x15\x45VICTION_PRIORITY_LOW\x10\x01\x12\x1c\n\x18\x45VICTION_PRIORITY_NORMAL\x10\x02\x12\x1a\n\x16\x45VICTION_PRIORITY_HIGH\x10\x03\x12\x1b\n\x17\x45VICTION_PRIORITY_NEVER\x10\x04\x62\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
 _builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, 'payload.manager.core.v1.types_pb2', _globals)
 if not _descriptor._USE_C_DESCRIPTORS:
   DESCRIPTOR._loaded_options = None
-  _globals['_TIER']._serialized_start=64
-  _globals['_TIER']._serialized_end=186
-  _globals['_PAYLOADSTATE']._serialized_start=189
-  _globals['_PAYLOADSTATE']._serialized_end=454
-  _globals['_EVICTIONPRIORITY']._serialized_start=457
-  _globals['_EVICTIONPRIORITY']._serialized_end=624
+  _globals['_TIER']._serialized_start=65
+  _globals['_TIER']._serialized_end=211
+  _globals['_PAYLOADSTATE']._serialized_start=214
+  _globals['_PAYLOADSTATE']._serialized_end=479
+  _globals['_EVICTIONPRIORITY']._serialized_start=482
+  _globals['_EVICTIONPRIORITY']._serialized_end=649
 # @@protoc_insertion_point(module_scope)

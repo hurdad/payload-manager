@@ -24,7 +24,7 @@ _sym_db = _symbol_database.Default()
 
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n$payload/manager/admin/v1/stats.proto\x12\x18payload.manager.admin.v1\"\x0e\n\x0cStatsRequest\"\xc4\x01\n\tRingStats\x12\x0f\n\x07ring_id\x18\x01 \x01(\t\x12\x13\n\x0bslots_total\x18\x02 \x01(\r\x12\x17\n\x0fslots_available\x18\x03 \x01(\r\x12\x15\n\rslots_writing\x18\x04 \x01(\r\x12\x14\n\x0cslots_leased\x18\x05 \x01(\r\x12\x15\n\rleases_active\x18\x06 \x01(\x04\x12\x17\n\x0fslots_reclaimed\x18\x07 \x01(\x04\x12\x1b\n\x13slot_capacity_bytes\x18\x08 \x01(\x04\"\xef\x01\n\rStatsResponse\x12\x14\n\x0cpayloads_gpu\x18\x01 \x01(\x04\x12\x14\n\x0cpayloads_ram\x18\x02 \x01(\x04\x12\x15\n\rpayloads_disk\x18\x03 \x01(\x04\x12\x17\n\x0fpayloads_object\x18\x07 \x01(\x04\x12\x11\n\tbytes_gpu\x18\x04 \x01(\x04\x12\x11\n\tbytes_ram\x18\x05 \x01(\x04\x12\x12\n\nbytes_disk\x18\x06 \x01(\x04\x12\x14\n\x0c\x62ytes_object\x18\x08 \x01(\x04\x12\x32\n\x05rings\x18\t \x03(\x0b\x32#.payload.manager.admin.v1.RingStatsb\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n$payload/manager/admin/v1/stats.proto\x12\x18payload.manager.admin.v1\"\x0e\n\x0cStatsRequest\"\xc4\x01\n\tRingStats\x12\x0f\n\x07ring_id\x18\x01 \x01(\t\x12\x13\n\x0bslots_total\x18\x02 \x01(\r\x12\x17\n\x0fslots_available\x18\x03 \x01(\r\x12\x15\n\rslots_writing\x18\x04 \x01(\r\x12\x14\n\x0cslots_leased\x18\x05 \x01(\r\x12\x15\n\rleases_active\x18\x06 \x01(\x04\x12\x17\n\x0fslots_reclaimed\x18\x07 \x01(\x04\x12\x1b\n\x13slot_capacity_bytes\x18\x08 \x01(\x04\"\xac\x02\n\rStatsResponse\x12\x14\n\x0cpayloads_gpu\x18\x01 \x01(\x04\x12\x14\n\x0cpayloads_ram\x18\x02 \x01(\x04\x12\x19\n\x11payloads_disk_hot\x18\x03 \x01(\x04\x12\x17\n\x0fpayloads_object\x18\x07 \x01(\x04\x12\x11\n\tbytes_gpu\x18\x04 \x01(\x04\x12\x11\n\tbytes_ram\x18\x05 \x01(\x04\x12\x16\n\x0e\x62ytes_disk_hot\x18\x06 \x01(\x04\x12\x14\n\x0c\x62ytes_object\x18\x08 \x01(\x04\x12\x32\n\x05rings\x18\t \x03(\x0b\x32#.payload.manager.admin.v1.RingStats\x12\x1a\n\x12payloads_disk_cold\x18\n \x01(\x04\x12\x17\n\x0f\x62ytes_disk_cold\x18\x0b \x01(\x04\x62\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
@@ -36,5 +36,5 @@ if not _descriptor._USE_C_DESCRIPTORS:
   _globals['_RINGSTATS']._serialized_start=83
   _globals['_RINGSTATS']._serialized_end=279
   _globals['_STATSRESPONSE']._serialized_start=282
-  _globals['_STATSRESPONSE']._serialized_end=521
+  _globals['_STATSRESPONSE']._serialized_end=582
 # @@protoc_insertion_point(module_scope)

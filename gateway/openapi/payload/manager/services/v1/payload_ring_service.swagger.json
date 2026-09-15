@@ -353,13 +353,14 @@
         "TIER_UNSPECIFIED",
         "TIER_GPU",
         "TIER_RAM",
-        "TIER_DISK",
+        "TIER_DISK_HOT",
         "TIER_OBJECT",
         "TIER_VOID",
-        "TIER_RAM_RING"
+        "TIER_RAM_RING",
+        "TIER_DISK_COLD"
       ],
       "default": "TIER_UNSPECIFIED",
-      "description": "Ordered from fastest → most durable.\nHigher tiers may not always be available.\n\n - TIER_UNSPECIFIED: Not set; treated as an error in most contexts.\n - TIER_GPU: GPU device memory (fastest, smallest, most volatile).\n - TIER_RAM: Host DRAM / shared-memory segment.\n - TIER_DISK: Local NVMe/SSD/HDD (durable, larger, slower than RAM).\n - TIER_OBJECT: Remote object storage (S3/GCS/Azure; durable, largest).\n - TIER_VOID: Discard on eviction: payload is deleted rather than moved.\n - TIER_RAM_RING: Pre-allocated /dev/shm ring of N fixed slots, rotated across"
+      "description": "Ordered from fastest → most durable.\nHigher tiers may not always be available.\n\n - TIER_UNSPECIFIED: Not set; treated as an error in most contexts.\n - TIER_GPU: GPU device memory (fastest, smallest, most volatile).\n - TIER_RAM: Host DRAM / shared-memory segment.\n - TIER_DISK_HOT: Primary local durable level (NVMe/SSD; durable, larger,\n - TIER_OBJECT: slower than RAM). See TIER_DISK_COLD for the optional\nslower second local level.\n\nRemote object storage (S3/GCS/Azure; durable, largest).\n - TIER_VOID: Discard on eviction: payload is deleted rather than moved.\n - TIER_RAM_RING: Pre-allocated /dev/shm ring of N fixed slots, rotated across\n - TIER_DISK_COLD: captures. Producers acquire a slot, write, commit; consumers\nmap the ring once at startup (no per-capture mmap or\ncudaHostRegister) and lease the indicated slot per cycle.\nSee payload/manager/services/v1/payload_ring_service.proto.\n\nSecond local durable level on slower media (HDD or a"
     }
   }
 }

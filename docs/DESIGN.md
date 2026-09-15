@@ -82,7 +82,7 @@ Set `spill_target = TIER_VOID` in `EvictionPolicy` to mark a payload as ephemera
 The void tier is not durable. Setting `require_durable = true` alongside `spill_target = TIER_VOID` is rejected at spill time.
 
 For payloads without an explicit `spill_target`:
-- RAM eviction target defaults to `TIER_DISK`.
+- RAM eviction target defaults to `TIER_DISK_HOT`.
 - Disk eviction target defaults to `TIER_OBJECT`.
 
 ## 5. Repository and transaction design

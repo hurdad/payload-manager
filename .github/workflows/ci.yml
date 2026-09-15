@@ -199,6 +199,18 @@ jobs:
       # The RAM and ring tiers allocate POSIX shm; the default 64 MB is too
       # small for the tier-accounting and ring suites.
       options: --shm-size=1g
+    env:
+      # Dependabot-triggered pull_request runs get a read-only GITHUB_TOKEN and
+      # no access to Actions secrets — those live in a separate Dependabot
+      # secret store — so secrets.CODECOV_TOKEN expands to "". Codecov then
+      # falls back to a tokenless upload, which a protected branch rejects with
+      # "Token required because branch is protected", and fail_ci_if_error
+      # turned that into a red build on every Dependabot PR. Fork PRs have the
+      # same problem. A coverage upload should not be able to fail a build
+      # whose tests passed, so the upload steps below skip when no token
+      # exists. `secrets` cannot be read from a step-level `if`, hence the
+      # job-level env indirection.
+      HAS_CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN != '' }}
     services:
       # Only the repository parity suite uses this. Everything else is
       # in-process against the in-memory repository.
@@ -293,7 +305,7 @@ jobs:
       # Runs even when the suite failed — a red run is exactly when the
       # per-test breakdown is worth having.
       - name: Upload test results to Codecov
-        if: ${{ !cancelled() }}
+        if: ${{ !cancelled() && env.HAS_CODECOV_TOKEN == 'true' }}
         uses: codecov/test-results-action@v1
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
@@ -343,8 +355,16 @@ jobs:
             exit 1
           fi
 
+      # A silent skip would hide a genuinely missing secret on a normal run, so
+      # say so. This is a notice rather than an error precisely because the
+      # Dependabot and fork cases are expected, not broken.
+      - name: Note skipped Codecov upload
+        if: ${{ !cancelled() && env.HAS_CODECOV_TOKEN != 'true' }}
+        run: |
+          echo "::notice::CODECOV_TOKEN is not available to this run (Dependabot or fork PR); skipping both Codecov uploads. Coverage was still generated and checked non-empty above."
+
       - name: Upload to Codecov
-        if: ${{ !cancelled() }}
+        if: ${{ !cancelled() && env.HAS_CODECOV_TOKEN == 'true' }}
         uses: codecov/codecov-action@v5
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
@@ -433,6 +453,78 @@ jobs:
   # bucket, so every upload died with NO_SUCH_BUCKET. Re-enabled now that
   # ObjectArrowStore creates its root at construction.
   # ---------------------------------------------------------------------------
+  # Same suite as integration-api, with TLS and bearer-token authentication
+  # switched on. It exists because an untested secure path is a broken secure
+  # path by the third refactor: everything here is opt-in, so without this job
+  # the entire TLS and auth surface would be exercised by nothing.
+  integration-api-tls:
+    name: Integration (API over TLS + auth)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # The credentials are gitignored and are not in any image, so they have
+      # to be made before the stack comes up.
+      - name: Generate development credentials
+        run: scripts/gen-dev-certs.sh
+
+      - name: Run the API integration suite over TLS
+        run: |
+          set -euo pipefail
+          COMPOSE=(docker compose
+            -f docker/docker-compose.postgres.yml
+            -f docker/docker-compose.tls.yml
+            -f docker/docker-compose.test.yml
+            -f docker/docker-compose.tls.test.yml)
+
+          "${COMPOSE[@]}" up --build --abort-on-container-exit --exit-code-from integration-test || true
+
+          # Same false-green guard as the plaintext suite: --exit-code-from
+          # reports 0 when the named container never starts.
+          cid=$("${COMPOSE[@]}" ps -a -q integration-test)
+          if [ -z "$cid" ]; then
+            echo "::error::integration-test container was never created — the stack failed to come up."
+            exit 1
+          fi
+          status=$(docker inspect -f '{{.State.Status}}:{{.State.ExitCode}}' "$cid")
+          echo "integration-test (TLS) => $status"
+          case "$status" in
+            exited:0) ;;
+            *) echo "::error::integration-test did not pass over TLS (state $status)"; exit 1 ;;
+          esac
+
+          # A pass proves the client reached the server, but not that the
+          # server would have refused an unauthenticated one — a stack that
+          # quietly fell back to plaintext would also pass. Assert the server
+          # actually enabled both.
+          server=$("${COMPOSE[@]}" ps -a -q payload-manager)
+          if ! docker logs "$server" 2>&1 | grep -q 'tls=true auth=true'; then
+            echo "::error::payload-manager did not start with TLS and auth enabled; the suite passed against a plaintext server."
+            docker logs "$server" 2>&1 | tail -20
+            exit 1
+          fi
+          echo "verified: the suite passed against a TLS server requiring tokens"
+
+      - name: Dump logs on failure
+        if: failure()
+        run: |
+          docker compose \
+            -f docker/docker-compose.postgres.yml \
+            -f docker/docker-compose.tls.yml \
+            -f docker/docker-compose.test.yml \
+            -f docker/docker-compose.tls.test.yml \
+            logs --no-color
+
+      - name: Tear down
+        if: always()
+        run: |
+          docker compose \
+            -f docker/docker-compose.postgres.yml \
+            -f docker/docker-compose.tls.yml \
+            -f docker/docker-compose.test.yml \
+            -f docker/docker-compose.tls.test.yml \
+            down -v --remove-orphans
+
   integration-object:
     name: Integration (object tier / MinIO)
     runs-on: ubuntu-latest
@@ -599,7 +691,7 @@ jobs:
     # nothing to do with CUDA. The tradeoff is explicit — the -cuda image can
     # publish while the GPU suite is red, so check that job before trusting a
     # -cuda tag.
-    needs: [format, tidy, generated, build-test, python, integration-api, integration-object]
+    needs: [format, tidy, generated, build-test, python, integration-api, integration-api-tls, integration-object]
     runs-on: ${{ matrix.runner }}
     permissions:
       contents: read

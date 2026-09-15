@@ -270,10 +270,20 @@ message RingTierConfig {
 
 message StorageConfig {
   RamTierConfig ram = 1;
-  DiskTierConfig disk = 2;
+  DiskTierConfig disk_hot = 2;
   pb.arrow.storage.ObjectStorageConfig object = 3;
   GpuTierConfig gpu = 4;
   RingTierConfig ring = 5;
+
+  // Optional second local durable level (TIER_DISK_COLD) on slower media,
+  // sitting between `disk_hot` and `object` in the demotion chain. Leaving
+  // root_path empty disables it, and TIER_DISK_HOT demotes straight to TIER_OBJECT
+  // exactly as it did before this field existed.
+  //
+  // Deliberately the same DiskTierConfig message as `disk_hot`: whatever that
+  // grows later (per-device lists, for instance) applies to both levels
+  // without a second migration.
+  DiskTierConfig disk_cold = 6;
 }
 
 // ------------------------------------------------------------------

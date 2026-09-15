@@ -302,8 +302,9 @@ chown payload-manager:payload-manager /etc/payload-manager/runtime.yaml
 The gRPC server (`server.bind_address`) defaults to `0.0.0.0:50051`. In production:
 
 - Bind to a loopback or internal address when the service is only accessed within the same node or cluster.
-- Place a TLS-terminating proxy (e.g. Envoy) in front of `payload-manager` for external-facing deployments; the server currently uses insecure credentials and relies on the surrounding infrastructure for transport security.
-- There is no authentication or authorization of any kind: anyone who can reach the port can allocate, read, spill and delete any payload. The proxy above is what supplies caller identity, not the service.
+- Enable `server.tls` (see `SECURITY.md`). A TLS-terminating proxy in front is still reasonable for anything internet-facing, since it adds rate limiting and request logging, neither of which this service has — but it is no longer the only way to get transport security.
+- TLS and bearer-token authentication are available and **off by default**; a config that sets neither behaves exactly as before. See `SECURITY.md` for the configuration and for what authentication does and does not cover — briefly, a valid token grants every RPC, since there is no per-caller authorization.
+- Where every client is on the same host, prefer a Unix socket: `bind_address: "unix:///run/payload-manager/pm.sock"` (three slashes), with `extra_bind_addresses` if a TCP port is also needed. For the RAM and ring tiers the clients always are node-local — their data plane is `/dev/shm` — so a TCP port there is reachable surface that buys nothing, and the socket's file mode becomes the access control.
 - The HTTP gateway sends no CORS headers unless `-cors-origins` (`CORS_ORIGINS`) names the origins that need them. The embedded UI and the vite dev proxy are both same-origin, so the default suits both. Enabling it — and especially setting it to `*` — lets any page in an operator's browser reach every `payload-manager` that browser can route to, which is a materially wider door than network reachability alone.
 
 ### Shared memory is inside the trust boundary

@@ -16,7 +16,7 @@ namespace {
 
 using payload::core::PayloadManager;
 using payload::lease::LeaseManager;
-using payload::manager::v1::TIER_DISK;
+using payload::manager::v1::TIER_DISK_HOT;
 using payload::manager::v1::TIER_RAM;
 
 class SimpleStorageBackend final : public payload::storage::StorageBackend {
@@ -61,12 +61,12 @@ class SimpleStorageBackend final : public payload::storage::StorageBackend {
 struct Fixture {
   std::shared_ptr<LeaseManager>                          lease_mgr = std::make_shared<LeaseManager>();
   std::shared_ptr<SimpleStorageBackend>                  ram       = std::make_shared<SimpleStorageBackend>(TIER_RAM);
-  std::shared_ptr<SimpleStorageBackend>                  disk      = std::make_shared<SimpleStorageBackend>(TIER_DISK);
+  std::shared_ptr<SimpleStorageBackend>                  disk      = std::make_shared<SimpleStorageBackend>(TIER_DISK_HOT);
   std::shared_ptr<payload::db::memory::MemoryRepository> repo      = std::make_shared<payload::db::memory::MemoryRepository>();
   PayloadManager                                         manager{[&] {
                            payload::storage::StorageFactory::TierMap storage;
                            storage[TIER_RAM]  = ram;
-                           storage[TIER_DISK] = disk;
+                           storage[TIER_DISK_HOT] = disk;
                            return storage;
                          }(),
                          lease_mgr, repo};
@@ -123,7 +123,7 @@ TEST(PayloadManagerTTL, ExpireStaleRemovesExpiredSpilledPayload) {
   Fixture f;
 
   const auto desc = f.manager.Commit(f.manager.Allocate(128, TIER_RAM, /*ttl_ms=*/1).payload_id());
-  f.manager.ExecuteSpill(desc.payload_id(), TIER_DISK, /*fsync=*/false);
+  f.manager.ExecuteSpill(desc.payload_id(), TIER_DISK_HOT, /*fsync=*/false);
   EXPECT_TRUE(f.disk->Has(desc.payload_id()));
   EXPECT_FALSE(f.ram->Has(desc.payload_id()));
 

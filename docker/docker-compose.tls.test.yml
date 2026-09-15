@@ -1,0 +1,11 @@
+# Client half of the TLS overlay: points integration-test at the CA and a token.
+# Layer it after the overlay that defines integration-test, and after
+# docker-compose.tls.yml which switches the server over.
+
+services:
+  integration-test:
+    volumes:
+      - ../certs:/certs:ro
+    environment:
+      PAYLOAD_MANAGER_TLS_CA: /certs/ca.pem
+      PAYLOAD_MANAGER_TOKEN_FILE: /certs/dev-token.txt

@@ -1,0 +1,36 @@
+# TLS + authentication overlay — the server half.
+#
+# Swaps in a config with server.tls and server.auth enabled and mounts the
+# development credentials. Like docker-compose.otel.yml this overrides only
+# what differs rather than duplicating a stack to express it.
+#
+# Run scripts/gen-dev-certs.sh first: the credentials are gitignored and are
+# not baked into any image.
+#
+#   scripts/gen-dev-certs.sh
+#   docker compose -f docker/docker-compose.postgres.yml \
+#                  -f docker/docker-compose.tls.yml \
+#                  -f docker/docker-compose.test.yml \
+#                  -f docker/docker-compose.tls.test.yml \
+#                  up --build --exit-code-from integration-test
+#
+# Each client needs its own companion overlay — tls.test.yml, tls.minio.yml,
+# tls.gateway.yml — because compose requires every service in the merged
+# project to have an image or a build context. Naming a client here that the
+# chosen stack does not include fails the whole project with
+# "has neither an image nor a build context specified".
+#
+# The certificate's SANs include "payload-manager", the hostname client
+# containers dial. gRPC verifies the SAN and ignores the CN, so a certificate
+# without it fails with an opaque handshake error.
+#
+# The base files' healthchecks are untouched on purpose: they are connect-only
+# probes (`bash -c '</dev/tcp/localhost/50051'`) and succeed against a TLS
+# listener because they never send a byte.
+
+services:
+  payload-manager:
+    command: ["./payload-manager", "--config", "/app/conf/runtime-docker-tls.yaml"]
+    volumes:
+      - ../config/runtime-docker-tls.yaml:/app/conf/runtime-docker-tls.yaml:ro
+      - ../certs:/app/certs:ro

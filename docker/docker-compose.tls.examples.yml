@@ -1,0 +1,11 @@
+# Client half of the TLS overlay: points cpp-examples at the CA and a token.
+# Layer it after the overlay that defines cpp-examples, and after
+# docker-compose.tls.yml which switches the server over.
+
+services:
+  cpp-examples:
+    volumes:
+      - ../certs:/certs:ro
+    environment:
+      PAYLOAD_MANAGER_TLS_CA: /certs/ca.pem
+      PAYLOAD_MANAGER_TOKEN_FILE: /certs/dev-token.txt

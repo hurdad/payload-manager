@@ -23,7 +23,7 @@
 
 namespace {
 
-using payload::manager::v1::TIER_DISK;
+using payload::manager::v1::TIER_DISK_HOT;
 using payload::manager::v1::TIER_RAM;
 
 class SimpleBackend final : public payload::storage::StorageBackend {
@@ -61,11 +61,11 @@ struct Env {
   std::shared_ptr<payload::lease::LeaseManager>          lease_mgr = std::make_shared<payload::lease::LeaseManager>();
   std::shared_ptr<payload::db::memory::MemoryRepository> repo      = std::make_shared<payload::db::memory::MemoryRepository>();
   std::shared_ptr<SimpleBackend>                         ram       = std::make_shared<SimpleBackend>(TIER_RAM);
-  std::shared_ptr<SimpleBackend>                         disk      = std::make_shared<SimpleBackend>(TIER_DISK);
+  std::shared_ptr<SimpleBackend>                         disk      = std::make_shared<SimpleBackend>(TIER_DISK_HOT);
   std::shared_ptr<payload::core::PayloadManager>         manager{[&] {
     payload::storage::StorageFactory::TierMap s;
     s[TIER_RAM]  = ram;
-    s[TIER_DISK] = disk;
+    s[TIER_DISK_HOT] = disk;
     return std::make_shared<payload::core::PayloadManager>(s, lease_mgr, repo);
   }()};
   std::shared_ptr<payload::metadata::MetadataCache>      cache     = std::make_shared<payload::metadata::MetadataCache>();

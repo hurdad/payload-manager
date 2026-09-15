@@ -41,7 +41,7 @@ using payload::manager::v1::PromoteRequest;
 using payload::manager::v1::ReleaseLeaseRequest;
 using payload::manager::v1::ResolveSnapshotRequest;
 using payload::manager::v1::SpillRequest;
-using payload::manager::v1::TIER_DISK;
+using payload::manager::v1::TIER_DISK_HOT;
 using payload::manager::v1::TIER_RAM;
 
 // ---------------------------------------------------------------------------
@@ -94,12 +94,12 @@ class MemStorageBackend final : public payload::storage::StorageBackend {
 struct Fixture {
   std::shared_ptr<LeaseManager>                          lease_mgr = std::make_shared<LeaseManager>();
   std::shared_ptr<MemStorageBackend>                     ram       = std::make_shared<MemStorageBackend>(TIER_RAM);
-  std::shared_ptr<MemStorageBackend>                     disk      = std::make_shared<MemStorageBackend>(TIER_DISK);
+  std::shared_ptr<MemStorageBackend>                     disk      = std::make_shared<MemStorageBackend>(TIER_DISK_HOT);
   std::shared_ptr<payload::db::memory::MemoryRepository> repo      = std::make_shared<payload::db::memory::MemoryRepository>();
   std::shared_ptr<PayloadManager>                        manager{[&] {
     payload::storage::StorageFactory::TierMap storage;
     storage[TIER_RAM]  = ram;
-    storage[TIER_DISK] = disk;
+    storage[TIER_DISK_HOT] = disk;
     return std::make_shared<PayloadManager>(storage, lease_mgr, repo);
   }()};
   payload::service::ServiceContext                       ctx{[&] {

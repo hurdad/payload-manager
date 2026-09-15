@@ -282,9 +282,18 @@ func withPayloadDownload(next http.Handler, diskRoot string) http.Handler {
 		c := callerFrom(r)
 
 		// For RAM/GPU payloads: spill to disk first so they can be served.
+		//
+		// TIER_DISK_COLD is excluded deliberately. Spilling is a demotion, so
+		// asking a cold payload to spill would push it toward object storage —
+		// the wrong direction. The lease acquired below requests
+		// minTier=TIER_DISK_HOT with a blocking promotion policy, and TIER_DISK_HOT
+		// ranks above TIER_DISK_COLD, so the server promotes it onto the hot
+		// level instead. That also keeps the path resolution below correct:
+		// the relative path in the descriptor is only meaningful against
+		// diskRoot once the payload is actually on the hot tier.
 		if snap, _, snapErr := resolveSnapshot(next, c, payloadID); snapErr == nil {
 			t := snap.PayloadDescriptor.Tier
-			if t != "" && t != "TIER_DISK" && t != "TIER_OBJECT" {
+			if t != "" && t != "TIER_DISK_HOT" && t != "TIER_DISK_COLD" && t != "TIER_OBJECT" {
 				spillCaller, spillCancel := c.withTimeout(5 * time.Minute)
 				spillErr := spillPayload(next, spillCaller, payloadID)
 				spillCancel()
@@ -437,7 +446,7 @@ func spillPayload(next http.Handler, c caller, payloadID string) error {
 func acquireReadLease(next http.Handler, c caller, payloadID string) (*acquireLeaseResponse, int, error) {
 	reqBody := map[string]any{
 		"mode":               "LEASE_MODE_READ",
-		"minTier":            "TIER_DISK",
+		"minTier":            "TIER_DISK_HOT",
 		"promotionPolicy":    "PROMOTION_POLICY_BLOCKING",
 		"minLeaseDurationMs": "30000",
 	}

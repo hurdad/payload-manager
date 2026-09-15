@@ -177,19 +177,23 @@ func (x *RingStats) GetSlotCapacityBytes() uint64 {
 }
 
 type StatsResponse struct {
-	state          protoimpl.MessageState `protogen:"open.v1"`
-	PayloadsGpu    uint64                 `protobuf:"varint,1,opt,name=payloads_gpu,json=payloadsGpu,proto3" json:"payloads_gpu,omitempty"`
-	PayloadsRam    uint64                 `protobuf:"varint,2,opt,name=payloads_ram,json=payloadsRam,proto3" json:"payloads_ram,omitempty"`
-	PayloadsDisk   uint64                 `protobuf:"varint,3,opt,name=payloads_disk,json=payloadsDisk,proto3" json:"payloads_disk,omitempty"`
-	PayloadsObject uint64                 `protobuf:"varint,7,opt,name=payloads_object,json=payloadsObject,proto3" json:"payloads_object,omitempty"`
-	BytesGpu       uint64                 `protobuf:"varint,4,opt,name=bytes_gpu,json=bytesGpu,proto3" json:"bytes_gpu,omitempty"`
-	BytesRam       uint64                 `protobuf:"varint,5,opt,name=bytes_ram,json=bytesRam,proto3" json:"bytes_ram,omitempty"`
-	BytesDisk      uint64                 `protobuf:"varint,6,opt,name=bytes_disk,json=bytesDisk,proto3" json:"bytes_disk,omitempty"`
-	BytesObject    uint64                 `protobuf:"varint,8,opt,name=bytes_object,json=bytesObject,proto3" json:"bytes_object,omitempty"`
+	state           protoimpl.MessageState `protogen:"open.v1"`
+	PayloadsGpu     uint64                 `protobuf:"varint,1,opt,name=payloads_gpu,json=payloadsGpu,proto3" json:"payloads_gpu,omitempty"`
+	PayloadsRam     uint64                 `protobuf:"varint,2,opt,name=payloads_ram,json=payloadsRam,proto3" json:"payloads_ram,omitempty"`
+	PayloadsDiskHot uint64                 `protobuf:"varint,3,opt,name=payloads_disk_hot,json=payloadsDiskHot,proto3" json:"payloads_disk_hot,omitempty"`
+	PayloadsObject  uint64                 `protobuf:"varint,7,opt,name=payloads_object,json=payloadsObject,proto3" json:"payloads_object,omitempty"`
+	BytesGpu        uint64                 `protobuf:"varint,4,opt,name=bytes_gpu,json=bytesGpu,proto3" json:"bytes_gpu,omitempty"`
+	BytesRam        uint64                 `protobuf:"varint,5,opt,name=bytes_ram,json=bytesRam,proto3" json:"bytes_ram,omitempty"`
+	BytesDiskHot    uint64                 `protobuf:"varint,6,opt,name=bytes_disk_hot,json=bytesDiskHot,proto3" json:"bytes_disk_hot,omitempty"`
+	BytesObject     uint64                 `protobuf:"varint,8,opt,name=bytes_object,json=bytesObject,proto3" json:"bytes_object,omitempty"`
 	// One entry per configured ring; empty when no ring tier is configured.
-	Rings         []*RingStats `protobuf:"bytes,9,rep,name=rings,proto3" json:"rings,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	Rings []*RingStats `protobuf:"bytes,9,rep,name=rings,proto3" json:"rings,omitempty"`
+	// The optional cold local level (TIER_DISK_COLD). Both stay zero when no
+	// cold tier is configured.
+	PayloadsDiskCold uint64 `protobuf:"varint,10,opt,name=payloads_disk_cold,json=payloadsDiskCold,proto3" json:"payloads_disk_cold,omitempty"`
+	BytesDiskCold    uint64 `protobuf:"varint,11,opt,name=bytes_disk_cold,json=bytesDiskCold,proto3" json:"bytes_disk_cold,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *StatsResponse) Reset() {
@@ -236,9 +240,9 @@ func (x *StatsResponse) GetPayloadsRam() uint64 {
 	return 0
 }
 
-func (x *StatsResponse) GetPayloadsDisk() uint64 {
+func (x *StatsResponse) GetPayloadsDiskHot() uint64 {
 	if x != nil {
-		return x.PayloadsDisk
+		return x.PayloadsDiskHot
 	}
 	return 0
 }
@@ -264,9 +268,9 @@ func (x *StatsResponse) GetBytesRam() uint64 {
 	return 0
 }
 
-func (x *StatsResponse) GetBytesDisk() uint64 {
+func (x *StatsResponse) GetBytesDiskHot() uint64 {
 	if x != nil {
-		return x.BytesDisk
+		return x.BytesDiskHot
 	}
 	return 0
 }
@@ -285,6 +289,20 @@ func (x *StatsResponse) GetRings() []*RingStats {
 	return nil
 }
 
+func (x *StatsResponse) GetPayloadsDiskCold() uint64 {
+	if x != nil {
+		return x.PayloadsDiskCold
+	}
+	return 0
+}
+
+func (x *StatsResponse) GetBytesDiskCold() uint64 {
+	if x != nil {
+		return x.BytesDiskCold
+	}
+	return 0
+}
+
 var File_payload_manager_admin_v1_stats_proto protoreflect.FileDescriptor
 
 const file_payload_manager_admin_v1_stats_proto_rawDesc = "" +
@@ -300,18 +318,20 @@ const file_payload_manager_admin_v1_stats_proto_rawDesc = "" +
 	"\fslots_leased\x18\x05 \x01(\rR\vslotsLeased\x12#\n" +
 	"\rleases_active\x18\x06 \x01(\x04R\fleasesActive\x12'\n" +
 	"\x0fslots_reclaimed\x18\a \x01(\x04R\x0eslotsReclaimed\x12.\n" +
-	"\x13slot_capacity_bytes\x18\b \x01(\x04R\x11slotCapacityBytes\"\xda\x02\n" +
+	"\x13slot_capacity_bytes\x18\b \x01(\x04R\x11slotCapacityBytes\"\xbe\x03\n" +
 	"\rStatsResponse\x12!\n" +
 	"\fpayloads_gpu\x18\x01 \x01(\x04R\vpayloadsGpu\x12!\n" +
-	"\fpayloads_ram\x18\x02 \x01(\x04R\vpayloadsRam\x12#\n" +
-	"\rpayloads_disk\x18\x03 \x01(\x04R\fpayloadsDisk\x12'\n" +
+	"\fpayloads_ram\x18\x02 \x01(\x04R\vpayloadsRam\x12*\n" +
+	"\x11payloads_disk_hot\x18\x03 \x01(\x04R\x0fpayloadsDiskHot\x12'\n" +
 	"\x0fpayloads_object\x18\a \x01(\x04R\x0epayloadsObject\x12\x1b\n" +
 	"\tbytes_gpu\x18\x04 \x01(\x04R\bbytesGpu\x12\x1b\n" +
-	"\tbytes_ram\x18\x05 \x01(\x04R\bbytesRam\x12\x1d\n" +
-	"\n" +
-	"bytes_disk\x18\x06 \x01(\x04R\tbytesDisk\x12!\n" +
+	"\tbytes_ram\x18\x05 \x01(\x04R\bbytesRam\x12$\n" +
+	"\x0ebytes_disk_hot\x18\x06 \x01(\x04R\fbytesDiskHot\x12!\n" +
 	"\fbytes_object\x18\b \x01(\x04R\vbytesObject\x129\n" +
-	"\x05rings\x18\t \x03(\v2#.payload.manager.admin.v1.RingStatsR\x05ringsB\x89\x02\n" +
+	"\x05rings\x18\t \x03(\v2#.payload.manager.admin.v1.RingStatsR\x05rings\x12,\n" +
+	"\x12payloads_disk_cold\x18\n" +
+	" \x01(\x04R\x10payloadsDiskCold\x12&\n" +
+	"\x0fbytes_disk_cold\x18\v \x01(\x04R\rbytesDiskColdB\x89\x02\n" +
 	"\x1ccom.payload.manager.admin.v1B\n" +
 	"StatsProtoP\x01ZZgithub.com/payload-manager/payload-manager/gateway/gen/go/payload/manager/admin/v1;adminv1\xa2\x02\x03PMA\xaa\x02\x18Payload.Manager.Admin.V1\xca\x02\x18Payload\\Manager\\Admin\\V1\xe2\x02$Payload\\Manager\\Admin\\V1\\GPBMetadata\xea\x02\x1bPayload::Manager::Admin::V1b\x06proto3"
 

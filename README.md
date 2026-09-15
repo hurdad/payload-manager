@@ -3,7 +3,7 @@
 [![CI](https://github.com/hurdad/payload-manager/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/hurdad/payload-manager/actions/workflows/ci.yml)
 [![codecov](https://codecov.io/gh/hurdad/payload-manager/branch/main/graph/badge.svg)](https://codecov.io/gh/hurdad/payload-manager)
 
-Payload Manager is a high-performance control plane for managing opaque binary payloads across multiple storage tiers (GPU, RAM, disk, object storage, or void) without routing payload bytes through the service itself.
+Payload Manager is a high-performance control plane for managing opaque binary payloads across multiple storage tiers (GPU, RAM, disk, cold disk, object storage, or void) without routing payload bytes through the service itself.
 
 The platform is designed around a strict control-plane/data-plane split:
 
@@ -17,6 +17,9 @@ Modern pipelines often spend more time moving bytes through orchestration servic
 ## Core capabilities
 
 - Tier-aware placement across GPU, RAM, disk, object storage, and void (discard-on-eviction).
+- An optional cold disk tier (`TIER_DISK_COLD`) for a second local durable level
+  on slower media — NVMe stays hot, bulk ages onto HDD before it ever reaches
+  object storage. Off unless `storage.disk_cold` is configured.
 - A ring tier (`TIER_RAM_RING`) for steady-rate pipelines: pre-allocated shm slots
   addressed by position and rewritten in place, with no catalog row per capture.
 - Lease-based read stability for payload access.
@@ -44,8 +47,11 @@ tiering manager spills it downward as the tier holding it comes under pressure:
 GPU evictions go to RAM, RAM to disk, disk to object storage. The bytes move;
 the `PayloadID` does not. A payload can set `spill_target = TIER_VOID` on its
 eviction policy to be deleted instead of demoted, which is how something is
-marked ephemeral. See
-[Design Details](docs/DESIGN.md#4-placement-tiering-and-spill-behavior).
+marked ephemeral. Configuring `storage.disk_cold` inserts one more stop —
+disk to cold disk, then cold disk to object storage — so bulk ages onto cheap
+local media before it leaves the box. See
+[Design Details](docs/DESIGN.md#4-placement-tiering-and-spill-behavior) and
+[Cold Disk Tier](docs/DISK_COLD_TIER.md).
 
 **The ring tier is beside the catalog, not under it.** Every other tier holds
 UUID-addressed payloads the repository tracks through allocate, commit, spill
@@ -213,16 +219,16 @@ list is in `payloadctl` with no arguments; the everyday flow is:
 
 ```bash
 # Mint a payload and get its id back, then publish it.
-payloadctl <addr> allocate <size_bytes> [tier=ram|disk|gpu]   # prints id= and tier=
+payloadctl <addr> allocate <size_bytes> [tier=ram|disk|disk-cold|gpu]   # prints id= and tier=
 payloadctl <addr> commit <uuid>
 payloadctl <addr> resolve <uuid>
 
 # Look around.
-payloadctl <addr> list [tier=ram|disk|gpu|object]
+payloadctl <addr> list [tier=ram|disk|disk-cold|gpu|object]
 payloadctl <addr> stats
 
 # Move bytes between tiers, or take a read lease.
-payloadctl <addr> promote <uuid> <tier=ram|disk|gpu|object>
+payloadctl <addr> promote <uuid> <tier=ram|disk|disk-cold|gpu|object>
 payloadctl <addr> spill <uuid>
 payloadctl <addr> lease <uuid>
 payloadctl <addr> release <lease_id>
@@ -352,7 +358,7 @@ The UI is then available at `http://localhost:8080/`.
 |------|-------------|
 | Payloads | List, filter by tier, download, spill, promote, pin/unpin, prefetch, delete, view snapshot/lineage/metadata |
 | Streams | Create/delete streams, read entries, append entries, manage consumer group offsets |
-| Admin | Per-tier stats (GPU/RAM/Disk/Object) with totals |
+| Admin | Per-tier stats (GPU/RAM/Disk/Cold/Object) with totals |
 
 ### Environment variables
 
@@ -361,6 +367,39 @@ The UI is then available at `http://localhost:8080/`.
 | `GRPC_ADDR` | `localhost:50051` | gRPC backend address |
 | `HTTP_ADDR` | `:8080` | HTTP listen address |
 | `DISK_ROOT_PATH` | `/var/lib/payload-manager/payloads` | Disk storage root (must match payload-manager config) |
+| `CORS_ORIGINS` | *(empty — CORS off)* | Comma-separated origins allowed to make cross-origin requests |
+| `GRPC_CA` | *(empty — plaintext)* | PEM CA bundle for the payload-manager connection |
+| `GRPC_SERVER_NAME` | *(from the dial target)* | Name to verify against payload-manager's certificate |
+| `TLS_CERT` / `TLS_KEY` | *(empty — plain HTTP)* | Certificate and key to serve HTTPS with |
+
+The gateway forwards the caller's bearer token rather than holding one of its
+own, so on an authenticated deployment a browser still supplies a token — the
+UI has a field for it.
+
+### Security
+
+TLS and bearer-token authentication are available and **off by default**; a
+configuration that sets neither behaves exactly as it always has. `SECURITY.md`
+covers turning them on, what authentication does and does not cover, and the
+one assumption the deployment model makes that is easy to miss: the RAM and
+ring tiers put payload bytes in `/dev/shm` readable and writable by any local
+user.
+
+`scripts/gen-dev-certs.sh` generates a CA, a server certificate, a signing key
+and a token for trying it locally:
+
+```bash
+scripts/gen-dev-certs.sh
+docker compose -f docker/docker-compose.postgres.yml \
+               -f docker/docker-compose.tls.yml up --build
+
+export PAYLOAD_MANAGER_TLS_CA=certs/ca.pem
+export PAYLOAD_MANAGER_TOKEN_FILE=certs/dev-token.txt
+./payloadctl localhost:50051 stats
+```
+
+Clients read those two variables in both C++ and Python, so the same code
+connects to a plaintext or a secured deployment unchanged.
 
 ### Regenerate code
 

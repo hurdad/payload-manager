@@ -24,7 +24,7 @@ import pyarrow as pa
 
 from payload_manager_client import PayloadClient
 
-channel = grpc.insecure_channel("localhost:50051")
+channel = make_channel("localhost:50051")
 client = PayloadClient(channel)
 
 # 1) Allocate writable buffer
@@ -56,3 +56,21 @@ Examples are in `examples/python/`:
 - `catalog_admin_example.py`
 - `stats_example.py`
 - `stream_example.py`
+
+## Connecting to a TLS or authenticated deployment
+
+`make_channel()` reads the same environment variables as the C++ client, so a
+deployment configures both languages identically:
+`PAYLOAD_MANAGER_TLS_CA` (its presence enables TLS), `PAYLOAD_MANAGER_TOKEN` or
+`PAYLOAD_MANAGER_TOKEN_FILE`, `PAYLOAD_MANAGER_TLS_CERT`/`_KEY` for mutual TLS,
+and `PAYLOAD_MANAGER_TLS_SERVER_NAME` when the address dialled is not a name
+the certificate carries.
+
+```python
+from payload_manager_client import PayloadClient, make_channel
+
+client = PayloadClient(make_channel("localhost:50051"))
+```
+
+Keyword arguments override any of them. A token without TLS and a client
+certificate without a CA are both refused rather than connected.

@@ -244,9 +244,13 @@ Application Build(const payload::runtime::config::RuntimeConfig& config) {
   if (pressure_state->gpu_limit == 0) {
     pressure_state->gpu_limit = std::numeric_limits<uint64_t>::max();
   }
-  pressure_state->disk_limit = config.storage().disk().capacity_bytes();
-  if (pressure_state->disk_limit == 0) {
-    pressure_state->disk_limit = std::numeric_limits<uint64_t>::max();
+  pressure_state->disk_hot_limit = config.storage().disk_hot().capacity_bytes();
+  if (pressure_state->disk_hot_limit == 0) {
+    pressure_state->disk_hot_limit = std::numeric_limits<uint64_t>::max();
+  }
+  pressure_state->disk_cold_limit = config.storage().disk_cold().capacity_bytes();
+  if (pressure_state->disk_cold_limit == 0) {
+    pressure_state->disk_cold_limit = std::numeric_limits<uint64_t>::max();
   }
 
   // Eviction high-water marks. proto3 cannot tell "unset" from "0", so an
@@ -257,7 +261,8 @@ Application Build(const payload::runtime::config::RuntimeConfig& config) {
   const auto         resolve_pct                  = [](uint32_t configured) { return configured == 0 ? kDefaultEvictionHighWaterPct : configured; };
 
   pressure_state->ram_evict_pct  = resolve_pct(config.storage().ram().eviction_high_water_pct());
-  pressure_state->disk_evict_pct = resolve_pct(config.storage().disk().eviction_high_water_pct());
+  pressure_state->disk_hot_evict_pct      = resolve_pct(config.storage().disk_hot().eviction_high_water_pct());
+  pressure_state->disk_cold_evict_pct = resolve_pct(config.storage().disk_cold().eviction_high_water_pct());
 
   uint32_t gpu_pct = 0;
   for (const auto& dev : config.storage().gpu().devices()) {
@@ -319,8 +324,10 @@ Application Build(const payload::runtime::config::RuntimeConfig& config) {
   PAYLOAD_LOG_INFO("resolved tier limits",
                    {payload::observability::IntField("ram_capacity_bytes", static_cast<int64_t>(pressure_state->ram_limit)),
                     payload::observability::IntField("ram_evict_at_bytes", static_cast<int64_t>(pressure_state->RamEvictThreshold())),
-                    payload::observability::IntField("disk_capacity_bytes", static_cast<int64_t>(pressure_state->disk_limit)),
-                    payload::observability::IntField("disk_evict_at_bytes", static_cast<int64_t>(pressure_state->DiskEvictThreshold())),
+                    payload::observability::IntField("disk_hot_capacity_bytes", static_cast<int64_t>(pressure_state->disk_hot_limit)),
+                    payload::observability::IntField("disk_hot_evict_at_bytes", static_cast<int64_t>(pressure_state->DiskHotEvictThreshold())),
+                    payload::observability::IntField("disk_cold_capacity_bytes", static_cast<int64_t>(pressure_state->disk_cold_limit)),
+                    payload::observability::IntField("disk_cold_evict_at_bytes", static_cast<int64_t>(pressure_state->DiskColdEvictThreshold())),
                     payload::observability::IntField("gpu_capacity_bytes", static_cast<int64_t>(pressure_state->gpu_limit)),
                     payload::observability::IntField("gpu_evict_at_bytes", static_cast<int64_t>(pressure_state->GpuEvictThreshold())),
                     payload::observability::IntField("ring_reserved_bytes", static_cast<int64_t>(ring_total_bytes))});
@@ -349,7 +356,16 @@ Application Build(const payload::runtime::config::RuntimeConfig& config) {
       [pm = payload_manager.get()](const manager::v1::PayloadID& id) {
         if (pm->IsEvictionExempt(id)) return false;
         try {
-          return pm->ResolveSnapshot(id).tier() == manager::v1::TIER_DISK;
+          return pm->ResolveSnapshot(id).tier() == manager::v1::TIER_DISK_HOT;
+        } catch (...) {
+          return false;
+        }
+      },
+      // Cold-disk eviction: only consider payloads currently on the cold level.
+      [pm = payload_manager.get()](const manager::v1::PayloadID& id) {
+        if (pm->IsEvictionExempt(id)) return false;
+        try {
+          return pm->ResolveSnapshot(id).tier() == manager::v1::TIER_DISK_COLD;
         } catch (...) {
           return false;
         }

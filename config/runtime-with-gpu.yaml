@@ -24,7 +24,7 @@ storage:
   ram:
     capacity_bytes: 17179869184   # 16 GiB
     use_hugepages: true
-  disk:
+  disk_hot:
     root_path: "./data/payloads"
     capacity_bytes: 214748364800  # 200 GiB
     fsync: false

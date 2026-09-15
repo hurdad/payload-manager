@@ -45,14 +45,19 @@ message RingStats {
 message StatsResponse {
   uint64 payloads_gpu = 1;
   uint64 payloads_ram = 2;
-  uint64 payloads_disk = 3;
+  uint64 payloads_disk_hot = 3;
   uint64 payloads_object = 7;
 
   uint64 bytes_gpu = 4;
   uint64 bytes_ram = 5;
-  uint64 bytes_disk = 6;
+  uint64 bytes_disk_hot = 6;
   uint64 bytes_object = 8;
 
   // One entry per configured ring; empty when no ring tier is configured.
   repeated RingStats rings = 9;
+
+  // The optional cold local level (TIER_DISK_COLD). Both stay zero when no
+  // cold tier is configured.
+  uint64 payloads_disk_cold = 10;
+  uint64 bytes_disk_cold = 11;
 }

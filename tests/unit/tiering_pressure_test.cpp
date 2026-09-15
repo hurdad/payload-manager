@@ -24,7 +24,7 @@ namespace {
 
 using payload::core::PayloadManager;
 using payload::lease::LeaseManager;
-using payload::manager::v1::TIER_DISK;
+using payload::manager::v1::TIER_DISK_HOT;
 using payload::manager::v1::TIER_RAM;
 
 class SimpleBackend : public payload::storage::StorageBackend {
@@ -76,11 +76,11 @@ struct Fixture {
   std::shared_ptr<LeaseManager>                          lease_mgr = std::make_shared<LeaseManager>();
   std::shared_ptr<payload::db::memory::MemoryRepository> repo      = std::make_shared<payload::db::memory::MemoryRepository>();
   std::shared_ptr<SimpleBackend>                         ram       = std::make_shared<SimpleBackend>(TIER_RAM);
-  std::shared_ptr<SimpleBackend>                         disk      = std::make_shared<SimpleBackend>(TIER_DISK);
+  std::shared_ptr<SimpleBackend>                         disk      = std::make_shared<SimpleBackend>(TIER_DISK_HOT);
   std::shared_ptr<PayloadManager>                        manager{[&] {
     payload::storage::StorageFactory::TierMap s;
     s[TIER_RAM]  = ram;
-    s[TIER_DISK] = disk;
+    s[TIER_DISK_HOT] = disk;
     return std::make_shared<PayloadManager>(s, lease_mgr, repo);
   }()};
 };
@@ -128,16 +128,16 @@ TEST(TieringPressure, GetTierBytesAfterSpill) {
   {
     const auto bytes = f.manager->GetTierBytes();
     EXPECT_TRUE(bytes.count(static_cast<int>(TIER_RAM)) && bytes.at(static_cast<int>(TIER_RAM)) == 64);
-    EXPECT_TRUE(!bytes.count(static_cast<int>(TIER_DISK)) || bytes.at(static_cast<int>(TIER_DISK)) == 0);
+    EXPECT_TRUE(!bytes.count(static_cast<int>(TIER_DISK_HOT)) || bytes.at(static_cast<int>(TIER_DISK_HOT)) == 0);
   }
 
-  f.manager->ExecuteSpill(desc.payload_id(), TIER_DISK, /*fsync=*/false);
+  f.manager->ExecuteSpill(desc.payload_id(), TIER_DISK_HOT, /*fsync=*/false);
 
   // RAM bytes gone; disk bytes added.
   {
     const auto bytes    = f.manager->GetTierBytes();
     uint64_t   ram_val  = bytes.count(static_cast<int>(TIER_RAM)) ? bytes.at(static_cast<int>(TIER_RAM)) : 0;
-    uint64_t   disk_val = bytes.count(static_cast<int>(TIER_DISK)) ? bytes.at(static_cast<int>(TIER_DISK)) : 0;
+    uint64_t   disk_val = bytes.count(static_cast<int>(TIER_DISK_HOT)) ? bytes.at(static_cast<int>(TIER_DISK_HOT)) : 0;
     EXPECT_EQ(ram_val, 0u) << "RAM bytes must be zero after spill";
     EXPECT_EQ(disk_val, 64u) << "disk bytes must equal original size after spill";
   }
@@ -237,19 +237,19 @@ TEST(TieringPressure, HighWaterAppliesToEveryTier) {
   payload::tiering::PressureState state;
   state.ram_limit      = 1000;
   state.gpu_limit      = 2000;
-  state.disk_limit     = 4000;
+  state.disk_hot_limit     = 4000;
   state.ram_evict_pct  = 50;
   state.gpu_evict_pct  = 25;
-  state.disk_evict_pct = 90;
+  state.disk_hot_evict_pct = 90;
 
   EXPECT_EQ(state.RamEvictThreshold(), 500u);
   EXPECT_EQ(state.GpuEvictThreshold(), 500u);
-  EXPECT_EQ(state.DiskEvictThreshold(), 3600u);
+  EXPECT_EQ(state.DiskHotEvictThreshold(), 3600u);
 
   state.gpu_bytes.store(600);
   EXPECT_TRUE(state.GpuPressure());
-  state.disk_bytes.store(3000);
-  EXPECT_FALSE(state.DiskPressure());
+  state.disk_hot_bytes.store(3000);
+  EXPECT_FALSE(state.DiskHotPressure());
 }
 
 TEST(TieringPressure, HighWaterOf100EvictsOnlyAtHardCap) {
@@ -353,11 +353,11 @@ TEST(TieringCapacity, EachTierIsCappedIndependently) {
   Fixture f;
   auto    state     = std::make_shared<payload::tiering::PressureState>();
   state->ram_limit  = 512;
-  state->disk_limit = 4096;
+  state->disk_hot_limit = 4096;
   f.manager->SetPressureState(state);
 
   EXPECT_THROW((void)f.manager->Allocate(1024, TIER_RAM), payload::util::ResourceExhausted);
-  EXPECT_NO_THROW((void)f.manager->Allocate(1024, TIER_DISK)) << "a full RAM tier must not block the disk tier";
+  EXPECT_NO_THROW((void)f.manager->Allocate(1024, TIER_DISK_HOT)) << "a full RAM tier must not block the disk tier";
 }
 
 TEST(TieringCapacity, RefusesWhenTheMediumIsFullEvenIfTheCapAllows) {

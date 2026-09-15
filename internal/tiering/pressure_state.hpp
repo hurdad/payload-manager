@@ -28,15 +28,18 @@ namespace payload::tiering {
 struct PressureState {
   std::atomic<uint64_t> ram_bytes{0};
   std::atomic<uint64_t> gpu_bytes{0};
-  std::atomic<uint64_t> disk_bytes{0};
+  std::atomic<uint64_t> disk_hot_bytes{0};
+  std::atomic<uint64_t> disk_cold_bytes{0};
 
   uint64_t ram_limit{0};
   uint64_t gpu_limit{0};
-  uint64_t disk_limit{0};
+  uint64_t disk_hot_limit{0};
+  uint64_t disk_cold_limit{0};
 
   uint32_t ram_evict_pct{0};
   uint32_t gpu_evict_pct{0};
-  uint32_t disk_evict_pct{0};
+  uint32_t disk_hot_evict_pct{0};
+  uint32_t disk_cold_evict_pct{0};
 
   // Byte count at which eviction should begin for a tier whose hard cap is
   // `limit`. A pct outside 1..99 (including 0) yields `limit` itself.
@@ -55,8 +58,11 @@ struct PressureState {
   uint64_t GpuEvictThreshold() const {
     return EvictionThreshold(gpu_limit, gpu_evict_pct);
   }
-  uint64_t DiskEvictThreshold() const {
-    return EvictionThreshold(disk_limit, disk_evict_pct);
+  uint64_t DiskHotEvictThreshold() const {
+    return EvictionThreshold(disk_hot_limit, disk_hot_evict_pct);
+  }
+  uint64_t DiskColdEvictThreshold() const {
+    return EvictionThreshold(disk_cold_limit, disk_cold_evict_pct);
   }
 
   bool RamPressure() const {
@@ -65,8 +71,11 @@ struct PressureState {
   bool GpuPressure() const {
     return gpu_bytes.load() > GpuEvictThreshold();
   }
-  bool DiskPressure() const {
-    return disk_bytes.load() > DiskEvictThreshold();
+  bool DiskHotPressure() const {
+    return disk_hot_bytes.load() > DiskHotEvictThreshold();
+  }
+  bool DiskColdPressure() const {
+    return disk_cold_bytes.load() > DiskColdEvictThreshold();
   }
 };
 

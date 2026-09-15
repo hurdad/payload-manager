@@ -173,7 +173,7 @@ func TestDownloadPropagatesRequestID(t *testing.T) {
 func TestDownloadWithoutCredentialsSendsNone(t *testing.T) {
 	// No Authorization in, none forged on the way out — the handler must not
 	// invent a credential of its own.
-	_, m := downloadOnce(t, "TIER_DISK", "")
+	_, m := downloadOnce(t, "TIER_DISK_HOT", "")
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	for p, h := range m.seen {
@@ -186,7 +186,7 @@ func TestDownloadWithoutCredentialsSendsNone(t *testing.T) {
 func TestDownloadSkipsSpillForDiskTier(t *testing.T) {
 	// A payload already on disk needs no spill; this pins that the credential
 	// plumbing did not change the tier logic.
-	rec, m := downloadOnce(t, "TIER_DISK", "Bearer t")
+	rec, m := downloadOnce(t, "TIER_DISK_HOT", "Bearer t")
 	if rec.Code != http.StatusOK {
 		t.Fatalf("download failed: %d %q", rec.Code, rec.Body.String())
 	}

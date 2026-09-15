@@ -31,7 +31,7 @@
 
 namespace {
 
-using payload::manager::v1::TIER_DISK;
+using payload::manager::v1::TIER_DISK_HOT;
 using payload::manager::v1::TIER_RAM;
 
 // Normal backend for the destination tier.
@@ -107,22 +107,22 @@ class ThrowingRemoveBackend final : public payload::storage::StorageBackend {
 TEST(SpillSourceRemoveFailure, SpillDoesNotPropagateRemoveException) {
   auto lease_mgr    = std::make_shared<payload::lease::LeaseManager>();
   auto ram_backend  = std::make_shared<ThrowingRemoveBackend>(TIER_RAM);
-  auto disk_backend = std::make_shared<SimpleBackend>(TIER_DISK);
+  auto disk_backend = std::make_shared<SimpleBackend>(TIER_DISK_HOT);
 
   payload::storage::StorageFactory::TierMap storage;
   storage[TIER_RAM]  = ram_backend;
-  storage[TIER_DISK] = disk_backend;
+  storage[TIER_DISK_HOT] = disk_backend;
 
   payload::core::PayloadManager manager(std::move(storage), lease_mgr, std::make_shared<payload::db::memory::MemoryRepository>());
 
   auto desc = manager.Commit(manager.Allocate(128, TIER_RAM).payload_id());
 
   // Must not throw despite Remove() failing.
-  EXPECT_NO_THROW(manager.ExecuteSpill(desc.payload_id(), TIER_DISK, false));
+  EXPECT_NO_THROW(manager.ExecuteSpill(desc.payload_id(), TIER_DISK_HOT, false));
 
   // DB must reflect new tier.
   auto snap = manager.ResolveSnapshot(desc.payload_id());
-  EXPECT_EQ(snap.tier(), TIER_DISK) << "DB tier must be updated even when source Remove() throws";
+  EXPECT_EQ(snap.tier(), TIER_DISK_HOT) << "DB tier must be updated even when source Remove() throws";
 
   // Destination must have the data.
   EXPECT_TRUE(disk_backend->Has(desc.payload_id())) << "Destination must have data after spill";
@@ -136,7 +136,7 @@ TEST(SpillSourceRemoveFailure, PromoteDoesNotPropagateRemoveException) {
 
   // Use a manager where DISK Remove throws and verify Promote(DISK → RAM) succeeds.
   auto ram2  = std::make_shared<SimpleBackend>(TIER_RAM);
-  auto disk2 = std::make_shared<ThrowingRemoveBackend>(TIER_DISK);
+  auto disk2 = std::make_shared<ThrowingRemoveBackend>(TIER_DISK_HOT);
 
   // Pre-seed the disk backend manually with a buffer.
   const auto                      promote_uuid = payload::util::GenerateUUID();
@@ -152,7 +152,7 @@ TEST(SpillSourceRemoveFailure, PromoteDoesNotPropagateRemoveException) {
   {
     payload::db::model::PayloadRecord r;
     r.id         = promote_uuid;
-    r.tier       = TIER_DISK;
+    r.tier       = TIER_DISK_HOT;
     r.state      = payload::manager::v1::PAYLOAD_STATE_ACTIVE;
     r.size_bytes = 64;
     r.version    = 1;
@@ -163,7 +163,7 @@ TEST(SpillSourceRemoveFailure, PromoteDoesNotPropagateRemoveException) {
 
   payload::storage::StorageFactory::TierMap storage3;
   storage3[TIER_RAM]  = ram2;
-  storage3[TIER_DISK] = disk2;
+  storage3[TIER_DISK_HOT] = disk2;
   payload::core::PayloadManager manager3(std::move(storage3), lease_mgr, repo2);
   manager3.HydrateCaches();
 

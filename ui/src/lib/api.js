@@ -177,7 +177,7 @@ export const api = {
   resolveSnapshot: (id) =>
     apiFetch(`/v1/payloads/${toURLSafe(id)}/snapshot`),
 
-  acquireLease: (id, minTier = 'TIER_DISK', durationMs = 30000) =>
+  acquireLease: (id, minTier = 'TIER_DISK_HOT', durationMs = 30000) =>
     apiFetch(`/v1/payloads/${toURLSafe(id)}/lease`, {
       method: 'POST',
       body: JSON.stringify({

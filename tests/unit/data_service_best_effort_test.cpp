@@ -24,7 +24,7 @@ using payload::manager::v1::AllocatePayloadRequest;
 using payload::manager::v1::LEASE_MODE_READ;
 using payload::manager::v1::PROMOTION_POLICY_BEST_EFFORT;
 using payload::manager::v1::PROMOTION_POLICY_BLOCKING;
-using payload::manager::v1::TIER_DISK;
+using payload::manager::v1::TIER_DISK_HOT;
 using payload::manager::v1::TIER_GPU;
 using payload::manager::v1::TIER_RAM;
 using payload::manager::v1::TIER_UNSPECIFIED;
@@ -65,11 +65,11 @@ struct Fixture {
   std::shared_ptr<payload::lease::LeaseManager>          lease_mgr = std::make_shared<payload::lease::LeaseManager>();
   std::shared_ptr<payload::db::memory::MemoryRepository> repo      = std::make_shared<payload::db::memory::MemoryRepository>();
   std::shared_ptr<SimpleBackend>                         ram       = std::make_shared<SimpleBackend>(TIER_RAM);
-  std::shared_ptr<SimpleBackend>                         disk      = std::make_shared<SimpleBackend>(TIER_DISK);
+  std::shared_ptr<SimpleBackend>                         disk      = std::make_shared<SimpleBackend>(TIER_DISK_HOT);
   std::shared_ptr<payload::core::PayloadManager>         manager{[&] {
     payload::storage::StorageFactory::TierMap s;
     s[TIER_RAM]  = ram;
-    s[TIER_DISK] = disk;
+    s[TIER_DISK_HOT] = disk;
     return std::make_shared<payload::core::PayloadManager>(s, lease_mgr, repo);
   }()};
   ServiceContext                                         ctx{[&] {
@@ -86,7 +86,7 @@ struct Fixture {
 
   payload::manager::v1::PayloadID AllocateOnDisk() {
     auto id = manager->Commit(manager->Allocate(64, TIER_RAM).payload_id()).payload_id();
-    manager->ExecuteSpill(id, TIER_DISK, /*fsync=*/false);
+    manager->ExecuteSpill(id, TIER_DISK_HOT, /*fsync=*/false);
     return id;
   }
 };

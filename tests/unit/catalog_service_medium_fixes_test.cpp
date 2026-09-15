@@ -3,7 +3,7 @@
 
   - Allocate with TIER_UNSPECIFIED is rejected with InvalidState
   - Promote with TIER_UNSPECIFIED is rejected with InvalidState
-  - Spill uses per-payload GetSpillTarget instead of hardcoded TIER_DISK
+  - Spill uses per-payload GetSpillTarget instead of hardcoded TIER_DISK_HOT
 */
 
 #include <gtest/gtest.h>
@@ -32,7 +32,7 @@ using payload::manager::v1::AllocatePayloadRequest;
 using payload::manager::v1::PayloadID;
 using payload::manager::v1::PromoteRequest;
 using payload::manager::v1::SpillRequest;
-using payload::manager::v1::TIER_DISK;
+using payload::manager::v1::TIER_DISK_HOT;
 using payload::manager::v1::TIER_OBJECT;
 using payload::manager::v1::TIER_RAM;
 using payload::manager::v1::TIER_UNSPECIFIED;
@@ -87,12 +87,12 @@ class SimpleStorageBackend final : public payload::storage::StorageBackend {
 struct Fixture {
   std::shared_ptr<LeaseManager>                          lease_mgr = std::make_shared<LeaseManager>();
   std::shared_ptr<SimpleStorageBackend>                  ram       = std::make_shared<SimpleStorageBackend>(TIER_RAM);
-  std::shared_ptr<SimpleStorageBackend>                  disk      = std::make_shared<SimpleStorageBackend>(TIER_DISK);
+  std::shared_ptr<SimpleStorageBackend>                  disk      = std::make_shared<SimpleStorageBackend>(TIER_DISK_HOT);
   std::shared_ptr<payload::db::memory::MemoryRepository> repo      = std::make_shared<payload::db::memory::MemoryRepository>();
   std::shared_ptr<PayloadManager>                        manager{[&] {
     payload::storage::StorageFactory::TierMap storage;
     storage[TIER_RAM]  = ram;
-    storage[TIER_DISK] = disk;
+    storage[TIER_DISK_HOT] = disk;
     return std::make_shared<PayloadManager>(storage, lease_mgr, repo);
   }()};
   payload::service::ServiceContext                       ctx{[&] {
@@ -149,7 +149,7 @@ TEST(CatalogServiceMediumFixes, PromoteUnspecifiedTierThrows) {
   EXPECT_THROW(f.service.Promote(promote_req), std::exception) << "Promote with TIER_UNSPECIFIED must throw";
 }
 
-// Spill: default spill target (TIER_DISK) is used when no eviction policy set.
+// Spill: default spill target (TIER_DISK_HOT) is used when no eviction policy set.
 TEST(CatalogServiceMediumFixes, SpillDefaultTargetIsDisk) {
   Fixture f;
 
@@ -168,12 +168,12 @@ TEST(CatalogServiceMediumFixes, SpillDefaultTargetIsDisk) {
 
   const auto resp = f.service.Spill(spill_req);
   EXPECT_EQ(resp.results_size(), 1);
-  EXPECT_TRUE(resp.results(0).ok()) << "spill to TIER_DISK (default target) must succeed";
+  EXPECT_TRUE(resp.results(0).ok()) << "spill to TIER_DISK_HOT (default target) must succeed";
   EXPECT_TRUE(f.disk->Has(alloc_resp.payload_descriptor().payload_id()));
 }
 
 // Spill: payload with spill_target=TIER_OBJECT fails because no OBJECT backend
-// is registered, confirming that GetSpillTarget (not hardcoded TIER_DISK) is used.
+// is registered, confirming that GetSpillTarget (not hardcoded TIER_DISK_HOT) is used.
 TEST(CatalogServiceMediumFixes, SpillUsesPerPayloadTarget) {
   Fixture f; // No OBJECT backend registered.
 
@@ -196,7 +196,7 @@ TEST(CatalogServiceMediumFixes, SpillUsesPerPayloadTarget) {
 
   const auto resp = f.service.Spill(spill_req);
   EXPECT_EQ(resp.results_size(), 1);
-  // Must fail — no OBJECT storage backend — proving we used TIER_OBJECT, not TIER_DISK.
+  // Must fail — no OBJECT storage backend — proving we used TIER_OBJECT, not TIER_DISK_HOT.
   EXPECT_FALSE(resp.results(0).ok()) << "spill must fail when target tier has no backend";
   EXPECT_FALSE(resp.results(0).error_message().empty());
 }
@@ -217,7 +217,7 @@ TEST(CatalogServiceMediumFixes, ListPayloadsTierFilter) {
   // Allocate + commit a DISK payload.
   AllocatePayloadRequest disk_req;
   disk_req.set_size_bytes(64);
-  disk_req.set_preferred_tier(TIER_DISK);
+  disk_req.set_preferred_tier(TIER_DISK_HOT);
   const auto                                 disk_resp = f.service.Allocate(disk_req);
   payload::manager::v1::CommitPayloadRequest commit_disk;
   *commit_disk.mutable_id() = disk_resp.payload_descriptor().payload_id();
@@ -235,9 +235,9 @@ TEST(CatalogServiceMediumFixes, ListPayloadsTierFilter) {
   EXPECT_EQ(ram_only.payloads_size(), 1) << "expected 1 RAM payload";
   EXPECT_EQ(ram_only.payloads(0).id().value(), ram_resp.payload_descriptor().payload_id().value()) << "wrong payload returned for RAM filter";
 
-  // List with tier_filter=TIER_DISK — expect 1 payload (the DISK one).
+  // List with tier_filter=TIER_DISK_HOT — expect 1 payload (the DISK one).
   payload::manager::v1::ListPayloadsRequest list_disk;
-  list_disk.set_tier_filter(TIER_DISK);
+  list_disk.set_tier_filter(TIER_DISK_HOT);
   const auto disk_only = f.service.ListPayloads(list_disk);
   EXPECT_EQ(disk_only.payloads_size(), 1) << "expected 1 DISK payload";
   EXPECT_EQ(disk_only.payloads(0).id().value(), disk_resp.payload_descriptor().payload_id().value()) << "wrong payload returned for DISK filter";

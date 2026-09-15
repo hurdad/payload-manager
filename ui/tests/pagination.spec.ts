@@ -97,7 +97,7 @@ test.describe('api.js listPayloads', () => {
 
     await page.route('/v1/payloads**', (route) => {
       lastUrl = route.request().url();
-      route.fulfill({ json: makePageResponse({ total: 2, tier: 'TIER_DISK' }) });
+      route.fulfill({ json: makePageResponse({ total: 2, tier: 'TIER_DISK_HOT' }) });
     });
 
     await page.goto('/');
@@ -105,11 +105,11 @@ test.describe('api.js listPayloads', () => {
     await page.evaluate(() => localStorage.setItem('pm-tier-filter', ''));
     await page.goto('/');
     await page.waitForSelector('table tbody tr.payload-row');
-    await page.locator('.tier-tab', { hasText: 'Disk' }).click();
+    await page.locator('.tier-tab', { hasText: 'Hot' }).click();
     await page.waitForTimeout(300);
 
     const url = new URL(lastUrl!);
-    expect(url.searchParams.get('tierFilter')).toBe('TIER_DISK');
+    expect(url.searchParams.get('tierFilter')).toBe('TIER_DISK_HOT');
   });
 });
 
@@ -118,8 +118,17 @@ test.describe('api.js listPayloads', () => {
 // ---------------------------------------------------------------------------
 
 test.describe('Payloads pagination UI', () => {
+  // Seed localStorage before the app's own scripts run.
+  //
+  // This was page.evaluate, which executes against the page's current document
+  // — and in a beforeEach nothing has been navigated yet, so that document is
+  // about:blank. Reading localStorage there throws
+  // "SecurityError: Access is denied for this document", which failed every
+  // test in this block regardless of what it was asserting. addInitScript is
+  // the hook that runs on each navigation ahead of page scripts, which is what
+  // "start on the All tab" actually needs.
   test.beforeEach(async ({ page }) => {
-    await page.evaluate(() => localStorage.setItem('pm-tier-filter', ''));
+    await page.addInitScript(() => localStorage.setItem('pm-tier-filter', ''));
   });
 
   test('Next button disabled and Prev button disabled on single page', async ({ page }) => {

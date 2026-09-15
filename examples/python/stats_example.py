@@ -22,9 +22,9 @@ def main() -> int:
     print(f"Payload Manager stats for {target}")
     print(
         "payload counts: "
-        f"gpu={stats.payloads_gpu}, ram={stats.payloads_ram}, disk={stats.payloads_disk}"
+        f"gpu={stats.payloads_gpu}, ram={stats.payloads_ram}, disk_hot={stats.payloads_disk_hot}"
     )
-    print(f"bytes: gpu={stats.bytes_gpu}, ram={stats.bytes_ram}, disk={stats.bytes_disk}")
+    print(f"bytes: gpu={stats.bytes_gpu}, ram={stats.bytes_ram}, disk_hot={stats.bytes_disk_hot}")
     return 0
 
 
