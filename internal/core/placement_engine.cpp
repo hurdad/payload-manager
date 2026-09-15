@@ -67,8 +67,10 @@ Tier PlacementEngine::NextLowerTier(Tier t) {
     case TIER_DISK_HOT:
       return TIER_DISK_COLD;
     case TIER_DISK_COLD:
-      return TIER_OBJECT;
     default:
+      // The cold level's next stop and the fallback for TIER_UNSPECIFIED (or a
+      // value from a newer peer) are the same: object storage is the bottom of
+      // the chain, so there is nowhere further down to go.
       return TIER_OBJECT;
   }
 }
