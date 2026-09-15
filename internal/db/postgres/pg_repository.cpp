@@ -292,7 +292,8 @@ Result PgRepository::CreateStream(Transaction& t, model::StreamRecord& r) {
   try {
     auto res = TX(t).Work().exec(
         "INSERT INTO streams(namespace,name,retention_max_entries,retention_max_age_sec,created_at) "
-        "VALUES($1,$2,NULLIF($3,0),NULLIF($4,0),CASE WHEN $5=0 THEN now() ELSE to_timestamp($5 / 1000.0) END) "
+        "VALUES($1,$2,NULLIF($3::bigint,0),NULLIF($4::bigint,0),"
+        "CASE WHEN $5::bigint=0 THEN now() ELSE to_timestamp($5::bigint / 1000.0) END) "
         "RETURNING stream_id, EXTRACT(EPOCH FROM created_at)::bigint * 1000;",
         pqxx::params{r.stream_namespace, r.name, r.retention_max_entries, r.retention_max_age_sec, r.created_at_ms});
     r.stream_id     = res[0][0].as<uint64_t>();
@@ -381,9 +382,9 @@ Result PgRepository::AppendStreamEntries(Transaction& t, uint64_t stream_id, std
       auto insert_res = TX(t).Work().exec(
           "INSERT INTO stream_entries(stream_id,\"offset\",payload_uuid,event_time,append_time,duration_ns,tags) "
           "VALUES($1,$2,$3::uuid,"
-          "CASE WHEN $4=0 THEN NULL ELSE to_timestamp($4 / 1000.0) END,"
-          "CASE WHEN $5=0 THEN now() ELSE to_timestamp($5 / 1000.0) END,"
-          "NULLIF($6,0),CASE WHEN $7='' THEN NULL ELSE $7::jsonb END) "
+          "CASE WHEN $4::bigint=0 THEN NULL ELSE to_timestamp($4::bigint / 1000.0) END,"
+          "CASE WHEN $5::bigint=0 THEN now() ELSE to_timestamp($5::bigint / 1000.0) END,"
+          "NULLIF($6::bigint,0),CASE WHEN $7='' THEN NULL ELSE $7::jsonb END) "
           "RETURNING EXTRACT(EPOCH FROM append_time)::bigint * 1000;",
           pqxx::params{e.stream_id, e.offset, e.payload_uuid, e.event_time_ms, e.append_time_ms, e.duration_ns, e.tags});
       e.append_time_ms = insert_res[0][0].as<uint64_t>();
@@ -515,7 +516,7 @@ Result PgRepository::CommitConsumerOffset(Transaction& t, const model::StreamCon
   try {
     TX(t).Work().exec(
         "INSERT INTO stream_consumer_offsets(stream_id,consumer_group,\"offset\",updated_at) "
-        "VALUES($1,$2,$3,CASE WHEN $4=0 THEN now() ELSE to_timestamp($4 / 1000.0) END) "
+        "VALUES($1,$2,$3,CASE WHEN $4::bigint=0 THEN now() ELSE to_timestamp($4::bigint / 1000.0) END) "
         "ON CONFLICT(stream_id,consumer_group) DO UPDATE SET "
         "\"offset\"=excluded.\"offset\", updated_at=excluded.updated_at;",
         pqxx::params{record.stream_id, record.consumer_group, record.offset, record.updated_at_ms});
