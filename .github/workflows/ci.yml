@@ -62,7 +62,7 @@ jobs:
           DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
             clang-format cmake git ca-certificates
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Check formatting
         run: |
@@ -82,7 +82,7 @@ jobs:
           DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
             ca-certificates git wget
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: ./.github/actions/setup-cpp-deps
         with:
@@ -131,9 +131,9 @@ jobs:
     name: Generated code is current
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v7
         with:
           go-version-file: gateway/go.mod
           cache-dependency-path: gateway/go.sum
@@ -218,7 +218,7 @@ jobs:
           DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
             ca-certificates git wget
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: ./.github/actions/setup-cpp-deps
         with:
@@ -345,7 +345,7 @@ jobs:
 
       - name: Upload to Codecov
         if: ${{ !cancelled() }}
-        uses: codecov/codecov-action@v5
+        uses: codecov/codecov-action@v6
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: coverage.xml
@@ -359,9 +359,9 @@ jobs:
     name: Python client tests
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: '3.12'
 
@@ -386,7 +386,7 @@ jobs:
     name: Integration (API)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # `--exit-code-from` reports 0 when the named container never starts,
       # so a stack that dies on a dependency looks like a pass with no tests
@@ -437,7 +437,7 @@ jobs:
     name: Integration (object tier / MinIO)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # Same false-green guard as the API suite above.
       - name: Run the object-spill suite
@@ -487,7 +487,7 @@ jobs:
     # Container Toolkit; the CUDA toolkit itself comes from the image.
     runs-on: [self-hosted, gpu]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # Docker build has no GPU access — there is no --gpus for build — so the
       # image links against the libcuda stub and its in-build ctest skips every
@@ -658,15 +658,15 @@ jobs:
     env:
       IMAGE: ghcr.io/${{ github.repository }}${{ matrix.suffix }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # No QEMU: every entry above builds its own architecture natively.
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@v4
 
       - name: Log in to GitHub Container Registry
         if: github.event_name != 'pull_request'
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -675,7 +675,7 @@ jobs:
       # Labels only. Tags belong to the manifest, not to a single-arch build.
       - name: Extract Docker metadata
         id: meta
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@v6
         with:
           images: ${{ env.IMAGE }}
 
@@ -683,7 +683,7 @@ jobs:
       # the build is validation only.
       - name: Build (pull request)
         if: github.event_name == 'pull_request'
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           file: ${{ matrix.file }}
@@ -696,7 +696,7 @@ jobs:
       - name: Build and push by digest
         id: build
         if: github.event_name != 'pull_request'
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           file: ${{ matrix.file }}
@@ -731,7 +731,7 @@ jobs:
 
       - name: Upload digest
         if: github.event_name != 'pull_request'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: digests-${{ matrix.name }}-${{ matrix.arch }}
           path: ${{ runner.temp }}/digests/*
@@ -773,17 +773,17 @@ jobs:
       IMAGE: ghcr.io/${{ github.repository }}${{ matrix.suffix }}
     steps:
       - name: Download digests
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           path: ${{ runner.temp }}/digests
           pattern: digests-${{ matrix.name }}-*
           merge-multiple: true
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@v4
 
       - name: Log in to GitHub Container Registry
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -794,7 +794,7 @@ jobs:
       # uses — did not resolve.
       - name: Extract Docker metadata
         id: meta
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@v6
         with:
           images: ${{ env.IMAGE }}
           tags: |
