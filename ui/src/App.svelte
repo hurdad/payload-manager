@@ -1,5 +1,6 @@
 <script>
   import { onMount } from 'svelte';
+  import { getAuthToken, setAuthToken } from './lib/api.js';
   import Payloads from './pages/Payloads.svelte';
   import Streams from './pages/Streams.svelte';
   import Admin from './pages/Admin.svelte';
@@ -37,6 +38,23 @@
 
   function nav(p) { page = p; }
 
+  // Bearer token, for deployments with authentication enabled. Deliberately a
+  // paste field rather than a login flow: the token is issued elsewhere, and
+  // this UI has no notion of a user to log in as. api.js keeps it in
+  // sessionStorage, so it is scoped to the tab.
+  let token = getAuthToken();
+  let tokenOpen = false;
+
+  function saveToken() {
+    setAuthToken(token);
+    tokenOpen = false;
+  }
+
+  function clearToken() {
+    token = '';
+    setAuthToken('');
+  }
+
   const navItems = [
     { id: 'payloads', label: 'Payloads',  icon: '▦' },
     { id: 'streams',  label: 'Streams',   icon: '⇌' },
@@ -51,6 +69,14 @@
       <span class="title">Payload Manager</span>
     </div>
     <div class="header-right">
+      <button
+        class="icon-btn"
+        class:token-set={token}
+        title={token ? 'Bearer token set' : 'No bearer token — set one if this deployment requires authentication'}
+        on:click={() => (tokenOpen = !tokenOpen)}
+      >
+        {token ? '🔒' : '🔓'}
+      </button>
       <button class="icon-btn" title="Toggle theme" on:click={toggleTheme}>
         {theme === 'dark' ? '○' : '●'}
       </button>
@@ -59,6 +85,21 @@
       </button>
     </div>
   </header>
+
+  {#if tokenOpen}
+    <div class="token-bar">
+      <label for="pm-token">Bearer token</label>
+      <input
+        id="pm-token"
+        type="password"
+        bind:value={token}
+        placeholder="paste a token; leave empty if this deployment has no authentication"
+        on:keydown={(e) => e.key === 'Enter' && saveToken()}
+      />
+      <button on:click={saveToken}>Save</button>
+      <button on:click={clearToken}>Clear</button>
+    </div>
+  {/if}
 
   <div class="body">
     <main>
@@ -335,5 +376,44 @@
     font-size: 14px;
     width: 16px;
     text-align: center;
+  }
+
+  .token-bar {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+    padding: 0.5rem 1rem;
+    background: var(--panel);
+    border-bottom: 1px solid var(--border);
+  }
+
+  .token-bar label {
+    color: var(--muted);
+    font-size: 0.85rem;
+    white-space: nowrap;
+  }
+
+  .token-bar input {
+    flex: 1;
+    min-width: 0;
+    padding: 0.35rem 0.5rem;
+    background: var(--bg);
+    color: var(--text);
+    border: 1px solid var(--buttonBorder);
+    border-radius: 4px;
+    font-family: inherit;
+  }
+
+  .token-bar button {
+    padding: 0.35rem 0.75rem;
+    background: var(--button);
+    color: var(--text);
+    border: 1px solid var(--buttonBorder);
+    border-radius: 4px;
+    cursor: pointer;
+  }
+
+  .icon-btn.token-set {
+    color: var(--success);
   }
 </style>

@@ -37,9 +37,11 @@ if [ "$FORCE" -eq 1 ]; then
     rm -rf "$OUT_DIR"
 fi
 mkdir -p "$OUT_DIR"
-# The CA key and the HS256 secret are private keys; keep the directory tight
-# before anything is written into it.
-chmod 700 "$OUT_DIR"
+# Traversable, because containers read these. The per-file modes below are what
+# protect the private material, not the directory: a 700 directory blocks the
+# service and gateway containers, which run as their own unprivileged users
+# (999 and 65532) and cannot traverse a directory owned by the host user.
+chmod 755 "$OUT_DIR"
 
 CA_KEY="$OUT_DIR/ca-key.pem"
 CA_CRT="$OUT_DIR/ca.pem"
@@ -125,7 +127,6 @@ else
     echo "==> generating HS256 signing key"
     openssl rand -base64 48 | tr -d '\n' > "$JWT_KEY"
 fi
-chmod 600 "$JWT_KEY"
 
 echo "==> minting a development token"
 # exp is DAYS out. iat is now. "sub" names the bearer so log lines and any
@@ -140,9 +141,14 @@ p=$(printf '%s' "$payload" | b64url)
 sig=$(printf '%s' "$h.$p" | openssl dgst -sha256 -mac HMAC -macopt "key:$(cat "$JWT_KEY")" -binary | b64url)
 printf '%s.%s.%s' "$h" "$p" "$sig" > "$TOKEN"
 
-chmod 600 "$CA_KEY" "$SRV_KEY"
-chmod 644 "$CA_CRT" "$SRV_CRT"
-chmod 600 "$TOKEN"
+# The CA key never leaves this machine — nothing but this script reads it, so
+# it stays 600. The server key, the signing key and the token must be readable
+# by the containers that mount them, and these are development credentials by
+# construction: the CA key sits unencrypted beside the certificate it signed,
+# and the header of this file says not to deploy any of it. A real deployment
+# delivers these through a Secret with ownership set for the consuming pod.
+chmod 600 "$CA_KEY"
+chmod 644 "$CA_CRT" "$SRV_CRT" "$SRV_KEY" "$JWT_KEY" "$TOKEN"
 
 cat <<SUMMARY
 
@@ -154,6 +160,10 @@ Development credentials written to $OUT_DIR/
   server-key.pem   server private key
   jwt-hs256.key    HS256 signing key — server validates tokens with this
   dev-token.txt    a token signed with it, valid $DAYS days
+
+File modes are set so the service (uid 999) and gateway (uid 65532) containers
+can read what they mount. Only ca-key.pem is restricted, because nothing but
+this script ever needs it.
 
 Point the service at them:
 

@@ -35,18 +35,68 @@ export function utf8FromBase64(b64) {
   return new TextDecoder().decode(bytes);
 }
 
-async function apiFetch(path, options = {}) {
+// ---------------------------------------------------------------------------
+// Bearer token
+//
+// Held in sessionStorage rather than localStorage: it is a credential, and
+// sessionStorage is scoped to the tab and cleared when it closes, so a shared
+// machine does not keep it around. Every access is guarded — storage throws
+// outright when site data is blocked, and a browser setting should not be able
+// to stop the UI loading.
+// ---------------------------------------------------------------------------
+
+const TOKEN_KEY = 'pm-ui-token';
+let authToken = '';
+
+try {
+  authToken = sessionStorage.getItem(TOKEN_KEY) || '';
+} catch {
+  authToken = '';
+}
+
+export function getAuthToken() {
+  return authToken;
+}
+
+export function setAuthToken(token) {
+  authToken = (token || '').trim();
+  try {
+    if (authToken) sessionStorage.setItem(TOKEN_KEY, authToken);
+    else sessionStorage.removeItem(TOKEN_KEY);
+  } catch {
+    // Storage unavailable; the token still works for this page's lifetime.
+  }
+}
+
+function authHeaders() {
+  return authToken ? { Authorization: `Bearer ${authToken}` } : {};
+}
+
+/// Single request path. Returns the parsed body and the Response, because a
+/// couple of callers need a header off it — previously one of them duplicated
+/// this whole function to get at Date, and the two copies could drift.
+async function request(path, options = {}) {
   const res = await fetch(path, {
-    headers: { 'Content-Type': 'application/json', ...options.headers },
     ...options,
+    headers: { 'Content-Type': 'application/json', ...authHeaders(), ...options.headers },
   });
   if (!res.ok) {
     let msg = `HTTP ${res.status}`;
     try { const e = await res.json(); msg = e.message || msg; } catch {}
+    if (res.status === 401) {
+      msg = authToken
+        ? 'Not authorized — the token was rejected. It may have expired.'
+        : 'Not authorized — this deployment requires a token. Set one above.';
+    }
     throw new Error(msg);
   }
-  if (res.status === 204) return null;
-  return res.json();
+  const data = res.status === 204 ? null : await res.json();
+  return { data, res };
+}
+
+async function apiFetch(path, options = {}) {
+  const { data } = await request(path, options);
+  return data;
 }
 
 export const api = {
@@ -57,15 +107,9 @@ export const api = {
     if (pageSize !== 50) params.set('pageSize', String(pageSize));
     if (pageToken) params.set('pageToken', pageToken);
     const qs = params.toString();
-    const res = await fetch(`/v1/payloads${qs ? `?${qs}` : ''}`, {
-      headers: { 'Content-Type': 'application/json' },
-    });
-    if (!res.ok) {
-      let msg = `HTTP ${res.status}`;
-      try { const e = await res.json(); msg = e.message || msg; } catch {}
-      throw new Error(msg);
-    }
-    const data = await res.json();
+    // Uses request() rather than apiFetch because it needs the Date header to
+    // correct for clock skew between the browser and the server.
+    const { data, res } = await request(`/v1/payloads${qs ? `?${qs}` : ''}`);
     const dateHeader = res.headers.get('Date');
     const serverNow = dateHeader ? new Date(dateHeader).getTime() : null;
     return { ...data, serverNow };

@@ -11,6 +11,8 @@ import (
 	"strings"
 	"sync"
 	"testing"
+
+	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 )
 
 // withPayloadDownload is the one handler that does not proxy: it re-enters the
@@ -209,5 +211,82 @@ func TestNonDownloadPathsPassStraightThrough(t *testing.T) {
 		if !m.saw(tc.method + " " + tc.path) {
 			t.Errorf("%s %s did not reach the wrapped handler", tc.method, tc.path)
 		}
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Header forwarding
+// ---------------------------------------------------------------------------
+
+func TestAuthorizationReachesTheBackendUnrenamed(t *testing.T) {
+	// grpc-gateway's default matcher forwards Authorization as
+	// "grpcgateway-authorization". The server reads "authorization", so the
+	// default would make every gateway request fail authentication while direct
+	// gRPC clients succeeded — and nothing on either side would say why.
+	for _, spelling := range []string{"Authorization", "authorization", "AUTHORIZATION"} {
+		key, ok := incomingHeaderMatcher(spelling)
+		if !ok {
+			t.Errorf("%q was not forwarded at all", spelling)
+			continue
+		}
+		if key != "authorization" {
+			t.Errorf("%q forwarded as %q, want %q", spelling, key, "authorization")
+		}
+	}
+}
+
+func TestDefaultMatcherWouldRenameAuthorization(t *testing.T) {
+	// Pins the premise the override exists for. If a future grpc-gateway stops
+	// renaming Authorization, this fails and incomingHeaderMatcher can go.
+	key, ok := runtime.DefaultHeaderMatcher("Authorization")
+	if !ok {
+		t.Fatal("DefaultHeaderMatcher now drops Authorization entirely")
+	}
+	if key == "authorization" {
+		t.Fatal("DefaultHeaderMatcher no longer renames Authorization; the override is obsolete")
+	}
+	// v2.28 returns "grpcgateway-Authorization" — the prefix is lowercase but
+	// the header's own casing is preserved. It reaches the server lowercased
+	// regardless, since gRPC normalises metadata keys on the wire, but either
+	// way it is not "authorization" and the server would never find it.
+	if !strings.HasPrefix(strings.ToLower(key), "grpcgateway-") {
+		t.Errorf("DefaultHeaderMatcher maps Authorization to %q, an unexpected form", key)
+	}
+}
+
+func TestOtherHeadersKeepTheDefaultBehaviour(t *testing.T) {
+	// The override must not otherwise replace grpc-gateway's own policy.
+	if key, ok := incomingHeaderMatcher("Grpc-Metadata-X-Thing"); !ok || key != "X-Thing" {
+		t.Errorf("Grpc-Metadata- prefix handling changed: got %q, %v", key, ok)
+	}
+	if _, ok := incomingHeaderMatcher("X-Not-Forwarded"); ok {
+		t.Error("an arbitrary header is now forwarded; the default matcher was bypassed")
+	}
+}
+
+func TestBackendDialOptions(t *testing.T) {
+	// No CA means plaintext, which is what every pre-TLS deployment gets.
+	if opts, err := backendDialOptions("", ""); err != nil || len(opts) != 1 {
+		t.Errorf("plaintext dial: %v, %d options", err, len(opts))
+	}
+
+	// A server name with nothing to verify against is a configuration mistake
+	// that would otherwise be silently ignored.
+	if _, err := backendDialOptions("", "payload-manager"); err == nil {
+		t.Error("-grpc-server-name without -grpc-ca was accepted")
+	}
+
+	if _, err := backendDialOptions(filepath.Join(t.TempDir(), "absent.pem"), ""); err == nil {
+		t.Error("a missing CA file was accepted")
+	}
+
+	// AppendCertsFromPEM reports only a bool, so a file that is not PEM would
+	// otherwise surface much later as a handshake failure.
+	junk := filepath.Join(t.TempDir(), "junk.pem")
+	if err := os.WriteFile(junk, []byte("this is not a certificate"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := backendDialOptions(junk, ""); err == nil {
+		t.Error("a non-PEM CA file was accepted")
 	}
 }

@@ -47,18 +47,31 @@ func main() {
 	healthcheck := flag.Bool("healthcheck", false, "Probe /healthz on -http-addr and exit; for container HEALTHCHECK")
 	grpcCA := flag.String("grpc-ca", envOr("GRPC_CA", ""), "PEM CA bundle for the payload-manager connection; empty means plaintext")
 	grpcServerName := flag.String("grpc-server-name", envOr("GRPC_SERVER_NAME", ""), "Name to verify against the payload-manager certificate, when -grpc-addr is not it")
+	tlsCert := flag.String("tls-cert", envOr("TLS_CERT", ""), "PEM certificate to serve HTTPS with; empty serves plain HTTP")
+	tlsKey := flag.String("tls-key", envOr("TLS_KEY", ""), "Private key for -tls-cert")
 	flag.Parse()
+
+	if (*tlsCert == "") != (*tlsKey == "") {
+		log.Fatal("gateway: -tls-cert and -tls-key must be given together")
+	}
+	serveTLS := *tlsCert != ""
 
 	// Container HEALTHCHECK entry point. The distroless runtime image has no
 	// shell and no curl, so the binary probes itself.
 	if *healthcheck {
-		os.Exit(probeHealth(*httpAddr))
+		os.Exit(probeHealth(*httpAddr, serveTLS))
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	mux := runtime.NewServeMux()
+	// Without this, grpc-gateway's DefaultHeaderMatcher treats Authorization as
+	// a permanent HTTP header and forwards it renamed to the metadata key
+	// "grpcgateway-authorization". The server's AuthMetadataProcessor reads
+	// "authorization", so every request arriving through the gateway would fail
+	// authentication while direct gRPC clients succeeded — a difference with no
+	// visible cause on either side.
+	mux := runtime.NewServeMux(runtime.WithIncomingHeaderMatcher(incomingHeaderMatcher))
 	dialOpts, err := backendDialOptions(*grpcCA, *grpcServerName)
 	if err != nil {
 		log.Fatalf("gateway: %v", err)
@@ -123,9 +136,20 @@ func main() {
 		close(idle)
 	}()
 
-	log.Printf("gateway listening on %s -> %s", *httpAddr, *grpcAddr)
-	if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-		log.Fatal(err)
+	scheme := "http"
+	if serveTLS {
+		scheme = "https"
+	}
+	log.Printf("gateway listening on %s://%s -> %s", scheme, *httpAddr, *grpcAddr)
+
+	listenErr := func() error {
+		if serveTLS {
+			return srv.ListenAndServeTLS(*tlsCert, *tlsKey)
+		}
+		return srv.ListenAndServe()
+	}()
+	if listenErr != nil && !errors.Is(listenErr, http.ErrServerClosed) {
+		log.Fatal(listenErr)
 	}
 	<-idle
 }
@@ -138,6 +162,22 @@ func main() {
 // and are forwarded per request, so payload-manager stays the single place
 // authorization is decided and the gateway never becomes a way to act with more
 // authority than the browser behind it.
+// incomingHeaderMatcher decides which HTTP headers reach the gRPC backend, and
+// under what metadata key.
+//
+// Authorization is the reason this exists. grpc-gateway's DefaultHeaderMatcher
+// treats it as a permanent HTTP header and forwards it *renamed* to
+// "grpcgateway-authorization". The server's AuthMetadataProcessor reads
+// "authorization", so with the default matcher every request arriving through
+// the gateway fails authentication while direct gRPC clients succeed — with
+// nothing on either side to suggest why.
+func incomingHeaderMatcher(key string) (string, bool) {
+	if strings.EqualFold(key, "authorization") {
+		return "authorization", true
+	}
+	return runtime.DefaultHeaderMatcher(key)
+}
+
 func backendDialOptions(caFile, serverName string) ([]grpc.DialOption, error) {
 	if caFile == "" {
 		if serverName != "" {
@@ -168,7 +208,7 @@ func backendDialOptions(caFile, serverName string) ([]grpc.DialOption, error) {
 
 // probeHealth GETs /healthz on addr and returns a process exit code. addr is
 // the listen address, so a bare ":8080" has to be dialled on loopback.
-func probeHealth(addr string) int {
+func probeHealth(addr string, useTLS bool) int {
 	host, port, err := net.SplitHostPort(addr)
 	if err != nil {
 		log.Printf("healthcheck: cannot parse -http-addr %q: %v", addr, err)
@@ -178,8 +218,17 @@ func probeHealth(addr string) int {
 		host = "127.0.0.1"
 	}
 
+	// The probe talks to this same process over loopback, so certificate
+	// verification would only be checking the certificate against itself — and
+	// would fail for any cert that does not happen to name 127.0.0.1. What the
+	// healthcheck establishes is that the server is answering, not who it is.
 	client := &http.Client{Timeout: 3 * time.Second}
-	resp, err := client.Get("http://" + net.JoinHostPort(host, port) + "/healthz")
+	scheme := "http://"
+	if useTLS {
+		scheme = "https://"
+		client.Transport = &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}} // #nosec G402 -- loopback self-probe
+	}
+	resp, err := client.Get(scheme + net.JoinHostPort(host, port) + "/healthz")
 	if err != nil {
 		log.Printf("healthcheck: %v", err)
 		return 1
