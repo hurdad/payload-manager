@@ -7,8 +7,10 @@ test.describe('Admin page', () => {
     await expect(page.locator('h2')).toHaveText('Admin');
   });
 
-  test('shows all four tier stat cards', async ({ page }) => {
-    for (const tier of ['GPU', 'RAM', 'Disk', 'Object']) {
+  test('shows all five tier stat cards', async ({ page }) => {
+    // Five since the cold disk tier landed: 'Disk' is no longer a label at
+    // all, and matching it would resolve to both Hot and Cold.
+    for (const tier of ['GPU', 'RAM', 'Hot', 'Cold', 'Object']) {
       await expect(page.locator('.tier-card', { hasText: tier })).toBeVisible();
     }
   });
@@ -16,9 +18,9 @@ test.describe('Admin page', () => {
   test('each card shows a payload count and bytes value', async ({ page }) => {
     // Wait for stats to load (cards only render once API returns)
     const cards = page.locator('.tier-card');
-    await expect(cards).toHaveCount(4, { timeout: 8000 });
+    await expect(cards).toHaveCount(5, { timeout: 8000 });
 
-    for (let i = 0; i < 4; i++) {
+    for (let i = 0; i < 5; i++) {
       const card = cards.nth(i);
       // stat-value elements: first is payload count, second is bytes
       const statValues = card.locator('.stat-value');

@@ -66,7 +66,7 @@ test.describe('Payloads page', () => {
   });
 
   test('tier filter tabs are all present', async ({ page }) => {
-    for (const tier of ['All', 'GPU', 'RAM', 'Disk', 'Object']) {
+    for (const tier of ['All', 'GPU', 'RAM', 'Hot', 'Cold', 'Object']) {
       await expect(page.locator('.tier-tab', { hasText: tier })).toBeVisible();
     }
   });

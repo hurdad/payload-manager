@@ -51,7 +51,10 @@ test.describe('Navigation', () => {
   test('theme toggle switches between dark and light', async ({ page }) => {
     await page.goto('/');
     const html = page.locator('html');
-    const toggleBtn = page.locator('.icon-btn').first();
+    // By title, not .first(): the bearer-token button was added ahead of
+    // this one in the header, so .first() toggled the token panel and the
+    // theme never changed.
+    const toggleBtn = page.locator('.icon-btn[title="Toggle theme"]');
 
     const before = await html.evaluate(el =>
       getComputedStyle(el).getPropertyValue('--bg').trim()
