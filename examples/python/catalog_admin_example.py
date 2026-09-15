@@ -21,7 +21,7 @@ def main() -> int:
 
     # Allocate a short-lived RAM payload (TTL 60s) so we can safely exercise
     # admin APIs without leaving long-term test artifacts.
-    writable = client.AllocateWritableBuffer(16, types_pb2.TIER_RAM, ttl_ms=60_000, persist=False)
+    writable = client.AllocateWritableBuffer(16, types_pb2.TIER_RAM, ttl_ms=60_000)
     writable.mmap_obj[:] = bytes(range(1, 17))
 
     payload_id = writable.descriptor.payload_id
