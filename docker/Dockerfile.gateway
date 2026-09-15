@@ -15,10 +15,32 @@ COPY gateway ./gateway
 # Embed the compiled UI as the static filesystem
 COPY --from=ui-build /src/ui/dist ./gateway/static/
 WORKDIR /src/gateway
-RUN go build -o /out/gateway .
+# CGO_ENABLED=0 so the binary has no libc dependency at all, and -trimpath so
+# the build is not stamped with /src paths. -w -s drops DWARF and the symbol
+# table, which this image has no debugger to use.
+RUN CGO_ENABLED=0 go build -trimpath -ldflags="-w -s" -o /out/gateway .
 
 # Stage 3: Minimal runtime image
-FROM gcr.io/distroless/base-debian12
+#
+# :nonroot rather than the default tag. distroless base runs as UID 0 unless
+# told otherwise, which made the gateway — the only component reachable from a
+# browser — the one of the four images running as root, while Dockerfile and
+# Dockerfile.cuda both drop to an unprivileged user. Nothing here writes to the
+# filesystem or binds a privileged port, so there is nothing to give up.
+FROM gcr.io/distroless/base-debian12:nonroot
+
+LABEL org.opencontainers.image.title="payload-manager-gateway" \
+      org.opencontainers.image.description="gRPC-JSON gateway and web UI for payload-manager" \
+      org.opencontainers.image.source="https://github.com/hurdad/payload-manager" \
+      org.opencontainers.image.licenses="Apache-2.0"
+
 COPY --from=go-build /out/gateway /gateway
 EXPOSE 8080
+
+# distroless carries no shell and no curl, so the usual `curl -f` probe cannot
+# run. The gateway answers its own probe instead: `-healthcheck` dials the
+# configured HTTP address, checks /healthz and exits non-zero on failure.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
+  CMD ["/gateway", "-healthcheck"]
+
 ENTRYPOINT ["/gateway"]

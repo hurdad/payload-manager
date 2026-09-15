@@ -7,7 +7,23 @@ This directory contains all Docker build and Docker Compose assets for Payload M
 - `Dockerfile` — payload-manager image. OpenTelemetry is compiled in; no GPU.
 - `Dockerfile.cuda` — payload-manager image with GPU + OpenTelemetry support.
 - `Dockerfile.payloadctl` — `payloadctl` CLI image.
-- `Dockerfile.gateway` — multi-stage image: Node UI build → Go gateway build → distroless runtime. Embeds the compiled Svelte UI into the gateway binary.
+- `Dockerfile.gateway` — multi-stage image: Node UI build → Go gateway build → distroless runtime. Embeds the compiled Svelte UI into the gateway binary. Runs as the distroless `nonroot` user; the healthcheck is the binary probing its own `/healthz`, because distroless carries neither a shell nor curl.
+
+  Configuration is by environment variable (or the equivalent flag):
+
+  | Variable | Flag | Default | Meaning |
+  | --- | --- | --- | --- |
+  | `GRPC_ADDR` | `-grpc-addr` | `localhost:50051` | payload-manager to proxy to |
+  | `HTTP_ADDR` | `-http-addr` | `:8080` | HTTP listen address |
+  | `DISK_ROOT_PATH` | `-disk-root` | `/var/lib/payload-manager/payloads` | Shared disk-tier root, for `GET /v1/payloads/{id}/download` |
+  | `CORS_ORIGINS` | `-cors-origins` | *(empty — CORS off)* | Comma-separated origins allowed to make cross-origin requests |
+
+  Leave `CORS_ORIGINS` unset unless something genuinely needs it. The embedded UI
+  is served from the gateway itself and `npm run dev` proxies `/v1` through vite,
+  so both supported ways of running the UI are same-origin. The service behind
+  the gateway has no authentication, so enabling CORS — `*` especially — lets any
+  page in an operator's browser reach every payload-manager that browser can
+  route to. See `SECURITY.md`.
 - `Dockerfile.test` — integration test image (`payload_manager_integration_api`), used by Compose overlays.
 - `Dockerfile.test.minio` — object-tier spill test image (`payload_manager_integration_object_spill`), used by `docker-compose.minio.test.yml`.
 - `Dockerfile.e2e` — Playwright image for the UI end-to-end suite, used by `docker-compose.e2e.yml` and `docker-compose.e2e.cuda.yml`.
