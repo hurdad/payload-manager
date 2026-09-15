@@ -17,9 +17,17 @@ out/
 *.log
 *.pid
 
-# Dependency/cache directories
-node_modules/
-__pycache__/
+# Dependency/cache directories.
+#
+# These need the **/ prefix: a bare "node_modules/" is matched against paths
+# relative to the context root, so it excludes ./node_modules and nothing else
+# -- ui/node_modules was copied into the gateway image by `COPY ui/ ./`, landing
+# a developer's stale tree on top of the one `npm ci` had just installed. A host
+# carrying pre-Svelte-5 packages broke the UI build with a missing
+# encodeRangeMappings export, while CI, whose checkout has no node_modules,
+# built the same commit cleanly.
+**/node_modules/
+**/__pycache__/
 
 # Large local package artifacts
 *.deb
