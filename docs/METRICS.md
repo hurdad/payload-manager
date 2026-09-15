@@ -81,6 +81,16 @@ Metrics use OTEL resource attribute `service.name`, sourced from OTEL config ser
 - **Enable controls:**
   - `tier_occupancy_metrics_enabled`
 
+### `payload.auth.rejections_total`
+
+- **Type:** Counter (`uint64`)
+- **Unit:** `1`
+- **Meaning:** RPCs refused because the bearer token was absent, malformed or invalid. Only emitted when `server.auth` is enabled; a server without authentication never increments it.
+- **Attributes:**
+  - `reason`, a bounded label — one of `missing`, `malformed_header`, `malformed`, `too_large`, `wrong_algorithm`, `bad_signature`, `missing_exp`, `expired`, `not_yet_valid`, `wrong_issuer`, `wrong_audience`
+- **Enable controls:**
+  - None. Deliberately not gated on `request_metrics_enabled`: every other counter describes work the service did, this one describes work it refused, and a deployment that turned request metrics off to reduce cardinality still needs to see a spike in rejected calls.
+
 ### `payload.spill.failures_total`
 
 - **Type:** Counter (`uint64`)

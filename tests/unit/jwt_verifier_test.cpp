@@ -16,6 +16,7 @@
 #include <filesystem>
 #include <fstream>
 #include <memory>
+#include <stdexcept>
 #include <string>
 
 #include "config/config.pb.h"
@@ -82,6 +83,41 @@ constexpr char kRsaPublicKey[] =
     "fQIDAQAB\n"
     "-----END PUBLIC KEY-----\n";
 
+// ES256 fixtures, signed by python-cryptography. A JWS ECDSA signature is the
+// raw concatenation R||S (RFC 7518 3.4), not the DER ECDSA-Sig-Value OpenSSL
+// verifies -- kEs256TokenDerSignature is the same token re-encoded the way
+// OpenSSL would want it, and must be rejected. Accepting it would mean the
+// verifier had been made permissive rather than correct.
+constexpr char kEs256Token[] =
+    "eyJhbGciOiJFUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJlYy11c2VyIiwiZXhwIjo0MTAyNDQ0ODAwfQ.c8ETSatV2vrGCYEVfJtxCm2Pmr"
+    "MAeOMmN4zeys2FNvKBVAdGS2F7mTRYRbg9uXDeoUtEnG5H9oaR71AhKsZfmA";
+
+constexpr char kEs256TokenDerSignature[] =
+    "eyJhbGciOiJFUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJlYy11c2VyIiwiZXhwIjo0MTAyNDQ0ODAwfQ.MEUCIHPBE0mrVdr6xgmBFXybcQ"
+    "ptj5qzAHjjJjeM3srNhTbyAiEAgVQHRkthe5k0WEW4Pblw3qFLRJxuR_aGke9QISrGX5g";
+
+constexpr char kEs256TokenFromAnotherKey[] =
+    "eyJhbGciOiJFUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJlYy11c2VyIiwiZXhwIjo0MTAyNDQ0ODAwfQ.0Q6MvLnWL3QEdPIpT54OapV5El"
+    "IPQa7G1w1UA8q86SIp9QIhtnWpdivSRATRCL0h1tJCwbyfR7KLdf8a7cchLg";
+
+constexpr char kEcPublicKey[] =
+    "-----BEGIN PUBLIC KEY-----\n"
+    "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEaqA3XYY9jn48eG0zYxI972+nU3vn\n"
+    "/tsm6kz0jKe72u2iinDa4E5Q6AJh7l81Pz3/ifVoag4LSo5VLP/G3vGIyw==\n"
+    "-----END PUBLIC KEY-----\n";
+
+constexpr char kEcP384PublicKey[] =
+    "-----BEGIN PUBLIC KEY-----\n"
+    "MHYwEAYHKoZIzj0CAQYFK4EEACIDYgAETmAhXWiFkTugCicZyx5L/+Pvl+6NjnjX\n"
+    "tGGmCkfR/PpjdgGhMxJhOlNIKTlLVkW70cCoB6jqyk9widIxi6HVkHt/24LWItPL\n"
+    "mrkotII+DrjtLQWiUAx2xugi+V1v7meO\n"
+    "-----END PUBLIC KEY-----\n";
+
+constexpr char kEd25519PublicKey[] =
+    "-----BEGIN PUBLIC KEY-----\n"
+    "MCowBQYDK2VwAyEAiD3KCVsRLRq7rtWm7glxEQZ/XhV7lkZsKHrOsffD4kU=\n"
+    "-----END PUBLIC KEY-----\n";
+
 class JwtTest : public ::testing::Test {
  protected:
   void SetUp() override {
@@ -89,6 +125,7 @@ class JwtTest : public ::testing::Test {
     std::filesystem::create_directories(dir_);
     hs256_key_path_ = Write("hs256.key", kHs256Key);
     rsa_key_path_   = Write("rsa.pub", kRsaPublicKey);
+    ec_key_path_    = Write("ec.pub", kEcPublicKey);
   }
 
   void TearDown() override {
@@ -113,9 +150,17 @@ class JwtTest : public ::testing::Test {
     return MakeJwtVerifier(config);
   }
 
+  /// Verifier configured with an asymmetric public key.
+  std::unique_ptr<TokenVerifier> Asymmetric(const std::string& key_path) {
+    AuthConfig config;
+    config.set_jwt_public_key_file(key_path);
+    return MakeJwtVerifier(config);
+  }
+
   std::filesystem::path dir_;
   std::string           hs256_key_path_;
   std::string           rsa_key_path_;
+  std::string           ec_key_path_;
 };
 
 // ---------------------------------------------------------------------------
@@ -157,6 +202,45 @@ TEST_F(JwtTest, VerifiesRs256AgainstAPublicKey) {
   const auto outcome = MakeJwtVerifier(config)->Verify(kRs256Token);
   ASSERT_TRUE(outcome.ok) << outcome.error;
   EXPECT_EQ(outcome.identity.subject, "rsa-user");
+}
+
+TEST_F(JwtTest, VerifiesEs256AgainstAPublicKey) {
+  // Regression: the signature was passed to EVP_DigestVerify verbatim, which
+  // wants DER. Every genuine ES256 token was rejected as bad_signature, and no
+  // test covered the algorithm, so the verifier advertised ES256 and could not
+  // verify it.
+  const auto outcome = Asymmetric(ec_key_path_)->Verify(kEs256Token);
+  ASSERT_TRUE(outcome.ok) << outcome.error;
+  EXPECT_EQ(outcome.identity.subject, "ec-user");
+}
+
+TEST_F(JwtTest, RejectsAnEs256SignatureInDerForm) {
+  // The other side of the fix: converting R||S to DER must not also start
+  // accepting DER off the wire. A JWS signature has exactly one encoding, and
+  // a 71-byte DER blob is not 64 bytes of R||S.
+  EXPECT_EQ(Asymmetric(ec_key_path_)->Verify(kEs256TokenDerSignature).error, "bad_signature");
+}
+
+TEST_F(JwtTest, RejectsAnEs256SignatureFromAnotherKey) {
+  EXPECT_EQ(Asymmetric(ec_key_path_)->Verify(kEs256TokenFromAnotherKey).error, "bad_signature");
+}
+
+TEST_F(JwtTest, RejectsAnHmacTokenAgainstAnEcConfiguration) {
+  EXPECT_EQ(Asymmetric(ec_key_path_)->Verify(kValid).error, "wrong_algorithm");
+}
+
+TEST_F(JwtTest, AnEcKeyOnTheWrongCurveIsAStartupFailure) {
+  // ES256 is P-256 by definition. A P-384 key signs 96-byte signatures that
+  // the name does not describe, so it is refused where the message can say so
+  // rather than failing every token later.
+  const auto path = Write("ec384.pub", kEcP384PublicKey);
+  EXPECT_THROW(Asymmetric(path), std::runtime_error);
+}
+
+TEST_F(JwtTest, AnUnsupportedKeyTypeIsAStartupFailure) {
+  // An Ed25519 key is a valid PEM public key, but neither RS256 nor ES256.
+  const auto path = Write("ed25519.pub", kEd25519PublicKey);
+  EXPECT_THROW(Asymmetric(path), std::runtime_error);
 }
 
 // ---------------------------------------------------------------------------

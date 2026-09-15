@@ -1,5 +1,7 @@
 #include <openssl/bio.h>
+#include <openssl/bn.h>
 #include <openssl/crypto.h>
+#include <openssl/ecdsa.h>
 #include <openssl/evp.h>
 #include <openssl/hmac.h>
 #include <openssl/pem.h>
@@ -123,6 +125,47 @@ bool AudienceMatches(const google::protobuf::Struct& claims, const std::string& 
   return false;
 }
 
+/// Coordinate width of an EC key, which is half the length of a JWS ECDSA
+/// signature over it. P-256 gives 32, so a 64-byte signature.
+size_t EcCoordinateBytes(const EVP_PKEY* key) {
+  return static_cast<size_t>((EVP_PKEY_bits(key) + 7) / 8);
+}
+
+/// JWS carries an ECDSA signature as the raw concatenation R||S, each padded to
+/// the coordinate width (RFC 7518 3.4). OpenSSL verifies the DER ECDSA-Sig-Value
+/// encoding instead, and the two are not interchangeable: handing the raw form
+/// to EVP_DigestVerify rejects every genuine token. Convert, rather than
+/// loosening the comparison.
+bool RawEcdsaSignatureToDer(const std::string& raw, size_t coordinate_bytes, std::vector<unsigned char>* der) {
+  // A signature of any other length is not a JWS ECDSA signature for this key.
+  if (coordinate_bytes == 0 || raw.size() != coordinate_bytes * 2) return false;
+
+  const auto* bytes = reinterpret_cast<const unsigned char*>(raw.data());
+  BIGNUM*     r     = BN_bin2bn(bytes, static_cast<int>(coordinate_bytes), nullptr);
+  BIGNUM*     s     = BN_bin2bn(bytes + coordinate_bytes, static_cast<int>(coordinate_bytes), nullptr);
+  ECDSA_SIG*  sig   = (r && s) ? ECDSA_SIG_new() : nullptr;
+  if (!sig) {
+    BN_free(r);
+    BN_free(s);
+    return false;
+  }
+  // Takes ownership of r and s on success; on failure they are still ours.
+  if (ECDSA_SIG_set0(sig, r, s) != 1) {
+    ECDSA_SIG_free(sig);
+    BN_free(r);
+    BN_free(s);
+    return false;
+  }
+
+  unsigned char* out = nullptr;
+  const int      len = i2d_ECDSA_SIG(sig, &out);
+  ECDSA_SIG_free(sig);
+  if (len <= 0 || out == nullptr) return false;
+  der->assign(out, out + len);
+  OPENSSL_free(out);
+  return true;
+}
+
 enum class Algorithm { kHs256, kAsymmetric };
 
 class JwtVerifier final : public TokenVerifier {
@@ -225,6 +268,29 @@ class JwtVerifier final : public TokenVerifier {
     EVP_PKEY* key = PEM_read_bio_PUBKEY(bio, nullptr, nullptr, nullptr);
     BIO_free(bio);
     if (!key) throw std::runtime_error("server.auth: jwt_public_key_file is not a PEM public key");
+
+    // Only RS256 and ES256 are implemented. Anything else -- an Ed25519 key,
+    // say -- would otherwise load happily, be announced as RS256 by
+    // ExpectedAlgName, and then reject every token for a reason no error
+    // mentions. Fail at startup, where the message can name the key.
+    const int id = EVP_PKEY_base_id(key);
+    if (id != EVP_PKEY_RSA && id != EVP_PKEY_EC) {
+      EVP_PKEY_free(key);
+      throw std::runtime_error("server.auth: jwt_public_key_file is neither an RSA (RS256) nor a NIST P-256 EC (ES256) public key");
+    }
+    // ES256 is P-256 by definition (RFC 7518 3.4). A P-384 key would produce
+    // 96-byte signatures that the ES256 name does not describe.
+    if (id == EVP_PKEY_EC) {
+      char       group[64] = {0};
+      size_t     group_len = 0;
+      const bool named     = EVP_PKEY_get_group_name(key, group, sizeof(group), &group_len) == 1;
+      const bool is_p256   = named && (std::strcmp(group, "prime256v1") == 0 || std::strcmp(group, "P-256") == 0);
+      if (!is_p256) {
+        const std::string found = named ? group : "unknown";
+        EVP_PKEY_free(key);
+        throw std::runtime_error("server.auth: jwt_public_key_file is an EC key on curve '" + found + "', but ES256 requires NIST P-256");
+      }
+    }
     return key;
   }
 
@@ -249,12 +315,23 @@ class JwtVerifier final : public TokenVerifier {
       return CRYPTO_memcmp(expected, signature.data(), expected_len) == 0;
     }
 
+    // RS256 signatures are already in the encoding OpenSSL verifies. ES256
+    // signatures are not: see RawEcdsaSignatureToDer.
+    const unsigned char*       signature_bytes = reinterpret_cast<const unsigned char*>(signature.data());
+    size_t                     signature_len   = signature.size();
+    std::vector<unsigned char> der;
+    if (EVP_PKEY_base_id(public_key_) == EVP_PKEY_EC) {
+      if (!RawEcdsaSignatureToDer(signature, EcCoordinateBytes(public_key_), &der)) return false;
+      signature_bytes = der.data();
+      signature_len   = der.size();
+    }
+
     EVP_MD_CTX* ctx = EVP_MD_CTX_new();
     if (!ctx) return false;
     bool ok = false;
     if (EVP_DigestVerifyInit(ctx, nullptr, EVP_sha256(), nullptr, public_key_) == 1) {
-      ok = EVP_DigestVerify(ctx, reinterpret_cast<const unsigned char*>(signature.data()), signature.size(),
-                            reinterpret_cast<const unsigned char*>(signed_input.data()), signed_input.size()) == 1;
+      ok = EVP_DigestVerify(ctx, signature_bytes, signature_len, reinterpret_cast<const unsigned char*>(signed_input.data()), signed_input.size()) ==
+           1;
     }
     EVP_MD_CTX_free(ctx);
     return ok;
