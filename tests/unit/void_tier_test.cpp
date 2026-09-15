@@ -272,3 +272,60 @@ TEST(VoidTier, TierBytesCleanAfterVoidThenReallocate) {
 }
 
 } // namespace
+
+// ---------------------------------------------------------------------------
+// Per-payload mutex lifetime
+//
+// Both paths that destroy a payload have to drop its entry from
+// payload_mutexes_. Delete always did; the TIER_VOID spill path did not, and
+// because nothing observes that map the only symptom was memory growth over
+// days. TIER_VOID is reached automatically from background eviction
+// (TieringManager consults GetDiskSpillTarget), so on a VOID-terminated tier
+// the leak accrued once per evicted payload for the life of the process.
+// ---------------------------------------------------------------------------
+
+TEST(VoidTier, SpillToVoidDropsThePerPayloadMutex) {
+  Fixture    f;
+  const auto baseline = f.manager->TrackedPayloadMutexCount();
+
+  auto id = f.AllocateAndCommit(TIER_RAM);
+  // Entries are created lazily on the first operation that locks the payload —
+  // Allocate and Commit do not take the per-payload lock, so read it once to
+  // put the entry in the map before checking that the spill takes it out.
+  f.manager->ResolveSnapshot(id);
+  ASSERT_GT(f.manager->TrackedPayloadMutexCount(), baseline);
+
+  f.manager->ExecuteSpill(id, TIER_VOID, /*fsync=*/false);
+
+  EXPECT_EQ(f.manager->TrackedPayloadMutexCount(), baseline);
+}
+
+TEST(VoidTier, RepeatedVoidSpillsDoNotGrowTheMutexMap) {
+  // The single-payload case above passes even if the map merely happens to be
+  // reused; this is the one that would have caught the leak. Without the fix
+  // the count climbs to 32.
+  Fixture    f;
+  const auto baseline = f.manager->TrackedPayloadMutexCount();
+
+  for (int i = 0; i < 32; ++i) {
+    auto id = f.AllocateAndCommit(TIER_RAM);
+    f.manager->ExecuteSpill(id, TIER_VOID, /*fsync=*/false);
+  }
+
+  EXPECT_EQ(f.manager->TrackedPayloadMutexCount(), baseline);
+}
+
+TEST(VoidTier, DeleteAlsoDropsThePerPayloadMutex) {
+  // Pins the behaviour the VOID path was supposed to match, so a future change
+  // to Delete's scope handling cannot silently regress it.
+  Fixture    f;
+  const auto baseline = f.manager->TrackedPayloadMutexCount();
+
+  auto id = f.AllocateAndCommit(TIER_RAM);
+  f.manager->ResolveSnapshot(id);
+  ASSERT_GT(f.manager->TrackedPayloadMutexCount(), baseline);
+
+  f.manager->Delete(id, /*force=*/true);
+
+  EXPECT_EQ(f.manager->TrackedPayloadMutexCount(), baseline);
+}

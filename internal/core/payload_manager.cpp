@@ -260,6 +260,20 @@ payload::util::UUID PayloadManager::Key(const PayloadID& id) {
   return payload::util::FromProto(id);
 }
 
+// Callers MUST keep the returned shared_ptr alive for as long as they hold the
+// lock, i.e. `auto m = PayloadMutex(id); std::unique_lock lk(*m);` and never
+// `std::unique_lock lk(*PayloadMutex(id));`. In the second form the temporary
+// shared_ptr dies at the end of the full-expression, leaving the map as sole
+// owner — and Delete erases the map entry once the payload is gone. A thread
+// blocked in lock() on a mutex whose only owner was just erased is waiting
+// inside a destroyed object. Holding the shared_ptr keeps the refcount above
+// zero for exactly the window the lock is held, so the erase merely drops the
+// map's reference and the mutex outlives its last waiter.
+size_t PayloadManager::TrackedPayloadMutexCount() const {
+  std::lock_guard<std::mutex> lock(payload_mutexes_guard_);
+  return payload_mutexes_.size();
+}
+
 std::shared_ptr<std::shared_mutex> PayloadManager::PayloadMutex(const PayloadID& id) {
   std::lock_guard<std::mutex> lock(payload_mutexes_guard_);
   auto&                       payload_mutex = payload_mutexes_[Key(id)];
@@ -684,7 +698,8 @@ void PayloadManager::Delete(const PayloadID& id, bool force) {
   }
 
   {
-    std::unique_lock<std::shared_mutex> payload_lock(*PayloadMutex(id));
+    auto                                payload_mutex = PayloadMutex(id);
+    std::unique_lock<std::shared_mutex> payload_lock(*payload_mutex);
 
     if (!force && lease_mgr_->HasActiveLeases(id)) {
       throw payload::util::LeaseConflict("delete payload: active lease present; release leases or set force=true");
@@ -750,7 +765,8 @@ void PayloadManager::Delete(const PayloadID& id, bool force) {
 }
 
 PayloadDescriptor PayloadManager::ResolveSnapshot(const PayloadID& id) {
-  std::shared_lock<std::shared_mutex> payload_lock(*PayloadMutex(id));
+  auto                                payload_mutex = PayloadMutex(id);
+  std::shared_lock<std::shared_mutex> payload_lock(*payload_mutex);
 
   {
     std::shared_lock lock(snapshot_cache_mutex_);
@@ -842,7 +858,8 @@ void PayloadManager::Unpin(const PayloadID& id) {
 }
 
 PayloadDescriptor PayloadManager::PromoteUnlocked(const PayloadID& id, Tier target) {
-  std::unique_lock<std::shared_mutex> payload_lock(*PayloadMutex(id));
+  auto                                payload_mutex = PayloadMutex(id);
+  std::unique_lock<std::shared_mutex> payload_lock(*payload_mutex);
 
   auto tx     = repository_->Begin();
   auto record = repository_->GetPayload(*tx, payload::util::FromProto(id));
@@ -1020,7 +1037,8 @@ void PayloadManager::HydrateCaches() {
 }
 
 void PayloadManager::ExecuteSpill(const PayloadID& id, Tier target, bool fsync) {
-  std::unique_lock<std::shared_mutex> payload_lock(*PayloadMutex(id));
+  auto                                payload_mutex = PayloadMutex(id);
+  std::unique_lock<std::shared_mutex> payload_lock(*payload_mutex);
 
   // Read record and validate inside Phase 1 transaction.
   auto tx1    = repository_->Begin();
@@ -1094,11 +1112,29 @@ void PayloadManager::ExecuteSpill(const PayloadID& id, Tier target, bool fsync) 
         spill_targets_.erase(Key(id));
       }
 
-      payload::observability::Metrics::Instance().RecordSpillBytes("background", record->size_bytes);
+      // Not RecordSpillBytes: nothing was moved. METRICS.md defines
+      // payload.spill.bytes_total as bytes *moved* by spill operations, and
+      // counting a discard there inflates it — a VOID-terminated tier would
+      // report steady spill throughput while writing nothing anywhere.
       UpdateTierBytes(source_tier, -static_cast<int64_t>(record->size_bytes));
       UpdateTierCount(source_tier, -1);
       if (metadata_cache_) {
         metadata_cache_->Remove(id);
+      }
+
+      // The payload is gone, exactly as after Delete, so its per-payload mutex
+      // has to go too. Without this the map grows by one entry per voided
+      // payload for the life of the process, and TIER_VOID is reached from the
+      // background eviction path (TieringManager::GetDiskSpillTarget), so on a
+      // VOID-terminated tier that is every evicted payload, forever.
+      //
+      // Unlock first: erasing the map entry drops the last reference the map
+      // holds, and the lock must be released before that happens. payload_mutex
+      // keeps the object alive across the erase either way.
+      payload_lock.unlock();
+      {
+        std::lock_guard<std::mutex> guard(payload_mutexes_guard_);
+        payload_mutexes_.erase(Key(id));
       }
       return;
     }

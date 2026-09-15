@@ -66,6 +66,16 @@ class PayloadManager {
 
   void HydrateCaches();
 
+  /// Number of live per-payload mutexes.
+  ///
+  /// Exposed for tests. Every path that destroys a payload has to drop its
+  /// mutex, and there is more than one such path (Delete, and spilling to
+  /// TIER_VOID). Nothing else observes this map, so a path that forgets is
+  /// invisible until the process runs out of memory — which is how the VOID
+  /// path went unnoticed. Asserting on this count is what keeps a third such
+  /// path from repeating it.
+  size_t TrackedPayloadMutexCount() const;
+
   void                                    ReleaseLease(const payload::manager::v1::LeaseID& lease_id);
   payload::manager::v1::PayloadDescriptor Promote(const payload::manager::v1::PayloadID& id, payload::manager::v1::Tier target);
   void                                    ExecuteSpill(const payload::manager::v1::PayloadID& id, payload::manager::v1::Tier target, bool fsync);
