@@ -59,6 +59,14 @@ if(PAYLOAD_MANAGER_CLIENT_ENABLE_CUDA)
                 "PAYLOAD_MANAGER_CLIENT_ENABLE_CUDA=ON but no Arrow CUDA target was found.\n"
                 "Rebuild Arrow with -DARROW_CUDA=ON.")
     endif()
+
+    # ring.cc calls the CUDA *runtime* API -- cudaHostRegister and friends --
+    # which the Arrow CUDA targets do not carry. Anything linking only the
+    # client failed at link with undefined references to cudaHostRegister,
+    # cudaHostUnregister, cudaHostGetDevicePointer and cudaGetErrorString;
+    # the server escaped it because internal/ links CUDA::cudart itself.
+    find_package(CUDAToolkit REQUIRED)
+    list(APPEND _payload_manager_client_arrow_cuda_targets CUDA::cudart)
 endif()
 
 # Prefer Arrow shared library so the installed client does not bake Arrow in.

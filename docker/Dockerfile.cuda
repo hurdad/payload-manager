@@ -9,7 +9,11 @@ WORKDIR /workspace
 # exact pinned version.  Ubuntu universe only carries Arrow 23.0.1 and has no
 # CUDA build, so the Apache repo is used for every image to keep one version.
 ARG ARROW_VERSION
-RUN sed -i 's/^Components: main$/Components: main universe/' /etc/apt/sources.list.d/ubuntu.sources \
+# NVIDIA's ubuntu2604 Packages index is malformed upstream -- see the note in
+# Dockerfile.examples.python.cuda. Nothing here installs from that repository,
+# so dropping the list is inert. Remove once their index is fixed.
+RUN rm -f /etc/apt/sources.list.d/cuda*.list \
+    && sed -i 's/^Components: main$/Components: main universe/' /etc/apt/sources.list.d/ubuntu.sources \
     && apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates wget \
     && wget -q -O /tmp/arrow-apt-source.deb \
@@ -18,7 +22,11 @@ RUN sed -i 's/^Components: main$/Components: main universe/' /etc/apt/sources.li
     && rm -f /tmp/arrow-apt-source.deb \
     && rm -rf /var/lib/apt/lists/*
 
-RUN apt-get update \
+# NVIDIA's ubuntu2604 Packages index is malformed upstream -- see the note in
+# Dockerfile.examples.python.cuda. Nothing here installs from that repository,
+# so dropping the list is inert. Remove once their index is fixed.
+RUN rm -f /etc/apt/sources.list.d/cuda*.list \
+    && apt-get update \
     && apt-get install -y --no-install-recommends \
         build-essential \
         cmake \
@@ -96,7 +104,11 @@ WORKDIR /app
 # exact pinned version.  Ubuntu universe only carries Arrow 23.0.1 and has no
 # CUDA build, so the Apache repo is used for every image to keep one version.
 ARG ARROW_VERSION
-RUN sed -i 's/^Components: main$/Components: main universe/' /etc/apt/sources.list.d/ubuntu.sources \
+# NVIDIA's ubuntu2604 Packages index is malformed upstream -- see the note in
+# Dockerfile.examples.python.cuda. Nothing here installs from that repository,
+# so dropping the list is inert. Remove once their index is fixed.
+RUN rm -f /etc/apt/sources.list.d/cuda*.list \
+    && sed -i 's/^Components: main$/Components: main universe/' /etc/apt/sources.list.d/ubuntu.sources \
     && apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates wget \
     && wget -q -O /tmp/arrow-apt-source.deb \
@@ -105,7 +117,11 @@ RUN sed -i 's/^Components: main$/Components: main universe/' /etc/apt/sources.li
     && rm -f /tmp/arrow-apt-source.deb \
     && rm -rf /var/lib/apt/lists/*
 
-RUN apt-get update \
+# NVIDIA's ubuntu2604 Packages index is malformed upstream -- see the note in
+# Dockerfile.examples.python.cuda. Nothing here installs from that repository,
+# so dropping the list is inert. Remove once their index is fixed.
+RUN rm -f /etc/apt/sources.list.d/cuda*.list \
+    && apt-get update \
     && apt-get install -y --no-install-recommends \
         ca-certificates \
         libprotobuf32t64 \
