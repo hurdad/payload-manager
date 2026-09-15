@@ -9,7 +9,7 @@ import uuid
 
 import grpc
 
-from payload_manager_client import PayloadClient
+from payload_manager_client import PayloadClient, make_channel
 from payload.manager.core.v1 import types_pb2
 from payload.manager.runtime.v1 import stream_pb2
 
@@ -27,7 +27,7 @@ def main() -> int:
     # Endpoint override is useful when the examples are run from CI or from a
     # developer machine targeting a non-default port.
     target = sys.argv[1] if len(sys.argv) > 1 else "localhost:50051"
-    client = PayloadClient(grpc.insecure_channel(target))
+    client = PayloadClient(make_channel(target))
 
     # Prepare a tiny payload and commit it so stream entries can reference a
     # durable payload ID instead of embedding raw bytes.

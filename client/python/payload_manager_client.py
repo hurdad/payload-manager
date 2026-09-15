@@ -35,6 +35,118 @@ from payload.manager.services.v1 import payload_stream_service_pb2_grpc
 PayloadIdLike = Union[id_pb2.PayloadID, bytes, bytearray, memoryview, str, uuidlib.UUID]
 
 
+# ---------------------------------------------------------------------------
+# Channel construction
+#
+# PayloadClient, RingProducer and RingConsumer all take a caller-constructed
+# channel and stay credential-agnostic; this is a convenience for the programs
+# that build one.  It mirrors payload::client::MakeChannel in the C++ client and
+# reads the same environment variables, so a deployment configures both client
+# languages identically.
+# ---------------------------------------------------------------------------
+
+
+def _read_trimmed(path: str, what: str) -> str:
+    """Read a credential file, stripping surrounding whitespace.
+
+    The strip matters for tokens: ``echo tok > file`` leaves a newline, an
+    ``authorization`` header carrying it is rejected, and the resulting
+    UNAUTHENTICATED says nothing about whitespace.  ``$(cat file)`` would have
+    stripped it, so the two ways of supplying one token must not differ.
+    """
+    try:
+        with open(path, "rb") as handle:
+            contents = handle.read()
+    except OSError as exc:
+        raise RuntimeError(f"cannot open {what} {path!r}: {exc}") from exc
+    if not contents.strip():
+        raise RuntimeError(f"{what} {path!r} is empty")
+    return contents.decode("utf-8").strip()
+
+
+def make_channel(
+    target: str,
+    *,
+    ca_file: Optional[str] = None,
+    token: Optional[str] = None,
+    cert_file: Optional[str] = None,
+    key_file: Optional[str] = None,
+    server_name_override: Optional[str] = None,
+    options: Optional[list] = None,
+) -> grpc.Channel:
+    """Build a channel to ``target``, with TLS and a bearer token when configured.
+
+    Any argument left as ``None`` falls back to the environment:
+
+    ==============================  ====================================
+    ``PAYLOAD_MANAGER_TLS_CA``      PEM CA bundle; its presence enables TLS
+    ``PAYLOAD_MANAGER_TOKEN``       bearer token
+    ``PAYLOAD_MANAGER_TOKEN_FILE``  file holding the token, instead of the above
+    ``PAYLOAD_MANAGER_TLS_CERT``    client certificate, for mutual TLS
+    ``PAYLOAD_MANAGER_TLS_KEY``     its key
+    ``PAYLOAD_MANAGER_TLS_SERVER_NAME``  name to verify against, when ``target`` is not it
+    ==============================  ====================================
+
+    With no CA configured this returns an insecure channel, which is what every
+    deployment predating TLS support gets and is why they keep working untouched.
+
+    ``target`` is a gRPC target: ``"host:port"``, ``"dns:///host:port"``, or
+    ``"unix:///run/payload-manager/pm.sock"`` for a Unix socket — three slashes,
+    because ``unix://host/path`` is an authority form the unix scheme rejects.
+    """
+    ca_file = ca_file if ca_file is not None else os.environ.get("PAYLOAD_MANAGER_TLS_CA", "")
+    cert_file = cert_file if cert_file is not None else os.environ.get("PAYLOAD_MANAGER_TLS_CERT", "")
+    key_file = key_file if key_file is not None else os.environ.get("PAYLOAD_MANAGER_TLS_KEY", "")
+    if server_name_override is None:
+        server_name_override = os.environ.get("PAYLOAD_MANAGER_TLS_SERVER_NAME", "")
+
+    if token is None:
+        token = os.environ.get("PAYLOAD_MANAGER_TOKEN", "").strip()
+        if not token:
+            token_file = os.environ.get("PAYLOAD_MANAGER_TOKEN_FILE", "")
+            if token_file:
+                token = _read_trimmed(token_file, "token file")
+
+    channel_options = list(options or [])
+    if server_name_override:
+        channel_options.append(("grpc.ssl_target_name_override", server_name_override))
+
+    if not ca_file:
+        if cert_file or key_file:
+            # A client certificate with nothing to verify the server against
+            # authenticates this end while leaving the other end unverified.
+            raise RuntimeError("a client certificate was configured without a CA (set PAYLOAD_MANAGER_TLS_CA)")
+        if token:
+            # grpc would refuse to attach call credentials to an insecure
+            # channel anyway; say why rather than letting it report a type error.
+            raise RuntimeError(
+                "a token was configured without TLS; a bearer token sent in cleartext is "
+                "readable by anything on the path (set PAYLOAD_MANAGER_TLS_CA)"
+            )
+        return grpc.insecure_channel(target, options=channel_options or None)
+
+    if bool(cert_file) != bool(key_file):
+        raise RuntimeError(
+            "a client certificate needs both a cert and a key (PAYLOAD_MANAGER_TLS_CERT and PAYLOAD_MANAGER_TLS_KEY)"
+        )
+
+    credentials = grpc.ssl_channel_credentials(
+        root_certificates=_read_trimmed(ca_file, "CA bundle").encode("utf-8"),
+        private_key=_read_trimmed(key_file, "client key").encode("utf-8") if key_file else None,
+        certificate_chain=_read_trimmed(cert_file, "client certificate").encode("utf-8") if cert_file else None,
+    )
+
+    if token:
+        # Composed onto the transport credentials so it rides every RPC without
+        # each call site remembering to attach it.
+        credentials = grpc.composite_channel_credentials(
+            credentials, grpc.access_token_call_credentials(token)
+        )
+
+    return grpc.secure_channel(target, credentials, options=channel_options or None)
+
+
+
 @dataclass
 class _PendingObjectUpload:
     """Tracks a TIER_OBJECT payload that has been allocated but not yet uploaded."""

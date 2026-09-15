@@ -1,7 +1,11 @@
 cmake_minimum_required(VERSION 3.20)
 
+# channel.cc is compiled in directly rather than linking payload_manager::client,
+# which would drag Arrow into a CLI that never touches a buffer. The file depends
+# on nothing but grpc++.
 add_executable(payloadctl
         main.cpp
+        ${PROJECT_SOURCE_DIR}/client/cpp/channel.cc
 )
 
 target_include_directories(payloadctl

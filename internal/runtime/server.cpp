@@ -6,8 +6,9 @@
 
 namespace payload::runtime {
 
-Server::Server(std::string bind_address, std::vector<std::unique_ptr<::grpc::Service>> services)
-    : bind_address_(std::move(bind_address)), services_(std::move(services)) {
+Server::Server(std::vector<std::string> bind_addresses, std::shared_ptr<::grpc::ServerCredentials> credentials,
+               std::vector<std::unique_ptr<::grpc::Service>> services)
+    : bind_addresses_(std::move(bind_addresses)), credentials_(std::move(credentials)), services_(std::move(services)) {
 }
 
 Server::~Server() {
@@ -16,7 +17,17 @@ Server::~Server() {
 
 void Server::Start() {
   ::grpc::ServerBuilder builder;
-  builder.AddListeningPort(bind_address_, ::grpc::InsecureServerCredentials());
+
+  // One credential set across every address: a Unix socket and a TCP port on
+  // the same process should not differ in what they demand of a caller.
+  //
+  // selected_port is deliberately not requested. It is 0 for a Unix socket, so
+  // a caller checking it for success would reject every socket bind; the real
+  // signal is BuildAndStart returning null, which is checked below.
+  for (const auto& address : bind_addresses_) {
+    builder.AddListeningPort(address, credentials_);
+  }
+
   for (const auto& service : services_) {
     builder.RegisterService(service.get());
   }
@@ -31,7 +42,15 @@ void Server::Start() {
 
   grpc_server_ = builder.BuildAndStart();
   if (!grpc_server_) {
-    throw std::runtime_error("Failed to start gRPC server");
+    // BuildAndStart swallows the reason, so name what was attempted. The usual
+    // causes are a port already in use, a socket path in a directory the
+    // process cannot write, and a certificate that does not match its key.
+    std::string attempted;
+    for (const auto& address : bind_addresses_) {
+      if (!attempted.empty()) attempted += ", ";
+      attempted += address;
+    }
+    throw std::runtime_error("Failed to start gRPC server on: " + attempted);
   }
 }
 

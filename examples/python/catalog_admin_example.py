@@ -7,9 +7,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT / "client/python"))
 import uuid
 
-import grpc
-
-from payload_manager_client import PayloadClient
+from payload_manager_client import PayloadClient, make_channel
 from payload.manager.catalog.v1 import lineage_pb2
 from payload.manager.core.v1 import policy_pb2, types_pb2
 from payload.manager.runtime.v1 import lifecycle_pb2, tiering_pb2
@@ -19,7 +17,7 @@ def main() -> int:
     # Endpoint can be overridden to point this walkthrough at any running
     # Payload Manager instance.
     target = sys.argv[1] if len(sys.argv) > 1 else "localhost:50051"
-    client = PayloadClient(grpc.insecure_channel(target))
+    client = PayloadClient(make_channel(target))
 
     # Allocate a short-lived RAM payload (TTL 60s) so we can safely exercise
     # admin APIs without leaving long-term test artifacts.

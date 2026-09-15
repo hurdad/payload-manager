@@ -52,6 +52,7 @@
 #include <memory>
 #include <string>
 
+#include "client/cpp/channel.h"
 #include "client/cpp/client.h"
 #include "payload/manager/catalog/v1/archive_metadata.pb.h"
 #include "payload/manager/services/v1/payload_catalog_service.grpc.pb.h"
@@ -219,7 +220,7 @@ void TestSpillToObject(const std::string& endpoint, const std::string& minio_end
   constexpr uint64_t kSize = 512;
   constexpr uint8_t  kFill = 0x5A;
 
-  auto                                         channel = grpc::CreateChannel(endpoint, grpc::InsecureChannelCredentials());
+  auto                                         channel = payload::client::MakeChannel(endpoint);
   PayloadClient                                client(channel);
   std::unique_ptr<PayloadCatalogService::Stub> catalog = PayloadCatalogService::NewStub(channel);
 

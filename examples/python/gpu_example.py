@@ -28,10 +28,9 @@ sys.path.insert(0, str(REPO_ROOT / "client/python"))
 
 import uuid as _uuid_mod
 
-import grpc
 import pyarrow as pa
 
-from payload_manager_client import PayloadClient
+from payload_manager_client import PayloadClient, make_channel
 from payload.manager.core.v1 import types_pb2
 
 
@@ -70,7 +69,7 @@ def main() -> int:
         print("No CUDA-capable GPU found – skipping GPU example.")
         return 0
 
-    client = PayloadClient(grpc.insecure_channel(target))
+    client = PayloadClient(make_channel(target))
 
     payload_size = 64
 

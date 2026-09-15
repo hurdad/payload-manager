@@ -8,6 +8,7 @@ cmake_minimum_required(VERSION 3.20)
 set(INTERNAL_SRC
 
         # runtime
+        runtime/credentials.cpp
         runtime/server.cpp
 
         # config

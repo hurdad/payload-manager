@@ -19,9 +19,7 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT / "client/python"))
 
-import grpc
-
-from payload_manager_client import PayloadClient
+from payload_manager_client import PayloadClient, make_channel
 from payload.manager.core.v1 import types_pb2
 from payload.manager.runtime.v1 import lifecycle_pb2
 
@@ -71,7 +69,7 @@ def main() -> int:
         print(f"Unknown tier filter '{tier_arg}'; expected ram, disk, gpu, or all", file=sys.stderr)
         return 1
 
-    client = PayloadClient(grpc.insecure_channel(target))
+    client = PayloadClient(make_channel(target))
 
     # ListAllPayloads is a convenience wrapper around ListPayloads that builds
     # the request automatically. Pass tier_filter=0 (TIER_UNSPECIFIED) to

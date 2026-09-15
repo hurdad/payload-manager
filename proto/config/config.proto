@@ -17,7 +17,102 @@ import "payload/manager/core/v1/ring_slot.proto";
 */
 
 message ServerConfig {
+  // Where the gRPC server listens. A TCP address ("0.0.0.0:50051") or a gRPC
+  // target URI. Unix domain sockets work here unchanged, because this string is
+  // handed straight to grpc::ServerBuilder::AddListeningPort, which takes a URI:
+  //
+  //   unix:///run/payload-manager/pm.sock    absolute path (note THREE slashes)
+  //   unix:relative/path.sock                relative to the working directory
+  //
+  // "unix://relative/path" is the form that silently does not work: everything
+  // after the two slashes parses as an authority, not a path.
+  //
+  // A socket is worth preferring wherever every client is on the same host,
+  // because for the RAM and ring tiers every client already is — their data
+  // plane is /dev/shm, so a producer on another host cannot use them at all. In
+  // that deployment a TCP port is reachable surface that buys nothing, and the
+  // socket's file mode becomes the access control.
   string bind_address = 1; // "0.0.0.0:50051"
+
+  // Additional addresses to listen on, same syntax as bind_address. Lets one
+  // process serve a Unix socket to node-local clients and TCP to the gateway or
+  // to remote clients, rather than choosing.
+  repeated string extra_bind_addresses = 4;
+
+  // Absent, or present with enabled=false => the server binds with insecure
+  // credentials, which is the historic behaviour and remains the default.
+  // Otherwise TLS, and a malformed or unreadable cert is a startup failure
+  // rather than a silent downgrade.
+  TlsConfig tls = 2;
+
+  // Absent, or present with enabled=false => no caller authentication, the
+  // historic behaviour. Otherwise every RPC must carry a valid bearer token.
+  //
+  // Requires tls: gRPC only runs an AuthMetadataProcessor on non-insecure
+  // credentials, and shipping bearer tokens over cleartext would undo the point
+  // of having them. Configuring auth without tls is a startup failure.
+  AuthConfig auth = 3;
+}
+
+message TlsConfig {
+  // Explicit on/off, so a templated config (Helm values, a config generator)
+  // can render this block unconditionally and toggle one value, rather than
+  // having to add and remove the block itself.
+  //
+  // Three-state on purpose:
+  //   block absent          -> off. The historic behaviour; nothing changes for
+  //                            a config written before TLS existed.
+  //   present, unset        -> on. Writing out cert_file and key_file is a
+  //                            clear enough statement of intent that requiring
+  //                            `enabled: true` next to them would be noise.
+  //   present, false        -> off, and the cert paths are left alone so they
+  //                            are still there when it is switched back on.
+  optional bool enabled = 4;
+
+  // PEM server certificate and its private key. The certificate's SANs must
+  // include every name clients dial: gRPC verifies the SAN and ignores the CN,
+  // so a certificate carrying only a CN fails with an opaque handshake error.
+  string cert_file = 1;
+  string key_file = 2;
+
+  // PEM CA bundle used to verify client certificates. Absent => clients are not
+  // asked for one (server-authenticated TLS). Present => a client certificate
+  // is required and verified against this bundle, i.e. mutual TLS, in addition
+  // to whatever AuthConfig requires.
+  string client_ca_file = 3;
+}
+
+message AuthConfig {
+  // Explicit on/off, with the same three-state semantics as TlsConfig.enabled:
+  // absent block off, present-and-unset on, present-and-false off.
+  //
+  // Turning this off is a security-relevant change that leaves a fully
+  // configured-looking auth block in place, so the service logs a warning at
+  // startup rather than only an "auth=false" field — an operator who disabled
+  // it for debugging and forgot should be told on every restart.
+  optional bool enabled = 6;
+
+  // Shared secret for HS256-signed tokens. The file's whole contents are the
+  // key, trailing newline stripped.
+  //
+  // Exactly one of jwt_hs256_key_file and jwt_public_key_file must be set.
+  string jwt_hs256_key_file = 1;
+
+  // PEM public key for asymmetric signatures (RS256/ES256), for tokens minted
+  // by an external issuer that never shares a secret with this service.
+  string jwt_public_key_file = 2;
+
+  // When set, a token whose "iss" / "aud" claim does not match is rejected.
+  // Empty means the claim is not checked. Set both in any deployment where more
+  // than one service validates tokens from the same issuer, otherwise a token
+  // minted for another audience is accepted here.
+  string issuer = 3;
+  string audience = 4;
+
+  // Tolerance applied to exp/nbf for clock drift between this host and the
+  // issuer. 0 selects 60s. Keep it small: it is the window in which an expired
+  // token still works.
+  uint64 clock_skew_seconds = 5;
 }
 
 // ------------------------------------------------------------------

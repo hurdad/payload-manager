@@ -24,9 +24,7 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT / "client/python"))
 
-import grpc
-
-from payload_manager_client import PayloadClient, payload_id_from_uuid
+from payload_manager_client import PayloadClient, make_channel, payload_id_from_uuid
 from payload.manager.core.v1 import policy_pb2, types_pb2
 from payload.manager.runtime.v1 import tiering_pb2
 
@@ -39,7 +37,7 @@ def main() -> int:
     payload_uuid_str = sys.argv[1]
     target = sys.argv[2] if len(sys.argv) > 2 else "localhost:50051"
 
-    client = PayloadClient(grpc.insecure_channel(target))
+    client = PayloadClient(make_channel(target))
 
     try:
         payload_id = payload_id_from_uuid(payload_uuid_str)

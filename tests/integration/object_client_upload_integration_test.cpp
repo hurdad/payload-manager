@@ -40,6 +40,7 @@
 #include <memory>
 #include <string>
 
+#include "client/cpp/channel.h"
 #include "client/cpp/client.h"
 #include "payload/manager/catalog/v1/archive_metadata.pb.h"
 #include "payload/manager/v1.hpp"
@@ -140,7 +141,7 @@ int main() {
   std::shared_ptr<arrow::fs::FileSystem> client_fs = *make_result;
 
   // Connect to the payload manager.
-  auto          channel = grpc::CreateChannel(pm_endpoint, grpc::InsecureChannelCredentials());
+  auto          channel = payload::client::MakeChannel(pm_endpoint);
   PayloadClient client(channel, client_fs);
 
   // -------------------------------------------------------------------------

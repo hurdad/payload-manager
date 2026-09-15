@@ -2,6 +2,17 @@
 build
 cmake-*
 
+# Key material. Nothing here generates certificates yet, which is exactly why
+# these patterns land before anything does: scripts/gen-dev-certs.sh writes into
+# certs/, and a development CA key is still a private key.
+*.pem
+*.key
+*.crt
+*.csr
+*.p12
+*.pfx
+certs/
+
 # Python
 __pycache__/
 *.py[cod]

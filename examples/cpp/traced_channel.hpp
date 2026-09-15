@@ -12,6 +12,7 @@
 #include <memory>
 #include <string>
 
+#include "client/cpp/channel.h"
 #include "otel_tracer.hpp"
 
 #ifdef ENABLE_OTEL
@@ -57,11 +58,19 @@ class TraceInjectFactory : public grpc::experimental::ClientInterceptorFactoryIn
 };
 
 // Returns a gRPC channel that injects traceparent into every RPC.
+//
+// Credentials come from payload::client::ChannelOptions rather than being
+// hardcoded insecure, so an example run against a TLS deployment works by
+// setting PAYLOAD_MANAGER_TLS_CA in the environment, with no edit here. The
+// interceptor plumbing is why this cannot simply call MakeChannel: the
+// interceptor variant of the factory function takes its own credentials
+// argument.
 inline std::shared_ptr<grpc::Channel> MakeTracedChannel(const std::string& endpoint, const std::string& traceparent) {
   grpc::ChannelArguments                                                              args;
   std::vector<std::unique_ptr<grpc::experimental::ClientInterceptorFactoryInterface>> factories;
   factories.push_back(std::make_unique<TraceInjectFactory>(traceparent));
-  return grpc::experimental::CreateCustomChannelWithInterceptors(endpoint, grpc::InsecureChannelCredentials(), args, std::move(factories));
+  return grpc::experimental::CreateCustomChannelWithInterceptors(endpoint, payload::client::ChannelCredentialsFromEnvironment(args), args,
+                                                                 std::move(factories));
 }
 
 // Start a named root span and return a traced channel carrying its traceparent.
@@ -70,7 +79,7 @@ inline std::shared_ptr<grpc::Channel> MakeTracedChannel(const std::string& endpo
 inline std::shared_ptr<grpc::Channel> StartSpanAndMakeChannel(const std::string& endpoint, const std::string& span_name) {
   auto ctx = OtelStartSpan(span_name);
   if (!ctx.valid) {
-    return grpc::CreateChannel(endpoint, grpc::InsecureChannelCredentials());
+    return payload::client::MakeChannel(endpoint);
   }
   return MakeTracedChannel(endpoint, MakeTraceparent(ctx));
 }
@@ -80,7 +89,7 @@ inline std::shared_ptr<grpc::Channel> StartSpanAndMakeChannel(const std::string&
 // No tracing: start a (no-op) span and return a plain channel.
 inline std::shared_ptr<grpc::Channel> StartSpanAndMakeChannel(const std::string& endpoint, const std::string& /*span_name*/) {
   OtelStartSpan(/*no-op*/ "");
-  return grpc::CreateChannel(endpoint, grpc::InsecureChannelCredentials());
+  return payload::client::MakeChannel(endpoint);
 }
 
 #endif // ENABLE_OTEL

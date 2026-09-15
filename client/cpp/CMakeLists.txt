@@ -73,6 +73,7 @@ endif()
 
 # Respects BUILD_SHARED_LIBS (default OFF = static archive).
 add_library(payload_manager_client
+        channel.cc
         client.cc
         ring.cc
 )
@@ -127,7 +128,7 @@ install(TARGETS payload_manager_client
 # the header that declares them makes the ring API unusable outside this
 # tree. ring.h includes "client.h" unqualified, so the two must stay in
 # the same directory.
-install(FILES client.h ring.h
+install(FILES channel.h client.h ring.h
         DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/payload-manager/cpp
 )
 

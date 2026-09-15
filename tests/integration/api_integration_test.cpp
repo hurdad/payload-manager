@@ -48,6 +48,7 @@
 #include <string>
 #include <vector>
 
+#include "client/cpp/channel.h"
 #include "client/cpp/client.h"
 #include "otel_tracer.hpp"
 #include "payload/manager/v1.hpp"
@@ -99,7 +100,8 @@ std::shared_ptr<grpc::Channel> MakeTracedChannel(const std::string& endpoint, co
   grpc::ChannelArguments                                                              args;
   std::vector<std::unique_ptr<grpc::experimental::ClientInterceptorFactoryInterface>> factories;
   factories.push_back(std::make_unique<TraceInjectFactory>(traceparent));
-  return grpc::experimental::CreateCustomChannelWithInterceptors(endpoint, grpc::InsecureChannelCredentials(), args, std::move(factories));
+  return grpc::experimental::CreateCustomChannelWithInterceptors(endpoint, payload::client::ChannelCredentialsFromEnvironment(args), args,
+                                                                 std::move(factories));
 }
 
 } // namespace
@@ -577,7 +579,7 @@ int main(int argc, char** argv) {
   auto run = [&](const char* name, auto fn) {
     auto          ctx = OtelStartSpan(name);
     std::string   tp  = ctx.valid ? MakeTraceparent(ctx) : "";
-    PayloadClient client(tp.empty() ? grpc::CreateChannel(endpoint, grpc::InsecureChannelCredentials()) : MakeTracedChannel(endpoint, tp));
+    PayloadClient client(tp.empty() ? payload::client::MakeChannel(endpoint) : MakeTracedChannel(endpoint, tp));
     fn(client, tp);
     OtelEndSpan();
   };

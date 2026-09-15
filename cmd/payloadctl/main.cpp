@@ -8,6 +8,7 @@
 #include <optional>
 #include <string>
 
+#include "client/cpp/channel.h"
 #include "payload/manager/services/v1/payload_admin_service.grpc.pb.h"
 #include "payload/manager/services/v1/payload_catalog_service.grpc.pb.h"
 #include "payload/manager/services/v1/payload_data_service.grpc.pb.h"
@@ -29,7 +30,18 @@ static void Usage() {
             << "  payloadctl <addr> pin <uuid> [duration_ms]\n"
             << "  payloadctl <addr> unpin <uuid>\n"
             << "  payloadctl <addr> stats\n"
-            << "  payloadctl <addr> list [tier=ram|disk|gpu|object]\n";
+            << "  payloadctl <addr> list [tier=ram|disk|gpu|object]\n"
+            << "\n"
+            << "<addr> is a gRPC target:\n"
+            << "  host:port                              TCP\n"
+            << "  unix:///run/payload-manager/pm.sock    Unix socket (three slashes)\n"
+            << "\n"
+            << "TLS and authentication come from the environment:\n"
+            << "  PAYLOAD_MANAGER_TLS_CA           PEM CA bundle; enables TLS\n"
+            << "  PAYLOAD_MANAGER_TOKEN            bearer token\n"
+            << "  PAYLOAD_MANAGER_TOKEN_FILE       file holding the token, instead of the above\n"
+            << "  PAYLOAD_MANAGER_TLS_CERT/_KEY    client certificate, for mutual TLS\n"
+            << "  PAYLOAD_MANAGER_TLS_SERVER_NAME  name to verify against, when <addr> is not it\n";
 }
 
 static int HexNibble(char c) {
@@ -116,7 +128,18 @@ int main(int argc, char** argv) {
   std::string addr = argv[1];
   std::string cmd  = argv[2];
 
-  auto channel = grpc::CreateChannel(addr, grpc::InsecureChannelCredentials());
+  // Transport security and the bearer token come from the environment rather
+  // than from flags: this CLI's arguments are positional (<addr> <cmd> ...),
+  // and the connection settings are per-deployment rather than per-invocation,
+  // so they belong with PAYLOAD_MANAGER_ENDPOINT and not in argv. Unset
+  // variables mean an insecure channel, exactly as before.
+  std::shared_ptr<grpc::Channel> channel;
+  try {
+    channel = payload::client::MakeChannel(addr);
+  } catch (const std::exception& e) {
+    std::cerr << "payloadctl: " << e.what() << "\n";
+    return 1;
+  }
 
   auto data_stub    = PayloadDataService::NewStub(channel);
   auto catalog_stub = PayloadCatalogService::NewStub(channel);

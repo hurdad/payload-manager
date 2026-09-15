@@ -36,9 +36,7 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT / "client/python"))
 
-import grpc
-
-from payload_manager_client import RingConsumer, RingProducer
+from payload_manager_client import RingConsumer, RingProducer, make_channel
 
 
 def make_payload(n: int, seed: int) -> bytes:
@@ -91,7 +89,7 @@ def main() -> int:
     target = sys.argv[1] if len(sys.argv) > 1 else "localhost:50051"
     ring_id = sys.argv[2] if len(sys.argv) > 2 else "example"
 
-    channel = grpc.insecure_channel(target)
+    channel = make_channel(target)
 
     # One of each per process, like the C++ client: they map a ring once and
     # reuse it rather than mapping per capture.

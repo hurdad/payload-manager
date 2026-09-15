@@ -12,6 +12,7 @@
 #include "internal/factory.hpp"
 #include "internal/observability/logging.hpp"
 #include "internal/observability/spans.hpp"
+#include "internal/runtime/credentials.hpp"
 #include "internal/runtime/server.hpp"
 
 using payload::factory::Build;
@@ -101,7 +102,13 @@ int main(int argc, char** argv) {
     // ------------------------------------------------------------
     // Start server
     // ------------------------------------------------------------
-    Server server(config.server().bind_address(), std::move(app.grpc_services));
+    // Throws on a tls block that is present but unusable, rather than falling
+    // back to plaintext: a deployment that asked for TLS and silently did not
+    // get it is worse than one that refuses to start.
+    auto bind_addresses = payload::runtime::ResolveBindAddresses(config.server());
+    auto credentials    = payload::runtime::BuildServerCredentials(config.server());
+
+    Server server(bind_addresses, std::move(credentials), std::move(app.grpc_services));
 
     // Register signal handlers before starting server to avoid race window.
     std::signal(SIGINT, HandleSignal);
@@ -109,7 +116,16 @@ int main(int argc, char** argv) {
     std::signal(SIGSEGV, HandleSigsegv);
 
     server.Start();
-    PAYLOAD_LOG_INFO("Payload Manager started", {payload::observability::StringField("bind_address", config.server().bind_address())});
+    {
+      std::string listening;
+      for (const auto& address : bind_addresses) {
+        if (!listening.empty()) listening += ", ";
+        listening += address;
+      }
+      PAYLOAD_LOG_INFO("Payload Manager started", {payload::observability::StringField("bind_address", listening),
+                                                   payload::observability::BoolField("tls", payload::runtime::TlsEnabled(config.server())),
+                                                   payload::observability::BoolField("auth", payload::runtime::AuthEnabled(config.server()))});
+    }
 
     while (g_running) std::this_thread::sleep_for(std::chrono::seconds(1));
 

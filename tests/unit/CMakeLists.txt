@@ -17,6 +17,7 @@ endfunction()
 payload_manager_add_unit_test(payload_manager_unit_placement_engine placement_engine_test.cpp "placement;core")
 payload_manager_add_unit_test(payload_manager_unit_lease_table lease_table_test.cpp "lease")
 payload_manager_add_unit_test(payload_manager_unit_config_loader config_loader_test.cpp "config")
+payload_manager_add_unit_test(payload_manager_unit_server_credentials server_credentials_test.cpp "config;server;tls")
 payload_manager_add_unit_test(payload_manager_unit_metrics_options metrics_options_test.cpp "config;metrics")
 payload_manager_add_unit_test(payload_manager_unit_logging logging_test.cpp "observability;logging")
 payload_manager_add_unit_test(payload_manager_unit_grpc_status grpc_status_test.cpp "grpc")
@@ -59,6 +60,11 @@ payload_manager_add_unit_test(payload_manager_unit_import payload_manager_import
 payload_manager_add_unit_test(payload_manager_unit_void_tier void_tier_test.cpp "tiering;void;eviction")
 
 if(TARGET payload_manager::client)
+  # Credential selection for client channels. Builds channels but connects
+  # nothing: gRPC dials lazily, so every case here is decided before any socket.
+  payload_manager_add_unit_test(payload_manager_unit_client_channel client/channel_test.cpp "client;tls")
+  target_link_libraries(payload_manager_unit_client_channel PRIVATE payload_manager::client)
+
   payload_manager_add_unit_test(payload_manager_unit_client_payload_manager_client client/payload_manager_client_test.cpp "client")
   target_link_libraries(payload_manager_unit_client_payload_manager_client PRIVATE payload_manager::client)
 
