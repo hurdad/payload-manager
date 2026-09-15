@@ -94,6 +94,9 @@ RUN cmake -S /workspace/arrow/cpp -B /workspace/arrow-build -G Ninja \
        PYARROW_WITH_GCS=0 \
        PYARROW_BUNDLE_ARROW_CPP=0 \
        pip3 install --break-system-packages --no-build-isolation . \
+    && cd / \
+    && cp -r "$(python3 -c 'import pyarrow, pathlib; print(pathlib.Path(pyarrow.__file__).parent)')" \
+          /opt/pyarrow \
     && rm -rf /workspace/arrow
 
 
@@ -123,12 +126,22 @@ RUN apt-get update \
 COPY --from=builder /usr/local/lib/libarrow* /usr/local/lib/
 RUN ldconfig
 
-COPY --from=builder /usr/local/lib/python3.12/dist-packages/pyarrow \
-                    /usr/local/lib/python3.12/dist-packages/pyarrow
+# pyarrow's install path is interpreter-version-specific, so it cannot be
+# written as a literal: this was hardcoded to python3.12 and stopped existing
+# the moment the base moved to Ubuntu 26.04, which ships 3.14 -- COPY --from a
+# missing path fails the build outright. The builder stages it at a fixed
+# location and the runtime resolves its own site-packages, so a later base bump
+# cannot break the copy again.
+COPY --from=builder /opt/pyarrow /opt/pyarrow
+RUN PYSITE="$(python3 -c 'import site; print(site.getsitepackages()[0])')" \
+    && mkdir -p "$PYSITE" \
+    && mv /opt/pyarrow "$PYSITE/pyarrow"
 
+# Floors dictated by the committed stubs, not chosen -- see the note in
+# Dockerfile.examples.python and the one in client/python/setup.py.
 RUN pip3 install --no-cache-dir --break-system-packages \
-    "grpcio>=1.50" \
-    "protobuf>=3.19,<4"
+    "grpcio>=1.75.1" \
+    "protobuf>=6.31.1"
 
 # Copy the cmake-generated Python client stubs and examples
 COPY client/python /app/client/python

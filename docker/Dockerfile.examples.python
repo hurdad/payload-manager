@@ -16,11 +16,17 @@ WORKDIR /app
 # Keep in step with the Arrow C++ version pinned in the other images.
 ARG PYARROW_VERSION=25.0.1
 
+# grpcio and protobuf are not free choices: the committed stubs under
+# client/python/payload/ carry a protoc gencode guard and a grpcio version
+# check, so these floors have to track the ones client/python/setup.py
+# declares. They were pinned below that guard -- protobuf <4 resolves to
+# 3.20.3, which has no google.protobuf.runtime_version at all, so every
+# example died on `import payload...`.
 RUN pip install --no-cache-dir \
         "pyarrow==${PYARROW_VERSION}" \
         "numpy>=1.25" \
-        "grpcio>=1.50" \
-        "protobuf>=3.19,<4" \
+        "grpcio>=1.75.1" \
+        "protobuf>=6.31.1" \
         "googleapis-common-protos>=1.56"
 
 # Copy the cmake-generated Python client stubs and examples
