@@ -164,12 +164,28 @@ jobs:
           fi
           echo "generated stubs match the protos"
 
-      - name: Gateway builds against the generated stubs
+      - name: Gateway builds, vets and tests
         run: |
+          set -euo pipefail
           # main.go embeds ./static, which is produced by the UI build. The
           # image build does that; here a placeholder is enough to compile.
           mkdir -p gateway/static && echo '<!doctype html>' > gateway/static/index.html
-          cd gateway && go build ./... && go vet ./gen/...
+          cd gateway
+          go build ./...
+          # ./... not ./gen/... — this used to vet only the generated stubs,
+          # which is the code least likely to be wrong, and skipped main.go and
+          # middleware/ entirely. Those are the hand-written parts: the CORS
+          # allow list, the UUID path rewrite, the download handler.
+          go vet ./...
+          # gofmt on the hand-written files only; the generated tree is the
+          # code generator's business.
+          unformatted=$(gofmt -l . | grep -v '^gen/' || true)
+          if [ -n "$unformatted" ]; then
+            echo "::error::gofmt needed on: $unformatted"
+            gofmt -d $unformatted
+            exit 1
+          fi
+          go test ./middleware/...
 
   # ---------------------------------------------------------------------------
   # Build, unit tests, coverage, repository parity
@@ -574,7 +590,15 @@ jobs:
 
   images:
     name: Image (${{ matrix.name }}/${{ matrix.arch }})
-    # integration-object is absent deliberately — see the commented block above.
+    # Every test job that runs on GitHub-hosted runners gates publishing.
+    #
+    # `gpu` is deliberately not in this list. It runs on the self-hosted board,
+    # whose availability is not a property of the change being tested: a runner
+    # that is offline, or whose NVIDIA device spec went stale after a driver
+    # upgrade, would otherwise block every image including the three that have
+    # nothing to do with CUDA. The tradeoff is explicit — the -cuda image can
+    # publish while the GPU suite is red, so check that job before trusting a
+    # -cuda tag.
     needs: [format, tidy, generated, build-test, python, integration-api, integration-object]
     runs-on: ${{ matrix.runner }}
     permissions:

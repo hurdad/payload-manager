@@ -1,0 +1,44 @@
+# Nothing was watching any of the dependency sets before this: the Go module,
+# the UI's npm tree and the workflow actions all drifted silently, and the
+# images publish to a public registry.
+#
+# Grouped and monthly rather than per-dependency and weekly, because this
+# pipeline builds C++ on a self-hosted arm64 board and a GPU runner — a stream
+# of single-dependency PRs would spend more runner time than the updates are
+# worth. Security advisories are not subject to the schedule; Dependabot opens
+# those as soon as it sees them.
+version: 2
+updates:
+  - package-ecosystem: gomod
+    directory: /gateway
+    schedule:
+      interval: monthly
+    groups:
+      go-dependencies:
+        patterns: ["*"]
+
+  - package-ecosystem: npm
+    directory: /ui
+    schedule:
+      interval: monthly
+    groups:
+      ui-dependencies:
+        patterns: ["*"]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    groups:
+      actions:
+        patterns: ["*"]
+
+  # Base images for every Dockerfile under docker/.
+  - package-ecosystem: docker
+    directories:
+      - /docker
+    schedule:
+      interval: monthly
+    groups:
+      base-images:
+        patterns: ["*"]

@@ -303,6 +303,17 @@ The gRPC server (`server.bind_address`) defaults to `0.0.0.0:50051`. In producti
 
 - Bind to a loopback or internal address when the service is only accessed within the same node or cluster.
 - Place a TLS-terminating proxy (e.g. Envoy) in front of `payload-manager` for external-facing deployments; the server currently uses insecure credentials and relies on the surrounding infrastructure for transport security.
+- There is no authentication or authorization of any kind: anyone who can reach the port can allocate, read, spill and delete any payload. The proxy above is what supplies caller identity, not the service.
+- The HTTP gateway sends no CORS headers unless `-cors-origins` (`CORS_ORIGINS`) names the origins that need them. The embedded UI and the vite dev proxy are both same-origin, so the default suits both. Enabling it — and especially setting it to `*` — lets any page in an operator's browser reach every `payload-manager` that browser can route to, which is a materially wider door than network reachability alone.
+
+### Shared memory is inside the trust boundary
+
+The RAM tier and the ring tier back payloads with POSIX shared-memory segments created mode `0666` (`internal/storage/ram/ram_arrow_store.cpp`, `internal/ring/ring.cpp`). That is the mechanism the zero-copy data plane depends on — producers and consumers map the segments directly, which is why payload bytes never pass through the service — and it is also the strongest assumption the deployment model makes:
+
+- Any local user, and any container sharing the host's `/dev/shm`, can read every payload resident in the RAM or ring tiers.
+- The same parties can write to those segments, undetected. The ring's generation counter guards a consumer against reading a slot the *producer* has recycled; it does not guard against a hostile writer.
+
+So do not co-locate untrusted workloads on the host or in containers sharing its IPC namespace. Restricting the segments further is not a configuration option, because a mode that excluded other users would exclude the clients as well; what bounds the exposure is which users have accounts on the box. `SECURITY.md` carries the same statement for readers arriving from the repository root.
 
 ## 7. Non-goals (explicit)
 
